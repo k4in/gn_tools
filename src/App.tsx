@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import techtreeData from "@/gn-data/techtree.json";
 import startData from "@/gn-data/start.json";
 import type { TechTreeEntry } from "@/types/gn";
@@ -176,6 +176,60 @@ function incomeGainIfBuilt(name: string, completed: Set<string>): number {
 function parseStartMinutes(time: string) {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+/** Lokale Start-DateTime aus start.json (ohne TZ-Drift durch ISO-Parse). */
+function startDateTime(startCfg: StartConfig): Date {
+  const [y, mo, d] = startCfg.start_date.split("-").map(Number);
+  const [h, m] = startCfg.start_time.split(":").map(Number);
+  return new Date(y, mo - 1, d, h, m, 0, 0);
+}
+
+/**
+ * Verstrichene Ticks seit Planstart: floor((now − start) / 15min).
+ * Beispiel: Start 18:00, jetzt 20:10 → 130min → Tick 8 ("nach Tick 8").
+ */
+function computeCurrentTick(startCfg: StartConfig, now: Date = new Date()): number {
+  const start = startDateTime(startCfg);
+  const diffMs = now.getTime() - start.getTime();
+  return Math.floor(diffMs / (TICK_MINUTES * 60 * 1000));
+}
+
+function formatWallClock(date: Date) {
+  const d = String(date.getDate()).padStart(2, "0");
+  const mo = String(date.getMonth() + 1).padStart(2, "0");
+  const y = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${d}.${mo}.${y} ${hh}:${mm}`;
+}
+
+function tickDateTime(startCfg: StartConfig, tick: number): Date {
+  const start = startDateTime(startCfg);
+  return new Date(start.getTime() + tick * TICK_MINUTES * 60 * 1000);
+}
+
+/** Restzeit bis zu einem Tick, z.B. "in 2 Stunden und 05 Minuten". */
+function formatTimeUntilTick(
+  startCfg: StartConfig,
+  tick: number,
+  now: Date = new Date(),
+): string {
+  const target = tickDateTime(startCfg, tick);
+  const diffMs = target.getTime() - now.getTime();
+  if (diffMs <= 0) return "jetzt";
+
+  const totalMinutes = Math.ceil(diffMs / (60 * 1000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `in ${minutes} ${minutes === 1 ? "Minute" : "Minuten"}`;
+  }
+  if (minutes === 0) {
+    return `in ${hours} ${hours === 1 ? "Stunde" : "Stunden"}`;
+  }
+  return `in ${hours} ${hours === 1 ? "Stunde" : "Stunden"} und ${String(minutes).padStart(2, "0")} Minuten`;
 }
 
 function clockLabel(startCfg: StartConfig, tick: number) {
@@ -427,170 +481,265 @@ export default function App() {
   const plan = useMemo(() => planFastestToGoal(GOAL, start), []);
 
   const maxTick = Math.max(plan.finishTick, 1);
-  const maxRes = Math.max(
-    1,
-    ...plan.ticks.map((t) => t.met),
-    ...plan.ticks.map((t) => t.kris),
+  const actionTicks = useMemo(
+    () => plan.ticks.filter((t) => t.started.length > 0),
+    [plan.ticks],
   );
 
-  const buildingSteps = plan.steps.filter((s) => s.type === "building");
-  const researchSteps = plan.steps.filter((s) => s.type === "research");
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const currentTick = computeCurrentTick(plan.start, now);
+  const upcomingActions = useMemo(
+    () => actionTicks.filter((t) => t.tick >= currentTick).slice(0, 3),
+    [actionTicks, currentTick],
+  );
+  const nextAction = upcomingActions[0] ?? null;
+  const followingActions = upcomingActions.slice(1);
 
   return (
     <main className="min-h-svh bg-background text-foreground">
       <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 md:px-8">
-        {/* Tick-Log */}
+        {/* Übersicht */}
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+            {/* Links: Status & Ziel */}
+            <div className="space-y-4">
+              <div>
+                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Aktuell
+                </p>
+                <p className="mt-1 font-heading text-2xl font-semibold tracking-tight tabular-nums">
+                  {formatWallClock(now)}
+                </p>
+                <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
+                  {currentTick < 0
+                    ? `Start in ${Math.abs(currentTick)} Ticks`
+                    : `Tick ${currentTick}`}
+                </p>
+              </div>
+              <div className="border-t border-border pt-4">
+                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Ziel
+                </p>
+                <p className="mt-1 text-lg font-semibold">{GOAL}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
+                  Tick {plan.finishTick} · {clockLabel(plan.start, plan.finishTick)}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                  {formatTimeUntilTick(plan.start, plan.finishTick, now)}
+                </p>
+              </div>
+            </div>
+
+            {/* Rechts: Nächste Aktionen */}
+            <div className="space-y-3 md:border-l md:border-border md:pl-8">
+              <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                Nächste Aktion
+              </p>
+              {nextAction ? (
+                <div className="rounded-lg border border-border bg-background/50 p-3">
+                  <p className="text-sm font-medium tabular-nums">
+                    Tick {nextAction.tick} · {nextAction.clockLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                    {formatTimeUntilTick(plan.start, nextAction.tick, now)}
+                  </p>
+                  <div className="mt-1.5 text-sm leading-snug">
+                    <JobList items={nextAction.started} />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Keine weiteren Aktionen</p>
+              )}
+
+              {followingActions.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Danach
+                  </p>
+                  <ul className="space-y-2">
+                    {followingActions.map((t) => (
+                      <li
+                        key={t.tick}
+                        className="rounded-md border border-border/60 px-3 py-2 text-sm"
+                      >
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          Tick {t.tick} · {t.clockLabel}
+                        </p>
+                        <p className="text-xs text-muted-foreground tabular-nums">
+                          {formatTimeUntilTick(plan.start, t.tick, now)}
+                        </p>
+                        <div className="mt-1 leading-snug">
+                          <JobList items={t.started} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Nur Ticks mit User-Aktion (Start) */}
         <section className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold">Tick-Protokoll</h2>
-            <p className="text-sm text-muted-foreground">
-              Alle {plan.ticks.length} Ticks · Ziel: {GOAL} um{" "}
-              {clockLabel(plan.start, plan.finishTick)} (Tick {plan.finishTick})
-            </p>
-          </div>
-          <div className="max-h-[36rem] overflow-auto rounded-xl border border-border">
-            <table className="w-full min-w-[720px] border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-                <tr className="border-b border-border text-[10px] tracking-wide text-muted-foreground uppercase">
-                  <th className="px-2 py-2 font-medium">Tick</th>
-                  <th className="px-2 py-2 font-medium">Uhrzeit</th>
-                  <th className="px-2 py-2 font-medium text-right">Met</th>
-                  <th className="px-2 py-2 font-medium text-right">Kris</th>
-                  <th className="px-2 py-2 font-medium text-right">+M</th>
-                  <th className="px-2 py-2 font-medium text-right">+K</th>
-                  <th className="px-2 py-2 font-medium">Aktiv</th>
-                  <th className="px-2 py-2 font-medium">Start</th>
-                  <th className="px-2 py-2 font-medium">Ende</th>
-                </tr>
-              </thead>
-              <tbody>
-                {plan.ticks.map((t) => {
-                  const hasStart = t.started.length > 0;
-                  return (
-                    <tr
-                      key={t.tick}
-                      className={[
-                        "border-b border-border/60",
-                        hasStart
-                          ? "bg-card"
-                          : "bg-background/50 text-muted-foreground",
-                      ].join(" ")}
-                    >
-                      <td className="px-2 py-1.5 font-mono tabular-nums">{t.tick}</td>
-                      <td className="px-2 py-1.5 whitespace-nowrap tabular-nums">
-                        {t.clockLabel}
-                      </td>
-                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                        {formatRes(t.met)}
-                      </td>
-                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                        {formatRes(t.kris)}
-                      </td>
-                      <td
-                        className={[
-                          "px-2 py-1.5 text-right font-mono tabular-nums",
-                          t.incomeMet > 0
-                            ? "text-green-500"
-                            : t.incomeMet < 0
-                              ? "text-red-500"
-                              : "",
-                        ].join(" ")}
-                      >
-                        {t.incomeMet
-                          ? `${t.incomeMet > 0 ? "+" : ""}${formatRes(t.incomeMet)}`
-                          : "—"}
-                      </td>
-                      <td
-                        className={[
-                          "px-2 py-1.5 text-right font-mono tabular-nums",
-                          t.incomeKris > 0
-                            ? "text-green-500"
-                            : t.incomeKris < 0
-                              ? "text-red-500"
-                              : "",
-                        ].join(" ")}
-                      >
-                        {t.incomeKris
-                          ? `${t.incomeKris > 0 ? "+" : ""}${formatRes(t.incomeKris)}`
-                          : "—"}
-                      </td>
-                      <td className="max-w-[18rem] px-2 py-1.5 text-[11px] leading-snug">
-                        {t.active.length ? (
-                          <JobList
-                            items={t.active.map((j) => ({
-                              name: j.name,
-                              type: j.type,
-                              suffix: `(${j.remainingTicks})`,
-                            }))}
-                          />
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
-                        {t.started.length ? <JobList items={t.started} /> : "—"}
-                      </td>
-                      <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
-                        {t.finished.length ? <JobList items={t.finished} /> : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <h2 className="text-lg font-semibold">Aktionsplan</h2>
+          <TickTable ticks={actionTicks} variant="actions" currentTick={currentTick} />
         </section>
 
-        {/* Warteschlangen / Gantt */}
-        <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <div>
-            <h2 className="text-lg font-semibold">Parallel laufende Aufträge</h2>
-            <p className="text-sm text-muted-foreground">
-              Amber = Gebäude · Fuchsia = Forschung · beliebig viele parallel
-            </p>
-          </div>
-          <GanttLane title="Gebäude" steps={buildingSteps} maxTick={maxTick} />
-          <GanttLane title="Forschung" steps={researchSteps} maxTick={maxTick} />
-          <div className="relative h-6 border-t border-border pt-1">
-            {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-              const t = Math.round(maxTick * f);
-              return (
-                <span
-                  key={f}
-                  className="absolute text-[10px] text-muted-foreground tabular-nums"
-                  style={{ left: `${f * 100}%`, transform: "translateX(-50%)" }}
-                >
-                  t{t}
-                </span>
-              );
-            })}
-          </div>
+        {/* Vollständiges Tick-Log */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Tick-Protokoll</h2>
+          <TickTable
+            ticks={plan.ticks}
+            maxHeightClass="max-h-[36rem]"
+            variant="log"
+            currentTick={currentTick}
+          />
         </section>
 
-        {/* Ressourcen */}
+        {/* Timeline */}
         <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <div>
-            <h2 className="text-lg font-semibold">Ressourcen über die Zeit</h2>
-            <p className="text-sm text-muted-foreground">
-              Metall (blau) und Kristall (cyan) nach jedem Tick. Vertikale Marken =
-              Starts/Fertigstellungen.
-            </p>
-          </div>
-          <ResourceChart ticks={plan.ticks} maxRes={maxRes} maxTick={maxTick} />
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 bg-sky-500" /> Metall
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-0.5 w-4 bg-cyan-400" /> Kristall
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-amber-500" /> Ereignis-Tick
-            </span>
-          </div>
+          <h2 className="text-lg font-semibold">Timeline</h2>
+          <Timeline steps={plan.steps} maxTick={maxTick} />
         </section>
       </div>
     </main>
+  );
+}
+
+function deltaClass(n: number) {
+  if (n > 0) return "text-green-500";
+  if (n < 0) return "text-red-500";
+  return "";
+}
+
+function formatDelta(n: number) {
+  if (!n) return "—";
+  return `${n > 0 ? "+" : ""}${formatRes(n)}`;
+}
+
+function TickTable({
+  ticks,
+  maxHeightClass,
+  variant = "log",
+  currentTick,
+}: {
+  ticks: TickSnapshot[];
+  maxHeightClass?: string;
+  variant?: "actions" | "log";
+  currentTick: number;
+}) {
+  const showResources = variant === "log";
+  // Letzter Tick ≤ jetzt (= aktuelle Position / letzte fällige Aktion)
+  const highlightTick = ticks.reduce<number | null>((best, t) => {
+    if (t.tick > currentTick) return best;
+    if (best === null || t.tick > best) return t.tick;
+    return best;
+  }, null);
+
+  return (
+    <div
+      className={["overflow-auto rounded-xl border border-border", maxHeightClass]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <table className="w-full min-w-[720px] border-collapse text-left text-xs">
+        <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+          <tr className="border-b border-border text-[10px] tracking-wide text-muted-foreground uppercase">
+            <th className="px-2 py-2 font-medium">Tick</th>
+            <th className="px-2 py-2 font-medium">Uhrzeit</th>
+            {showResources && (
+              <>
+                <th className="px-2 py-2 font-medium text-right">Met</th>
+                <th className="px-2 py-2 font-medium text-right">Kris</th>
+                <th className="px-2 py-2 font-medium text-right">+M</th>
+                <th className="px-2 py-2 font-medium text-right">+K</th>
+              </>
+            )}
+            <th className="px-2 py-2 font-medium">Aktiv</th>
+            <th className="px-2 py-2 font-medium">Start</th>
+            <th className="px-2 py-2 font-medium">Ende</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ticks.map((t) => {
+            const hasStart = t.started.length > 0;
+            const isCurrent = highlightTick !== null && t.tick === highlightTick;
+            return (
+              <tr
+                key={t.tick}
+                className={[
+                  "border-b border-border/60",
+                  variant === "actions"
+                    ? "bg-background/50"
+                    : hasStart
+                      ? "bg-card"
+                      : "bg-background/50 text-muted-foreground",
+                ].join(" ")}
+              >
+                <td className="px-2 py-1.5 font-mono tabular-nums">{t.tick}</td>
+                <td
+                  className={[
+                    "px-2 py-1.5 whitespace-nowrap tabular-nums",
+                    isCurrent ? "font-medium text-green-500" : "",
+                  ].join(" ")}
+                >
+                  {t.clockLabel}
+                </td>
+                {showResources && (
+                  <>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                      {formatRes(t.met)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                      {formatRes(t.kris)}
+                    </td>
+                    <td
+                      className={["px-2 py-1.5 text-right font-mono tabular-nums", deltaClass(t.incomeMet)].join(
+                        " ",
+                      )}
+                    >
+                      {formatDelta(t.incomeMet)}
+                    </td>
+                    <td
+                      className={["px-2 py-1.5 text-right font-mono tabular-nums", deltaClass(t.incomeKris)].join(
+                        " ",
+                      )}
+                    >
+                      {formatDelta(t.incomeKris)}
+                    </td>
+                  </>
+                )}
+                <td className="max-w-[18rem] px-2 py-1.5 text-[11px] leading-snug">
+                  {t.active.length ? (
+                    <JobList
+                      items={t.active.map((j) => ({
+                        name: j.name,
+                        type: j.type,
+                        suffix: `(${j.remainingTicks})`,
+                      }))}
+                    />
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
+                  {t.started.length ? <JobList items={t.started} /> : "—"}
+                </td>
+                <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
+                  {t.finished.length ? <JobList items={t.finished} /> : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -620,16 +769,8 @@ function JobList({
   );
 }
 
-function GanttLane({
-  title,
-  steps,
-  maxTick,
-}: {
-  title: string;
-  steps: Job[];
-  maxTick: number;
-}) {
-  // Stack overlapping jobs into rows so parallel work is visible
+function Timeline({ steps, maxTick }: { steps: Job[]; maxTick: number }) {
+  // Überlappende Jobs in Zeilen stapeln
   const rows: Job[][] = [];
   const sorted = [...steps].sort(
     (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
@@ -647,15 +788,14 @@ function GanttLane({
     if (!placed) rows.push([job]);
   }
 
-  const rowHeight = 44;
+  const rowHeight = 36;
   const height = Math.max(rows.length, 1) * rowHeight + 8;
+  const markers: number[] = [];
+  for (let t = 0; t <= maxTick; t += 12) markers.push(t);
+  if (markers[markers.length - 1] !== maxTick) markers.push(maxTick);
 
   return (
-    <div>
-      <div className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-        {title}
-        {rows.length > 1 ? ` · ${rows.length} parallel` : ""}
-      </div>
+    <div className="space-y-1">
       <div className="relative rounded-md bg-muted/50" style={{ height }}>
         {rows.map((row, rowIndex) =>
           row.map((s) => {
@@ -681,114 +821,26 @@ function GanttLane({
                 }}
               >
                 <span className="block truncate font-semibold">{s.name}</span>
-                <span className="block opacity-80">
-                  {s.startTick}–{s.endTick}
-                </span>
               </div>
             );
           }),
         )}
       </div>
+      <div className="relative h-6 border-t border-border pt-1">
+        {markers.map((t) => (
+          <span
+            key={t}
+            className="absolute text-[10px] text-muted-foreground tabular-nums"
+            style={{
+              left: `${(t / maxTick) * 100}%`,
+              transform: t === 0 ? "none" : t === maxTick ? "translateX(-100%)" : "translateX(-50%)",
+            }}
+          >
+            {t}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ResourceChart({
-  ticks,
-  maxRes,
-  maxTick,
-}: {
-  ticks: TickSnapshot[];
-  maxRes: number;
-  maxTick: number;
-}) {
-  const w = 1000;
-  const h = 220;
-  const padL = 48;
-  const padR = 12;
-  const padT = 12;
-  const padB = 28;
-  const innerW = w - padL - padR;
-  const innerH = h - padT - padB;
-
-  const xOf = (tick: number) => padL + (tick / maxTick) * innerW;
-  const yOf = (v: number) => padT + innerH - (v / maxRes) * innerH;
-
-  const poly = (key: "met" | "kris") =>
-    ticks.map((t) => `${xOf(t.tick).toFixed(1)},${yOf(t[key]).toFixed(1)}`).join(" ");
-
-  const eventTicks = ticks.filter(
-    (t) => t.started.length > 0 || t.finished.length > 0,
-  );
-
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(maxRes * f));
-
-  return (
-    <div className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-56 w-full min-w-[640px]">
-        {yTicks.map((v) => (
-          <g key={v}>
-            <line
-              x1={padL}
-              x2={w - padR}
-              y1={yOf(v)}
-              y2={yOf(v)}
-              className="stroke-border"
-              strokeWidth={1}
-            />
-            <text
-              x={padL - 6}
-              y={yOf(v) + 3}
-              textAnchor="end"
-              className="fill-muted-foreground"
-              fontSize={10}
-            >
-              {formatRes(v)}
-            </text>
-          </g>
-        ))}
-
-        {eventTicks.map((t) => (
-          <line
-            key={`e-${t.tick}`}
-            x1={xOf(t.tick)}
-            x2={xOf(t.tick)}
-            y1={padT}
-            y2={padT + innerH}
-            className="stroke-amber-500/40"
-            strokeWidth={1}
-          />
-        ))}
-
-        <polyline
-          fill="none"
-          strokeWidth={2}
-          className="stroke-sky-500"
-          points={poly("met")}
-        />
-        <polyline
-          fill="none"
-          strokeWidth={2}
-          className="stroke-cyan-400"
-          points={poly("kris")}
-        />
-
-        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-          const t = Math.round(maxTick * f);
-          return (
-            <text
-              key={f}
-              x={xOf(t)}
-              y={h - 8}
-              textAnchor="middle"
-              className="fill-muted-foreground"
-              fontSize={10}
-            >
-              t{t}
-            </text>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
