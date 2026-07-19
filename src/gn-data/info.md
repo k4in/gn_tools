@@ -8,6 +8,8 @@ Ticks sind immer zu vollen 15min (z.B. 14:00, 14:15, 14:30, etc...)
 Ein "angebrochener" Tick zählt bereits zur Bauzeit/Forschungszeit hinzu. Praktisches Beispiel:
 Die Bergbau-Forschung dauert 60 Minuten. Wenn ich die Forschung um 14:05 in Auftrag gebe, ist sie in 55 Minuten fertig. Ticks um: 14:15, 14:30, 14:45 und 15:00. Die Bergbau-Forschung ist mit dem Tick um 15:00 abgeschlossen.
 
+Beliebig viele Gebäude und Forschungen können parallel zueinander gestartet werden oder laufen, vorrausgesetzt die jeweiligen Dependencies wurden bereits gebaut/erforscht.
+
 # Ressourcen
 
 Es gibt in Galaxy-Network 2 Ressourcen, Metall und Kristall.

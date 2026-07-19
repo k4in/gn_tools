@@ -1,30 +1,107 @@
 import { useMemo } from "react";
 import techtreeData from "@/gn-data/techtree.json";
+import startData from "@/gn-data/start.json";
 import type { TechTreeEntry } from "@/types/gn";
 
 const techtree = techtreeData as TechTreeEntry[];
 const GOAL = "Extraktor";
 const TICK_MINUTES = 15;
+const MAX_TICKS = 2500;
 
-type ScheduledStep = {
-  entry: TechTreeEntry;
+type StartConfig = {
+  start_time: string;
+  start_date: string;
+  starting_resources: { metall: number; kristall: number };
+};
+
+const start = startData as StartConfig;
+
+/** Absolute income per completed building (not cumulative across tiers). */
+const INCOME_BY_BUILDING: Record<string, { met: number; kris: number }> = {
+  Koloniezentrum: { met: 500, kris: 500 },
+  Kristallmine: { met: 0, kris: 1000 },
+  Metallmine: { met: 1000, kris: 0 },
+  "Zweite Kristallmine": { met: 0, kris: 2000 },
+  "Zweite Metallmine": { met: 2000, kris: 0 },
+  "Tiefe Kristallminen": { met: 0, kris: 4000 },
+  "Tiefe Metallminen": { met: 4000, kris: 0 },
+  "Vollautomatisierte Kristallmine": { met: 0, kris: 10000 },
+  "Vollautomatisierte Metallmine": { met: 10000, kris: 0 },
+};
+
+const MINE_TIERS = [
+  ["Kristallmine", "Metallmine"],
+  ["Zweite Kristallmine", "Zweite Metallmine"],
+  ["Tiefe Kristallminen", "Tiefe Metallminen"],
+  ["Vollautomatisierte Kristallmine", "Vollautomatisierte Metallmine"],
+] as const;
+
+type Res = { met: number; kris: number };
+
+type Job = {
+  name: string;
+  type: TechTreeEntry["type"];
   startTick: number;
   endTick: number;
-  lane: "building" | "research";
-  onCriticalPath: boolean;
+  cost: Res;
+};
+
+type NamedJob = {
+  name: string;
+  type: TechTreeEntry["type"];
+};
+
+type ActiveJob = NamedJob & {
+  remainingTicks: number;
+};
+
+type TickSnapshot = {
+  tick: number;
+  clockLabel: string;
+  met: number;
+  kris: number;
+  incomeMet: number;
+  incomeKris: number;
+  active: ActiveJob[];
+  started: NamedJob[];
+  finished: NamedJob[];
+};
+
+type PlanResult = {
+  goal: string;
+  finishTick: number;
+  mineTier: number;
+  steps: Job[];
+  ticks: TickSnapshot[];
+  targetSet: string[];
+  critical: Set<string>;
+  peakWaitTicks: number;
+  finalRes: Res;
+  start: StartConfig;
 };
 
 function byName(entries: TechTreeEntry[]) {
   return new Map(entries.map((e) => [e.name, e]));
 }
 
-/** All techs required to unlock `goal` (including goal itself). */
+function addRes(a: Res, b: Res): Res {
+  return { met: a.met + b.met, kris: a.kris + b.kris };
+}
+
+function canAfford(res: Res, cost: Res) {
+  return res.met >= cost.met && res.kris >= cost.kris;
+}
+
+function pay(res: Res, cost: Res): Res {
+  return { met: res.met - cost.met, kris: res.kris - cost.kris };
+}
+
 function requiredClosure(goal: string, map: Map<string, TechTreeEntry>) {
   const needed = new Set<string>();
   const visit = (name: string) => {
     if (needed.has(name)) return;
     const entry = map.get(name);
-    if (!entry) throw new Error(`Unknown tech: ${name}`);
+    if (!entry) throw new Error(`Unbekannte Technologie: ${name}`);
     needed.add(name);
     for (const dep of entry.dependencies) visit(dep);
   };
@@ -32,7 +109,19 @@ function requiredClosure(goal: string, map: Map<string, TechTreeEntry>) {
   return needed;
 }
 
-/** Longest remaining duration (ticks) through dependency chain. */
+function expandWithDeps(names: Iterable<string>, map: Map<string, TechTreeEntry>) {
+  const set = new Set<string>();
+  const visit = (name: string) => {
+    if (set.has(name)) return;
+    const entry = map.get(name);
+    if (!entry) throw new Error(`Unbekannte Technologie: ${name}`);
+    set.add(name);
+    for (const dep of entry.dependencies) visit(dep);
+  };
+  for (const n of names) visit(n);
+  return set;
+}
+
 function criticalPathTicks(
   name: string,
   map: Map<string, TechTreeEntry>,
@@ -56,7 +145,6 @@ function criticalPathSet(goal: string, map: Map<string, TechTreeEntry>) {
     path.add(current);
     const entry = map.get(current)!;
     if (!entry.dependencies.length) break;
-    // Prefer dependency with highest critical-path contribution
     current = entry.dependencies.reduce((best, d) =>
       criticalPathTicks(d, map) > criticalPathTicks(best, map) ? d : best,
     );
@@ -64,248 +152,406 @@ function criticalPathSet(goal: string, map: Map<string, TechTreeEntry>) {
   return path;
 }
 
-/**
- * Draft scheduler: one building lane + one research lane in parallel.
- * Greedy: whenever a lane is free, start the ready item with the highest
- * critical-path remaining time (then higher cost as tie-break).
- */
-function schedule(
-  needed: Set<string>,
-  map: Map<string, TechTreeEntry>,
-  critical: Set<string>,
-): ScheduledStep[] {
-  const done = new Set<string>();
-  const steps: ScheduledStep[] = [];
-  let buildingFreeAt = 0;
-  let researchFreeAt = 0;
-  let guard = 0;
-
-  const ready = (lane: "building" | "research") =>
-    [...needed]
-      .filter((n) => !done.has(n))
-      .map((n) => map.get(n)!)
-      .filter((e) => e.type === lane)
-      .filter((e) => e.dependencies.every((d) => !needed.has(d) || done.has(d)));
-
-  const pick = (candidates: TechTreeEntry[]) => {
-    if (!candidates.length) return null;
-    return candidates
-      .slice()
-      .sort((a, b) => {
-        const cp = criticalPathTicks(b.name, map) - criticalPathTicks(a.name, map);
-        if (cp !== 0) return cp;
-        return b.cost.met + b.cost.kris - (a.cost.met + a.cost.kris);
-      })[0];
-  };
-
-  while (done.size < needed.size && guard++ < 500) {
-    const bReady = ready("building");
-    const rReady = ready("research");
-    const bPick = pick(bReady);
-    const rPick = pick(rReady);
-
-    if (!bPick && !rPick) {
-      // Deadlock (shouldn't happen on a valid tree)
-      break;
-    }
-
-    // Advance the lane that can start sooner (or both if same time)
-    const bStart = bPick ? buildingFreeAt : Infinity;
-    const rStart = rPick ? researchFreeAt : Infinity;
-    const t = Math.min(bStart, rStart);
-
-    if (bPick && buildingFreeAt <= t) {
-      const startTick = buildingFreeAt;
-      const endTick = startTick + bPick.ticks;
-      steps.push({
-        entry: bPick,
-        startTick,
-        endTick,
-        lane: "building",
-        onCriticalPath: critical.has(bPick.name),
-      });
-      buildingFreeAt = endTick;
-      done.add(bPick.name);
-    }
-
-    if (rPick && researchFreeAt <= t) {
-      // re-check still ready (deps might need the building we just finished — only if same t after building)
-      const stillReady =
-        rPick.dependencies.every((d) => !needed.has(d) || done.has(d)) ||
-        // if we finished a dep this same iteration at same t, allow it next loop
-        false;
-      if (rPick.dependencies.every((d) => !needed.has(d) || done.has(d))) {
-        const startTick = researchFreeAt;
-        const endTick = startTick + rPick.ticks;
-        steps.push({
-          entry: rPick,
-          startTick,
-          endTick,
-          lane: "research",
-          onCriticalPath: critical.has(rPick.name),
-        });
-        researchFreeAt = endTick;
-        done.add(rPick.name);
-      } else if (!stillReady && !bPick) {
-        // wait for building lane progress
-        researchFreeAt = Math.max(researchFreeAt, buildingFreeAt);
-      }
-    }
-
-    // If only one lane progressed due to dep order, nudge the waiting lane clock
-    if (done.size < needed.size) {
-      const nextB = pick(ready("building"));
-      const nextR = pick(ready("research"));
-      if (!nextB && nextR && researchFreeAt < buildingFreeAt) {
-        researchFreeAt = buildingFreeAt;
-      }
-      if (!nextR && nextB && buildingFreeAt < researchFreeAt) {
-        buildingFreeAt = researchFreeAt;
-      }
-      // both blocked until the other finishes something already scheduled — clocks already advanced
-      if (!nextB && !nextR) {
-        const nextFree = Math.min(buildingFreeAt, researchFreeAt);
-        if (buildingFreeAt === researchFreeAt) break;
-        if (buildingFreeAt < researchFreeAt) researchFreeAt = nextFree;
-        else buildingFreeAt = nextFree;
-      }
-    }
+function incomeFrom(completed: Set<string>): Res {
+  let met = 0;
+  let kris = 0;
+  for (const name of completed) {
+    const inc = INCOME_BY_BUILDING[name];
+    if (!inc) continue;
+    met = Math.max(met, inc.met);
+    kris = Math.max(kris, inc.kris);
   }
-
-  return steps.sort((a, b) => a.startTick - b.startTick || a.endTick - b.endTick);
+  return { met, kris };
 }
 
-function formatDuration(ticks: number) {
-  const minutes = ticks * TICK_MINUTES;
-  const days = Math.floor(minutes / (24 * 60));
-  const hours = Math.floor((minutes % (24 * 60)) / 60);
-  const mins = minutes % 60;
-  const parts: string[] = [];
-  if (days) parts.push(`${days}d`);
-  if (hours) parts.push(`${hours}h`);
-  if (mins || !parts.length) parts.push(`${mins}m`);
-  return `${parts.join(" ")} · ${ticks} ticks`;
+/** Buildings that raise income and are not yet completed. */
+function incomeGainIfBuilt(name: string, completed: Set<string>): number {
+  const inc = INCOME_BY_BUILDING[name];
+  if (!inc) return 0;
+  const now = incomeFrom(completed);
+  const next = incomeFrom(new Set([...completed, name]));
+  return next.met - now.met + (next.kris - now.kris);
+}
+
+function parseStartMinutes(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function clockLabel(startCfg: StartConfig, tick: number) {
+  const base = parseStartMinutes(startCfg.start_time);
+  const total = base + tick * TICK_MINUTES;
+  const dayOffset = Math.floor(total / (24 * 60));
+  const mins = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = String(Math.floor(mins / 60)).padStart(2, "0");
+  const mm = String(mins % 60).padStart(2, "0");
+  const date = new Date(`${startCfg.start_date}T00:00:00`);
+  date.setDate(date.getDate() + dayOffset);
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${d}.${mo}.${y} ${hh}:${mm}`;
 }
 
 function formatRes(n: number) {
-  return n.toLocaleString("de-DE");
+  return Math.round(n).toLocaleString("de-DE");
+}
+
+function economyExtras(tier: number): string[] {
+  const extras: string[] = [];
+  for (let i = 0; i < tier; i++) {
+    extras.push(...MINE_TIERS[i]);
+  }
+  return extras;
+}
+
+/**
+ * Diskrete Tick-Simulation mit unbegrenzter Parallelität.
+ *
+ * t=0: Spielstart. Jobs können sofort gestartet werden; noch kein Einkommen.
+ * Jeder spätere Tick t=1..n:
+ *   1) Jobs mit endTick === t abschließen
+ *   2) Einkommen aus früher fertigen Gebäuden gutschreiben
+ *   3) Alle startbaren Jobs starten (Dependencies + Ressourcen),
+ *      solange Kosten gedeckt sind — beliebig viele parallel
+ */
+function simulate(
+  targets: Set<string>,
+  map: Map<string, TechTreeEntry>,
+  critical: Set<string>,
+  goal: string,
+  startCfg: StartConfig,
+): Omit<PlanResult, "mineTier" | "targetSet" | "critical" | "start"> | null {
+  const requiredForGoal = requiredClosure(goal, map);
+  let res: Res = {
+    met: startCfg.starting_resources.metall,
+    kris: startCfg.starting_resources.kristall,
+  };
+  const completed = new Set<string>();
+  const completedAt = new Map<string, number>();
+  let active: Job[] = [];
+  const steps: Job[] = [];
+  const ticks: TickSnapshot[] = [];
+  let peakWaitTicks = 0;
+  let waitStreak = 0;
+
+  const inProgress = () => new Set(active.map((j) => j.name));
+
+  const isReady = (name: string) => {
+    const e = map.get(name)!;
+    return e.dependencies.every((d) => completed.has(d));
+  };
+
+  const score = (name: string) => {
+    const e = map.get(name)!;
+    const onCrit = critical.has(name) ? 1 : 0;
+    const forGoal = requiredForGoal.has(name) ? 1 : 0;
+    const gain = incomeGainIfBuilt(name, completed);
+    return onCrit * 1e9 + forGoal * 1e8 + gain * 1e3 - e.ticks + e.cost.met * 1e-9;
+  };
+
+  /** Startet alle Jobs, die jetzt Dependencies + Ressourcen erfüllen. */
+  const tryStartAll = (tick: number) => {
+    const startedJobs: NamedJob[] = [];
+    let spent: Res = { met: 0, kris: 0 };
+    // Greedy: wiederholt den besten Kandidaten starten, bis nichts mehr geht
+    while (true) {
+      const busy = inProgress();
+      const candidates = [...targets]
+        .filter((n) => !completed.has(n))
+        .filter((n) => !busy.has(n))
+        .filter(isReady)
+        .filter((n) =>
+          canAfford(res, { met: map.get(n)!.cost.met, kris: map.get(n)!.cost.kris }),
+        )
+        .sort((a, b) => score(b) - score(a));
+
+      const pick = candidates[0];
+      if (!pick) break;
+
+      const entry = map.get(pick)!;
+      const cost = { met: entry.cost.met, kris: entry.cost.kris };
+      res = pay(res, cost);
+      spent = addRes(spent, cost);
+      const job: Job = {
+        name: pick,
+        type: entry.type,
+        startTick: tick,
+        endTick: tick + entry.ticks,
+        cost,
+      };
+      active.push(job);
+      steps.push(job);
+      startedJobs.push({ name: pick, type: entry.type });
+    }
+    return { startedJobs, spent };
+  };
+
+  const snapshot = (
+    tick: number,
+    started: NamedJob[],
+    finished: NamedJob[],
+    /** Netto-Änderung: Einkommen − in diesem Tick gezahlte Baukosten */
+    delta: Res,
+  ): TickSnapshot => ({
+    tick,
+    clockLabel: clockLabel(startCfg, tick),
+    met: res.met,
+    kris: res.kris,
+    incomeMet: delta.met,
+    incomeKris: delta.kris,
+    active: active
+      .map((j) => ({
+        name: j.name,
+        type: j.type,
+        remainingTicks: j.endTick - tick,
+      }))
+      .sort((a, b) => a.remainingTicks - b.remainingTicks || a.name.localeCompare(b.name)),
+    started,
+    finished,
+  });
+
+  // t = 0
+  {
+    const { startedJobs, spent } = tryStartAll(0);
+    ticks.push(
+      snapshot(0, startedJobs, [], { met: -spent.met, kris: -spent.kris }),
+    );
+  }
+
+  for (let t = 1; t <= MAX_TICKS; t++) {
+    // 1) Abschlüsse
+    const finishing = active.filter((j) => j.endTick === t);
+    active = active.filter((j) => j.endTick !== t);
+    const finishedJobs: NamedJob[] = [];
+    for (const job of finishing) {
+      completed.add(job.name);
+      completedAt.set(job.name, t);
+      finishedJobs.push({ name: job.name, type: job.type });
+    }
+
+    // 2) Einkommen (Gebäude, die vor diesem Tick fertig wurden)
+    const producing = new Set(
+      [...completed].filter((n) => (completedAt.get(n) ?? 0) < t),
+    );
+    const income = incomeFrom(producing);
+    if (income.met || income.kris) {
+      res = addRes(res, income);
+    }
+
+    // 3) Neue Jobs starten (beliebig parallel)
+    const { startedJobs, spent } = tryStartAll(t);
+
+    const waiting =
+      !completed.has(goal) &&
+      startedJobs.length === 0 &&
+      active.length === 0 &&
+      [...targets].some((n) => !completed.has(n));
+
+    if (waiting) {
+      waitStreak += 1;
+      peakWaitTicks = Math.max(peakWaitTicks, waitStreak);
+    } else {
+      waitStreak = 0;
+    }
+
+    const delta: Res = {
+      met: income.met - spent.met,
+      kris: income.kris - spent.kris,
+    };
+    ticks.push(snapshot(t, startedJobs, finishedJobs, delta));
+
+    if (completed.has(goal)) {
+      return {
+        goal,
+        finishTick: t,
+        steps,
+        ticks,
+        peakWaitTicks,
+        finalRes: res,
+      };
+    }
+
+    // Soft-Lock: nichts aktiv, kein Einkommen, nichts startbar
+    if (
+      active.length === 0 &&
+      income.met === 0 &&
+      income.kris === 0 &&
+      ![...targets].some(
+        (n) =>
+          !completed.has(n) &&
+          isReady(n) &&
+          canAfford(res, { met: map.get(n)!.cost.met, kris: map.get(n)!.cost.kris }),
+      )
+    ) {
+      const remaining = [...targets].filter((n) => !completed.has(n));
+      if (remaining.length) return null;
+    }
+  }
+
+  return null;
+}
+
+function planFastestToGoal(goal: string, startCfg: StartConfig): PlanResult {
+  const map = byName(techtree);
+  if (!map.has(goal)) throw new Error(`Ziel fehlt: ${goal}`);
+
+  const critical = criticalPathSet(goal, map);
+  const base = requiredClosure(goal, map);
+
+  let best: PlanResult | null = null;
+
+  for (let tier = 0; tier <= MINE_TIERS.length; tier++) {
+    const targets = expandWithDeps([...base, ...economyExtras(tier)], map);
+    const sim = simulate(targets, map, critical, goal, startCfg);
+    if (!sim) continue;
+    const candidate: PlanResult = {
+      ...sim,
+      mineTier: tier,
+      targetSet: [...targets].sort(),
+      critical,
+      start: startCfg,
+    };
+    if (!best || candidate.finishTick < best.finishTick) {
+      best = candidate;
+    }
+  }
+
+  if (!best) {
+    throw new Error("Kein erreichbarer Plan mit den aktuellen Regeln / Startressourcen");
+  }
+  return best;
 }
 
 export default function App() {
-  const plan = useMemo(() => {
-    const map = byName(techtree);
-    if (!map.has(GOAL)) throw new Error(`Goal ${GOAL} missing from techtree`);
+  const plan = useMemo(() => planFastestToGoal(GOAL, start), []);
 
-    const needed = requiredClosure(GOAL, map);
-    const critical = criticalPathSet(GOAL, map);
-    const cpTicks = criticalPathTicks(GOAL, map);
-    const steps = schedule(needed, map, critical);
-    const makespan = steps.reduce((m, s) => Math.max(m, s.endTick), 0);
+  const maxTick = Math.max(plan.finishTick, 1);
+  const maxRes = Math.max(
+    1,
+    ...plan.ticks.map((t) => t.met),
+    ...plan.ticks.map((t) => t.kris),
+  );
 
-    let met = 0;
-    let kris = 0;
-    for (const name of needed) {
-      const e = map.get(name)!;
-      met += e.cost.met;
-      kris += e.cost.kris;
-    }
-    // First extractor unit cost from info.md (not in techtree)
-    const firstExtractorMet = 65;
-
-    const requiredEntries = [...needed]
-      .map((n) => map.get(n)!)
-      .sort((a, b) => criticalPathTicks(a.name, map) - criticalPathTicks(b.name, map));
-
-    return {
-      map,
-      needed,
-      critical,
-      cpTicks,
-      steps,
-      makespan,
-      totalCost: { met: met + firstExtractorMet, kris },
-      techCost: { met, kris },
-      firstExtractorMet,
-      requiredEntries,
-    };
-  }, []);
-
-  const maxTick = Math.max(plan.makespan, 1);
-  const buildingSteps = plan.steps.filter((s) => s.lane === "building");
-  const researchSteps = plan.steps.filter((s) => s.lane === "research");
+  const buildingSteps = plan.steps.filter((s) => s.type === "building");
+  const researchSteps = plan.steps.filter((s) => s.type === "research");
 
   return (
     <main className="min-h-svh bg-background text-foreground">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 md:px-8">
-        {/* Header */}
-        <header className="space-y-2 border-b border-border pb-6">
-          <p className="text-xs font-medium tracking-[0.2em] text-muted-foreground uppercase">
-            GN Planner · draft
-          </p>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
-            Fastest path to first{" "}
-            <span className="text-primary">{GOAL}</span>
-          </h1>
-          <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-            Rough plan from the tech tree only: one building queue and one research
-            queue in parallel. Resource income, partial ticks, and shipyard queues
-            are not simulated yet — this is a visual first draft.
-          </p>
-        </header>
-
-        {/* KPI strip */}
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi
-            label="Wall-clock (parallel queues)"
-            value={formatDuration(plan.makespan)}
-            hint="Build + research at the same time"
-          />
-          <Kpi
-            label="Critical path (serial deps)"
-            value={formatDuration(plan.cpTicks)}
-            hint="Longest dependency chain"
-          />
-          <Kpi
-            label="Tech cost (path)"
-            value={`${formatRes(plan.techCost.met)} M · ${formatRes(plan.techCost.kris)} K`}
-            hint="Sum of required techs/buildings"
-          />
-          <Kpi
-            label="Incl. 1st extractor"
-            value={`${formatRes(plan.totalCost.met)} M · ${formatRes(plan.totalCost.kris)} K`}
-            hint={`+${plan.firstExtractorMet} M unit cost (info.md)`}
-          />
+      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 md:px-8">
+        {/* Tick-Log */}
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Tick-Protokoll</h2>
+            <p className="text-sm text-muted-foreground">
+              Alle {plan.ticks.length} Ticks · Ziel: {GOAL} um{" "}
+              {clockLabel(plan.start, plan.finishTick)} (Tick {plan.finishTick})
+            </p>
+          </div>
+          <div className="max-h-[36rem] overflow-auto rounded-xl border border-border">
+            <table className="w-full min-w-[720px] border-collapse text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+                <tr className="border-b border-border text-[10px] tracking-wide text-muted-foreground uppercase">
+                  <th className="px-2 py-2 font-medium">Tick</th>
+                  <th className="px-2 py-2 font-medium">Uhrzeit</th>
+                  <th className="px-2 py-2 font-medium text-right">Met</th>
+                  <th className="px-2 py-2 font-medium text-right">Kris</th>
+                  <th className="px-2 py-2 font-medium text-right">+M</th>
+                  <th className="px-2 py-2 font-medium text-right">+K</th>
+                  <th className="px-2 py-2 font-medium">Aktiv</th>
+                  <th className="px-2 py-2 font-medium">Start</th>
+                  <th className="px-2 py-2 font-medium">Ende</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.ticks.map((t) => {
+                  const hasStart = t.started.length > 0;
+                  return (
+                    <tr
+                      key={t.tick}
+                      className={[
+                        "border-b border-border/60",
+                        hasStart
+                          ? "bg-card"
+                          : "bg-background/50 text-muted-foreground",
+                      ].join(" ")}
+                    >
+                      <td className="px-2 py-1.5 font-mono tabular-nums">{t.tick}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap tabular-nums">
+                        {t.clockLabel}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                        {formatRes(t.met)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono tabular-nums">
+                        {formatRes(t.kris)}
+                      </td>
+                      <td
+                        className={[
+                          "px-2 py-1.5 text-right font-mono tabular-nums",
+                          t.incomeMet > 0
+                            ? "text-green-500"
+                            : t.incomeMet < 0
+                              ? "text-red-500"
+                              : "",
+                        ].join(" ")}
+                      >
+                        {t.incomeMet
+                          ? `${t.incomeMet > 0 ? "+" : ""}${formatRes(t.incomeMet)}`
+                          : "—"}
+                      </td>
+                      <td
+                        className={[
+                          "px-2 py-1.5 text-right font-mono tabular-nums",
+                          t.incomeKris > 0
+                            ? "text-green-500"
+                            : t.incomeKris < 0
+                              ? "text-red-500"
+                              : "",
+                        ].join(" ")}
+                      >
+                        {t.incomeKris
+                          ? `${t.incomeKris > 0 ? "+" : ""}${formatRes(t.incomeKris)}`
+                          : "—"}
+                      </td>
+                      <td className="max-w-[18rem] px-2 py-1.5 text-[11px] leading-snug">
+                        {t.active.length ? (
+                          <JobList
+                            items={t.active.map((j) => ({
+                              name: j.name,
+                              type: j.type,
+                              suffix: `(${j.remainingTicks})`,
+                            }))}
+                          />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
+                        {t.started.length ? <JobList items={t.started} /> : "—"}
+                      </td>
+                      <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
+                        {t.finished.length ? <JobList items={t.finished} /> : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
 
-        {/* Gantt */}
+        {/* Warteschlangen / Gantt */}
         <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold">Timeline</h2>
-              <p className="text-sm text-muted-foreground">
-                Yellow = building · Grey = research ·{" "}
-                <span className="font-medium text-primary">Outline</span> = critical
-                path
-              </p>
-            </div>
-            <Legend />
+          <div>
+            <h2 className="text-lg font-semibold">Parallel laufende Aufträge</h2>
+            <p className="text-sm text-muted-foreground">
+              Amber = Gebäude · Fuchsia = Forschung · beliebig viele parallel
+            </p>
           </div>
-
-          <div className="space-y-6">
-            <GanttLane
-              title="Building"
-              steps={buildingSteps}
-              maxTick={maxTick}
-            />
-            <GanttLane
-              title="Research"
-              steps={researchSteps}
-              maxTick={maxTick}
-            />
-          </div>
-
-          {/* tick scale */}
-          <div className="relative mt-2 h-6 border-t border-border pt-1">
+          <GanttLane title="Gebäude" steps={buildingSteps} maxTick={maxTick} />
+          <GanttLane title="Forschung" steps={researchSteps} maxTick={maxTick} />
+          <div className="relative h-6 border-t border-border pt-1">
             {[0, 0.25, 0.5, 0.75, 1].map((f) => {
               const t = Math.round(maxTick * f);
               return (
@@ -321,141 +567,26 @@ export default function App() {
           </div>
         </section>
 
-        {/* Ordered steps + dependency chips */}
-        <section className="grid gap-6 lg:grid-cols-5">
-          <div className="space-y-3 lg:col-span-3">
-            <h2 className="text-lg font-semibold">Suggested order</h2>
-            <ol className="space-y-2">
-              {plan.steps.map((step, i) => (
-                <li
-                  key={`${step.entry.name}-${step.startTick}`}
-                  className={[
-                    "flex items-stretch gap-3 rounded-lg border p-3",
-                    step.onCriticalPath
-                      ? "border-primary/50 bg-primary/5"
-                      : "border-border bg-card",
-                  ].join(" ")}
-                >
-                  <div className="flex w-8 shrink-0 items-center justify-center text-sm font-bold text-muted-foreground tabular-nums">
-                    {i + 1}
-                  </div>
-                  <div
-                    className={[
-                      "w-1 shrink-0 rounded-full",
-                      step.lane === "building" ? "bg-amber-400" : "bg-zinc-400",
-                    ].join(" ")}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{step.entry.name}</span>
-                      <TypeBadge type={step.entry.type} />
-                      {step.onCriticalPath && (
-                        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-primary uppercase">
-                          critical
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      ticks {step.startTick}→{step.endTick} · {step.entry.ticks}{" "}
-                      ticks duration · {formatRes(step.entry.cost.met)} M /{" "}
-                      {formatRes(step.entry.cost.kris)} K
-                    </p>
-                    {step.entry.dependencies.length > 0 && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        needs: {step.entry.dependencies.join(", ")}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-              <li className="flex items-stretch gap-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3">
-                <div className="flex w-8 shrink-0 items-center justify-center text-sm font-bold text-primary tabular-nums">
-                  ✓
-                </div>
-                <div className="w-1 shrink-0 rounded-full bg-primary" />
-                <div>
-                  <span className="font-medium">Build first Extraktor unit</span>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    +{plan.firstExtractorMet} M (n×65 M scaling) · +50 resources /
-                    tick once finished · not timed in this draft
-                  </p>
-                </div>
-              </li>
-            </ol>
-          </div>
-
-          {/* Required set / graph summary */}
-          <div className="space-y-3 lg:col-span-2">
-            <h2 className="text-lg font-semibold">Required tech set</h2>
+        {/* Ressourcen */}
+        <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <div>
+            <h2 className="text-lg font-semibold">Ressourcen über die Zeit</h2>
             <p className="text-sm text-muted-foreground">
-              {plan.needed.size} items in the dependency closure of {GOAL}.
+              Metall (blau) und Kristall (cyan) nach jedem Tick. Vertikale Marken =
+              Starts/Fertigstellungen.
             </p>
-            <ul className="flex flex-col gap-1.5">
-              {plan.requiredEntries.map((e) => {
-                const isGoal = e.name === GOAL;
-                const isCrit = plan.critical.has(e.name);
-                return (
-                  <li
-                    key={e.name}
-                    className={[
-                      "flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-sm",
-                      isGoal
-                        ? "border-primary bg-primary/10 font-medium"
-                        : isCrit
-                          ? "border-primary/30 bg-card"
-                          : "border-border/80 bg-muted/40 text-muted-foreground",
-                    ].join(" ")}
-                  >
-                    <span className="truncate">{e.name}</span>
-                    <span className="shrink-0 text-[11px] tabular-nums">
-                      {e.ticks}t
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-              <p className="mb-1 font-semibold text-foreground">Draft notes</p>
-              <ul className="list-inside list-disc space-y-1">
-                <li>No resource-wait simulation (mines / asteroids ignored).</li>
-                <li>Assumes free parallel building + research slots.</li>
-                <li>Critical path = longest tick chain in the tree.</li>
-                <li>Next: income model from info.md + “can I afford this now?”.</li>
-              </ul>
-            </div>
           </div>
-        </section>
-
-        {/* Mini flow: critical path only */}
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4 md:p-6">
-          <h2 className="text-lg font-semibold">Critical path chain</h2>
-          <p className="text-sm text-muted-foreground">
-            Dependency spine that determines the lower bound on time.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {[...plan.critical]
-              .map((n) => plan.map.get(n)!)
-              .sort(
-                (a, b) =>
-                  criticalPathTicks(a.name, plan.map) -
-                  criticalPathTicks(b.name, plan.map),
-              )
-              .map((e, i, arr) => (
-                <div key={e.name} className="flex items-center gap-2">
-                  <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
-                    <div className="font-medium">{e.name}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {e.ticks} ticks · {e.type}
-                    </div>
-                  </div>
-                  {i < arr.length - 1 && (
-                    <span className="text-primary" aria-hidden>
-                      →
-                    </span>
-                  )}
-                </div>
-              ))}
+          <ResourceChart ticks={plan.ticks} maxRes={maxRes} maxTick={maxTick} />
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-4 bg-sky-500" /> Metall
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-4 bg-cyan-400" /> Kristall
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-amber-500" /> Ereignis-Tick
+            </span>
           </div>
         </section>
       </div>
@@ -463,55 +594,29 @@ export default function App() {
   );
 }
 
-function Kpi({
-  label,
-  value,
-  hint,
+function jobTypeClass(type: TechTreeEntry["type"]) {
+  return type === "building" ? "text-amber-500" : "text-fuchsia-500";
+}
+
+function JobList({
+  items,
 }: {
-  label: string;
-  value: string;
-  hint: string;
+  items: Array<{ name: string; type: TechTreeEntry["type"]; suffix?: string }>;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-        {label}
-      </p>
-      <p className="mt-1 font-heading text-lg font-semibold tracking-tight">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-    </div>
-  );
-}
-
-function TypeBadge({ type }: { type: TechTreeEntry["type"] }) {
-  return (
-    <span
-      className={[
-        "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
-        type === "building"
-          ? "bg-amber-400/20 text-amber-800 dark:text-amber-200"
-          : "bg-zinc-500/20 text-zinc-700 dark:text-zinc-200",
-      ].join(" ")}
-    >
-      {type}
+    <span className="inline">
+      {items.map((item, i) => (
+        <span key={`${item.name}-${i}`}>
+          {i > 0 && <span className="text-muted-foreground">, </span>}
+          <span className={jobTypeClass(item.type)}>
+            {item.name}
+            {item.suffix ? (
+              <span className="text-muted-foreground"> {item.suffix}</span>
+            ) : null}
+          </span>
+        </span>
+      ))}
     </span>
-  );
-}
-
-function Legend() {
-  return (
-    <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 rounded-sm bg-amber-400" /> Building
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 rounded-sm bg-zinc-400" /> Research
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 rounded-sm ring-2 ring-primary ring-offset-1 ring-offset-background" />{" "}
-        Critical
-      </span>
-    </div>
   );
 }
 
@@ -521,40 +626,169 @@ function GanttLane({
   maxTick,
 }: {
   title: string;
-  steps: ScheduledStep[];
+  steps: Job[];
   maxTick: number;
 }) {
+  // Stack overlapping jobs into rows so parallel work is visible
+  const rows: Job[][] = [];
+  const sorted = [...steps].sort(
+    (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
+  );
+  for (const job of sorted) {
+    let placed = false;
+    for (const row of rows) {
+      const last = row[row.length - 1];
+      if (last.endTick <= job.startTick) {
+        row.push(job);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) rows.push([job]);
+  }
+
+  const rowHeight = 44;
+  const height = Math.max(rows.length, 1) * rowHeight + 8;
+
   return (
     <div>
       <div className="mb-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {title}
+        {rows.length > 1 ? ` · ${rows.length} parallel` : ""}
       </div>
-      <div className="relative h-14 rounded-md bg-muted/50">
-        {steps.map((s) => {
-          const left = (s.startTick / maxTick) * 100;
-          const width = Math.max(((s.endTick - s.startTick) / maxTick) * 100, 0.8);
-          const isBuilding = s.lane === "building";
-          return (
-            <div
-              key={`${s.entry.name}-${s.startTick}`}
-              title={`${s.entry.name}: t${s.startTick}–${s.endTick}`}
-              className={[
-                "absolute top-1.5 bottom-1.5 overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] leading-tight shadow-sm",
-                isBuilding
-                  ? "bg-amber-400 text-amber-950"
-                  : "bg-zinc-400 text-zinc-950",
-                s.onCriticalPath ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : "",
-              ].join(" ")}
-              style={{ left: `${left}%`, width: `${width}%` }}
+      <div className="relative rounded-md bg-muted/50" style={{ height }}>
+        {rows.map((row, rowIndex) =>
+          row.map((s) => {
+            const left = (s.startTick / maxTick) * 100;
+            const width = Math.max(((s.endTick - s.startTick) / maxTick) * 100, 0.5);
+            const isBuilding = s.type === "building";
+            const top = 4 + rowIndex * rowHeight;
+            return (
+              <div
+                key={`${s.name}-${s.startTick}`}
+                title={`${s.name}: t${s.startTick}–${s.endTick}`}
+                className={[
+                  "absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] leading-tight shadow-sm",
+                  isBuilding
+                    ? "bg-amber-500 text-amber-950"
+                    : "bg-fuchsia-500 text-fuchsia-950",
+                ].join(" ")}
+                style={{
+                  left: `${left}%`,
+                  width: `${width}%`,
+                  top,
+                  height: rowHeight - 8,
+                }}
+              >
+                <span className="block truncate font-semibold">{s.name}</span>
+                <span className="block opacity-80">
+                  {s.startTick}–{s.endTick}
+                </span>
+              </div>
+            );
+          }),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResourceChart({
+  ticks,
+  maxRes,
+  maxTick,
+}: {
+  ticks: TickSnapshot[];
+  maxRes: number;
+  maxTick: number;
+}) {
+  const w = 1000;
+  const h = 220;
+  const padL = 48;
+  const padR = 12;
+  const padT = 12;
+  const padB = 28;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+
+  const xOf = (tick: number) => padL + (tick / maxTick) * innerW;
+  const yOf = (v: number) => padT + innerH - (v / maxRes) * innerH;
+
+  const poly = (key: "met" | "kris") =>
+    ticks.map((t) => `${xOf(t.tick).toFixed(1)},${yOf(t[key]).toFixed(1)}`).join(" ");
+
+  const eventTicks = ticks.filter(
+    (t) => t.started.length > 0 || t.finished.length > 0,
+  );
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(maxRes * f));
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-56 w-full min-w-[640px]">
+        {yTicks.map((v) => (
+          <g key={v}>
+            <line
+              x1={padL}
+              x2={w - padR}
+              y1={yOf(v)}
+              y2={yOf(v)}
+              className="stroke-border"
+              strokeWidth={1}
+            />
+            <text
+              x={padL - 6}
+              y={yOf(v) + 3}
+              textAnchor="end"
+              className="fill-muted-foreground"
+              fontSize={10}
             >
-              <span className="block truncate font-semibold">{s.entry.name}</span>
-              <span className="block opacity-80">
-                {s.startTick}–{s.endTick}
-              </span>
-            </div>
+              {formatRes(v)}
+            </text>
+          </g>
+        ))}
+
+        {eventTicks.map((t) => (
+          <line
+            key={`e-${t.tick}`}
+            x1={xOf(t.tick)}
+            x2={xOf(t.tick)}
+            y1={padT}
+            y2={padT + innerH}
+            className="stroke-amber-500/40"
+            strokeWidth={1}
+          />
+        ))}
+
+        <polyline
+          fill="none"
+          strokeWidth={2}
+          className="stroke-sky-500"
+          points={poly("met")}
+        />
+        <polyline
+          fill="none"
+          strokeWidth={2}
+          className="stroke-cyan-400"
+          points={poly("kris")}
+        />
+
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+          const t = Math.round(maxTick * f);
+          return (
+            <text
+              key={f}
+              x={xOf(t)}
+              y={h - 8}
+              textAnchor="middle"
+              className="fill-muted-foreground"
+              fontSize={10}
+            >
+              t{t}
+            </text>
           );
         })}
-      </div>
+      </svg>
     </div>
   );
 }
