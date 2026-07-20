@@ -40,8 +40,13 @@ export function Overview({
           value="timeline"
           className="flex min-h-0 flex-1 flex-col overflow-hidden data-hidden:hidden"
         >
-          <div className="min-h-0 flex-[2] overflow-hidden border-b border-border">
-            <Timeline steps={steps} maxTick={maxTick} hasPlan={hasPlan} />
+          <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-border">
+            <Timeline
+              steps={steps}
+              maxTick={maxTick}
+              currentTick={currentTick}
+              hasPlan={hasPlan}
+            />
           </div>
           <div className="min-h-0 flex-[3] overflow-auto">
             <ActionPlan ticks={actionTicks} currentTick={currentTick} hasPlan={hasPlan} />
