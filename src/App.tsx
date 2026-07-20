@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import {
   calculateFastestWayToGoal,
   computeCurrentTick,
-  getTechtree,
   getUnlockedTechs,
   maxAffordableExtractors,
   newEconomyOrderId,
@@ -166,9 +165,6 @@ export default function App() {
   }, [plan, hasExtraktorTech]);
 
   const unlocked = useMemo(() => getUnlockedTechs(planNames), [planNames]);
-  const techByName = useMemo(() => {
-    return new Map(getTechtree().map((t) => [t.name, t]));
-  }, []);
 
   const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
@@ -192,28 +188,6 @@ export default function App() {
     setStartCfg((prev) =>
       prev.plan.includes(name) ? prev : { ...prev, plan: [...prev.plan, name] },
     );
-  };
-
-  const removeFromPlan = (index: number) => {
-    setStartCfg((prev) => {
-      const next = prev.plan.filter((_, i) => i !== index);
-      return {
-        ...prev,
-        plan: next.length > 0 ? next : [...FALLBACK_PLAN],
-      };
-    });
-  };
-
-  const movePlanItem = (index: number, direction: -1 | 1) => {
-    setStartCfg((prev) => {
-      const target = index + direction;
-      if (target < 0 || target >= prev.plan.length) return prev;
-      const next = [...prev.plan];
-      const tmp = next[index];
-      next[index] = next[target];
-      next[target] = tmp;
-      return { ...prev, plan: next };
-    });
   };
 
   const addEconomyOrder = (order: EconomyOrder) => {
@@ -245,11 +219,9 @@ export default function App() {
           nextAction={nextAction}
           onReset={resetPlan}
         />
-        <div className="grid min-h-0 flex-1 grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]">
           <Sidebar
             unlocked={unlocked}
-            planNames={planNames}
-            techByName={techByName}
             plan={plan}
             startCfg={startCfg}
             canUseUnits={canUseUnits}
@@ -258,8 +230,6 @@ export default function App() {
             defaultEconomyTick={defaultEconomyTick}
             maxExtractorsAtTech={maxExtractorsAtTech}
             onAddTech={addToPlan}
-            onMoveTech={movePlanItem}
-            onRemoveTech={removeFromPlan}
             onAddOrder={addEconomyOrder}
             onRemoveOrder={removeEconomyOrder}
           />

@@ -1,40 +1,15 @@
 import { AvailableTechs } from "@/components/sidebar/available-techs";
-import { PlannedTechs } from "@/components/sidebar/planned-techs";
-import type { PlanResult, StartConfig } from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 
 export type TechProps = {
   unlocked: TechTreeEntry[];
-  planNames: string[];
-  techByName: Map<string, TechTreeEntry>;
-  plan: PlanResult | null;
-  startCfg: StartConfig;
   onAdd: (name: string) => void;
-  onMove: (index: number, direction: -1 | 1) => void;
-  onRemove: (index: number) => void;
 };
 
-export function Tech({
-  unlocked,
-  planNames,
-  techByName,
-  plan,
-  startCfg,
-  onAdd,
-  onMove,
-  onRemove,
-}: TechProps) {
+export function Tech({ unlocked, onAdd }: TechProps) {
   return (
-    <div className="grid min-h-0 flex-1 grid-rows-2">
+    <div className="flex min-h-0 flex-1 flex-col">
       <AvailableTechs unlocked={unlocked} onAdd={onAdd} />
-      <PlannedTechs
-        planNames={planNames}
-        techByName={techByName}
-        plan={plan}
-        startCfg={startCfg}
-        onMove={onMove}
-        onRemove={onRemove}
-      />
     </div>
   );
 }

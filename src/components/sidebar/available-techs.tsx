@@ -1,5 +1,4 @@
 import { jobTypeClass } from "@/components/overview/actionplan";
-import { Badge } from "@/components/shadcn/badge";
 import { Button } from "@/components/shadcn/button";
 import { ScrollArea } from "@/components/shadcn/scroll-area";
 import { formatRes } from "@/lib/calculateFastestWayToGoal";
@@ -12,12 +11,11 @@ export type AvailableTechsProps = {
 
 export function AvailableTechs({ unlocked, onAdd }: AvailableTechsProps) {
   return (
-    <section className="flex min-h-0 flex-col border-b border-border">
-      <div className="flex items-center justify-between px-3 py-2">
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="px-3 py-2">
         <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
           Verfügbar
         </span>
-        <Badge variant="secondary">{unlocked.length}</Badge>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <ul className="flex flex-col gap-0.5 px-2 pb-2">

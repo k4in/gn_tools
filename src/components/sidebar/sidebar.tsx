@@ -1,3 +1,5 @@
+import { Recon } from "@/components/sidebar/recon";
+import { Resources } from "@/components/sidebar/resources";
 import { Tech } from "@/components/sidebar/tech";
 import { Units } from "@/components/sidebar/units";
 import {
@@ -15,8 +17,6 @@ import type { TechTreeEntry } from "@/gn-data/techtree";
 
 export type SidebarProps = {
   unlocked: TechTreeEntry[];
-  planNames: string[];
-  techByName: Map<string, TechTreeEntry>;
   plan: PlanResult | null;
   startCfg: StartConfig;
   canUseUnits: boolean;
@@ -25,16 +25,12 @@ export type SidebarProps = {
   defaultEconomyTick: number;
   maxExtractorsAtTech: number;
   onAddTech: (name: string) => void;
-  onMoveTech: (index: number, direction: -1 | 1) => void;
-  onRemoveTech: (index: number) => void;
   onAddOrder: (order: EconomyOrder) => void;
   onRemoveOrder: (id: string) => void;
 };
 
 export function Sidebar({
   unlocked,
-  planNames,
-  techByName,
   plan,
   startCfg,
   canUseUnits,
@@ -43,8 +39,6 @@ export function Sidebar({
   defaultEconomyTick,
   maxExtractorsAtTech,
   onAddTech,
-  onMoveTech,
-  onRemoveTech,
   onAddOrder,
   onRemoveOrder,
 }: SidebarProps) {
@@ -54,7 +48,9 @@ export function Sidebar({
         <div className="border-b border-border px-3 py-2">
           <TabsList>
             <TabsTrigger value="tech">Tech</TabsTrigger>
+            <TabsTrigger value="resources">Extraktoren</TabsTrigger>
             <TabsTrigger value="units">Einheiten</TabsTrigger>
+            <TabsTrigger value="recon">Aufklärung</TabsTrigger>
           </TabsList>
         </div>
 
@@ -62,23 +58,14 @@ export function Sidebar({
           value="tech"
           className="flex min-h-0 flex-1 flex-col gap-0 data-hidden:hidden"
         >
-          <Tech
-            unlocked={unlocked}
-            planNames={planNames}
-            techByName={techByName}
-            plan={plan}
-            startCfg={startCfg}
-            onAdd={onAddTech}
-            onMove={onMoveTech}
-            onRemove={onRemoveTech}
-          />
+          <Tech unlocked={unlocked} onAdd={onAddTech} />
         </TabsContent>
 
         <TabsContent
-          value="units"
+          value="resources"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Units
+          <Resources
             canUse={canUseUnits}
             hasObservatorium={hasObservatorium}
             economyOrders={economyOrders}
@@ -89,6 +76,20 @@ export function Sidebar({
             onAddOrder={onAddOrder}
             onRemoveOrder={onRemoveOrder}
           />
+        </TabsContent>
+
+        <TabsContent
+          value="units"
+          className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
+        >
+          <Units />
+        </TabsContent>
+
+        <TabsContent
+          value="recon"
+          className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
+        >
+          <Recon />
         </TabsContent>
       </Tabs>
     </aside>
