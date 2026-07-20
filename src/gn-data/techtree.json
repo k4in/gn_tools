@@ -20,9 +20,7 @@
       "met": 1000,
       "kris": 1000
     },
-    "dependencies": [
-      "Koloniezentrum"
-    ],
+    "dependencies": ["Koloniezentrum"],
     "eliminates": []
   },
   {
@@ -34,9 +32,7 @@
       "met": 1000,
       "kris": 2500
     },
-    "dependencies": [
-      "Bergbau"
-    ],
+    "dependencies": ["Bergbau"],
     "eliminates": []
   },
   {
@@ -48,9 +44,7 @@
       "met": 2500,
       "kris": 1000
     },
-    "dependencies": [
-      "Bergbau"
-    ],
+    "dependencies": ["Bergbau"],
     "eliminates": []
   },
   {
@@ -62,9 +56,7 @@
       "met": 2000,
       "kris": 4000
     },
-    "dependencies": [
-      "Kristallmine"
-    ],
+    "dependencies": ["Kristallmine"],
     "eliminates": []
   },
   {
@@ -76,9 +68,7 @@
       "met": 4000,
       "kris": 2000
     },
-    "dependencies": [
-      "Metallmine"
-    ],
+    "dependencies": ["Metallmine"],
     "eliminates": []
   },
   {
@@ -90,10 +80,7 @@
       "met": 3000,
       "kris": 3000
     },
-    "dependencies": [
-      "Kristallmine",
-      "Metallmine"
-    ],
+    "dependencies": ["Kristallmine", "Metallmine"],
     "eliminates": []
   },
   {
@@ -105,9 +92,7 @@
       "met": 3500,
       "kris": 6000
     },
-    "dependencies": [
-      "Robotik"
-    ],
+    "dependencies": ["Robotik", "Zweite Kristallmine"],
     "eliminates": []
   },
   {
@@ -119,9 +104,7 @@
       "met": 6000,
       "kris": 3500
     },
-    "dependencies": [
-      "Robotik"
-    ],
+    "dependencies": ["Robotik", "Zweite Metallmine"],
     "eliminates": []
   },
   {
@@ -133,10 +116,7 @@
       "met": 16000,
       "kris": 16000
     },
-    "dependencies": [
-      "Tiefe Kristallminen",
-      "Tiefe Metallminen"
-    ],
+    "dependencies": ["Tiefe Kristallminen", "Tiefe Metallminen"],
     "eliminates": []
   },
   {
@@ -148,9 +128,7 @@
       "met": 15000,
       "kris": 12000
     },
-    "dependencies": [
-      "Fortgeschrittene Robotik"
-    ],
+    "dependencies": ["Fortgeschrittene Robotik"],
     "eliminates": []
   },
   {
@@ -162,9 +140,7 @@
       "met": 25000,
       "kris": 20000
     },
-    "dependencies": [
-      "Fortgeschrittene Robotik"
-    ],
+    "dependencies": ["Fortgeschrittene Robotik"],
     "eliminates": []
   },
   {
@@ -176,9 +152,7 @@
       "met": 20000,
       "kris": 25000
     },
-    "dependencies": [
-      "Fortgeschrittene Robotik"
-    ],
+    "dependencies": ["Fortgeschrittene Robotik"],
     "eliminates": []
   },
   {
@@ -190,9 +164,7 @@
       "met": 7000,
       "kris": 5500
     },
-    "dependencies": [
-      "Raumfahrt"
-    ],
+    "dependencies": ["Raumfahrt"],
     "eliminates": []
   },
   {
@@ -204,9 +176,7 @@
       "met": 7500,
       "kris": 7500
     },
-    "dependencies": [
-      "Koloniezentrum"
-    ],
+    "dependencies": ["Koloniezentrum"],
     "eliminates": []
   },
   {
@@ -218,9 +188,7 @@
       "met": 8500,
       "kris": 10000
     },
-    "dependencies": [
-      "Planetare Werften"
-    ],
+    "dependencies": ["Planetare Werften"],
     "eliminates": []
   },
   {
@@ -232,9 +200,7 @@
       "met": 8500,
       "kris": 12000
     },
-    "dependencies": [
-      "Planetare Werften"
-    ],
+    "dependencies": ["Planetare Werften"],
     "eliminates": []
   },
   {
@@ -246,9 +212,7 @@
       "met": 12000,
       "kris": 25000
     },
-    "dependencies": [
-      "Wiederverwendbare Trägersysteme"
-    ],
+    "dependencies": ["Wiederverwendbare Trägersysteme"],
     "eliminates": []
   },
   {
@@ -260,9 +224,7 @@
       "met": 25000,
       "kris": 35000
     },
-    "dependencies": [
-      "Wiederverwendbare Trägersysteme"
-    ],
+    "dependencies": ["Wiederverwendbare Trägersysteme"],
     "eliminates": []
   },
   {
@@ -274,9 +236,7 @@
       "met": 10000,
       "kris": 10000
     },
-    "dependencies": [
-      "Observatorium"
-    ],
+    "dependencies": ["Observatorium"],
     "eliminates": []
   },
   {
@@ -288,14 +248,8 @@
       "met": 40000,
       "kris": 60000
     },
-    "dependencies": [
-      "Sektorscan"
-    ],
-    "eliminates": [
-      "Geschützscan",
-      "Nachrichtenscan",
-      "Aufwertung des Nachrichtenscans"
-    ]
+    "dependencies": ["Sektorscan"],
+    "eliminates": ["Geschützscan", "Nachrichtenscan", "Aufwertung des Nachrichtenscans"]
   },
   {
     "name": "Geschützscan",
@@ -306,14 +260,8 @@
       "met": 40000,
       "kris": 60000
     },
-    "dependencies": [
-      "Sektorscan"
-    ],
-    "eliminates": [
-      "Einheitenscan",
-      "Militärscan",
-      "Aufwertung des Militärscans"
-    ]
+    "dependencies": ["Sektorscan"],
+    "eliminates": ["Einheitenscan", "Militärscan", "Aufwertung des Militärscans"]
   },
   {
     "name": "Militärscan",
@@ -324,9 +272,7 @@
       "met": 130000,
       "kris": 130000
     },
-    "dependencies": [
-      "Einheitenscan"
-    ],
+    "dependencies": ["Einheitenscan"],
     "eliminates": []
   },
   {
@@ -338,9 +284,7 @@
       "met": 130000,
       "kris": 130000
     },
-    "dependencies": [
-      "Geschützscan"
-    ],
+    "dependencies": ["Geschützscan"],
     "eliminates": []
   },
   {
@@ -352,9 +296,7 @@
       "met": 170000,
       "kris": 200000
     },
-    "dependencies": [
-      "Militärscan"
-    ],
+    "dependencies": ["Militärscan"],
     "eliminates": []
   },
   {
@@ -366,9 +308,7 @@
       "met": 170000,
       "kris": 200000
     },
-    "dependencies": [
-      "Nachrichtenscan"
-    ],
+    "dependencies": ["Nachrichtenscan"],
     "eliminates": []
   },
   {
@@ -380,9 +320,7 @@
       "met": 12000,
       "kris": 15000
     },
-    "dependencies": [
-      "Observatorium"
-    ],
+    "dependencies": ["Observatorium"],
     "eliminates": []
   },
   {
@@ -394,9 +332,7 @@
       "met": 20000,
       "kris": 10000
     },
-    "dependencies": [
-      "Observatorium"
-    ],
+    "dependencies": ["Observatorium"],
     "eliminates": []
   },
   {
@@ -408,9 +344,7 @@
       "met": 50000,
       "kris": 35000
     },
-    "dependencies": [
-      "Wiederverwendbare Trägersysteme"
-    ],
+    "dependencies": ["Wiederverwendbare Trägersysteme"],
     "eliminates": []
   },
   {
@@ -422,9 +356,7 @@
       "met": 150000,
       "kris": 150000
     },
-    "dependencies": [
-      "Raumstation"
-    ],
+    "dependencies": ["Raumstation"],
     "eliminates": []
   },
   {
@@ -436,9 +368,7 @@
       "met": 380000,
       "kris": 255000
     },
-    "dependencies": [
-      "Raumhafen"
-    ],
+    "dependencies": ["Raumhafen"],
     "eliminates": []
   },
   {
@@ -450,10 +380,7 @@
       "met": 50000,
       "kris": 50000
     },
-    "dependencies": [
-      "Interstellarer Handel",
-      "Raumhafen"
-    ],
+    "dependencies": ["Interstellarer Handel", "Raumhafen"],
     "eliminates": []
   },
   {
@@ -465,9 +392,7 @@
       "met": 95000,
       "kris": 95000
     },
-    "dependencies": [
-      "Bergbau"
-    ],
+    "dependencies": ["Bergbau"],
     "eliminates": []
   },
   {
@@ -479,10 +404,7 @@
       "met": 130000,
       "kris": 130000
     },
-    "dependencies": [
-      "Bergbaulaser",
-      "Observatorium"
-    ],
+    "dependencies": ["Bergbaulaser", "Observatorium"],
     "eliminates": []
   },
   {
@@ -494,9 +416,7 @@
       "met": 8500,
       "kris": 10000
     },
-    "dependencies": [
-      "Waffenfabriken"
-    ],
+    "dependencies": ["Waffenfabriken"],
     "eliminates": []
   },
   {
@@ -508,10 +428,7 @@
       "met": 8500,
       "kris": 10000
     },
-    "dependencies": [
-      "Raumwerften",
-      "Traktorstrahl"
-    ],
+    "dependencies": ["Raumwerften", "Traktorstrahl"],
     "eliminates": []
   },
   {
@@ -523,9 +440,7 @@
       "met": 4000,
       "kris": 3500
     },
-    "dependencies": [
-      "Kaperschiff"
-    ],
+    "dependencies": ["Kaperschiff"],
     "eliminates": []
   },
   {
@@ -537,9 +452,7 @@
       "met": 4000,
       "kris": 8500
     },
-    "dependencies": [
-      "Longsteen Feld"
-    ],
+    "dependencies": ["Longsteen Feld"],
     "eliminates": []
   },
   {
@@ -551,9 +464,7 @@
       "met": 70000,
       "kris": 70000
     },
-    "dependencies": [
-      "Raumstation"
-    ],
+    "dependencies": ["Raumstation"],
     "eliminates": []
   },
   {
@@ -565,9 +476,7 @@
       "met": 200000,
       "kris": 300000
     },
-    "dependencies": [
-      "Raumstation"
-    ],
+    "dependencies": ["Raumstation"],
     "eliminates": []
   },
   {
@@ -579,9 +488,7 @@
       "met": 70000,
       "kris": 140000
     },
-    "dependencies": [
-      "Raumstation"
-    ],
+    "dependencies": ["Raumstation"],
     "eliminates": []
   },
   {
@@ -593,10 +500,7 @@
       "met": 17000,
       "kris": 35000
     },
-    "dependencies": [
-      "Fabriken für Raumantriebe",
-      "Raumwerften"
-    ],
+    "dependencies": ["Fabriken für Raumantriebe", "Raumwerften"],
     "eliminates": []
   },
   {
@@ -608,9 +512,7 @@
       "met": 85000,
       "kris": 170000
     },
-    "dependencies": [
-      "Militärischer Ionenantrieb"
-    ],
+    "dependencies": ["Militärischer Ionenantrieb"],
     "eliminates": []
   },
   {
@@ -622,9 +524,7 @@
       "met": 255000,
       "kris": 215000
     },
-    "dependencies": [
-      "Fusionsantrieb"
-    ],
+    "dependencies": ["Fusionsantrieb"],
     "eliminates": []
   },
   {
@@ -636,9 +536,7 @@
       "met": 30000,
       "kris": 35000
     },
-    "dependencies": [
-      "Protonenantrieb"
-    ],
+    "dependencies": ["Protonenantrieb"],
     "eliminates": []
   },
   {
@@ -650,9 +548,7 @@
       "met": 1000000,
       "kris": 600000
     },
-    "dependencies": [
-      "Nanofabriken"
-    ],
+    "dependencies": ["Nanofabriken"],
     "eliminates": []
   },
   {
@@ -664,9 +560,7 @@
       "met": 650000,
       "kris": 650000
     },
-    "dependencies": [
-      "Mak-tol Werften"
-    ],
+    "dependencies": ["Mak-tol Werften"],
     "eliminates": []
   },
   {
@@ -678,9 +572,7 @@
       "met": 35000,
       "kris": 90000
     },
-    "dependencies": [
-      "Nanofabriken"
-    ],
+    "dependencies": ["Nanofabriken"],
     "eliminates": []
   },
   {
@@ -692,10 +584,7 @@
       "met": 50000,
       "kris": 25000
     },
-    "dependencies": [
-      "Kinetische Raketen",
-      "Militärischer Ionenantrieb"
-    ],
+    "dependencies": ["Kinetische Raketen", "Militärischer Ionenantrieb"],
     "eliminates": []
   },
   {
@@ -707,10 +596,7 @@
       "met": 135000,
       "kris": 100000
     },
-    "dependencies": [
-      "Protonenantrieb",
-      "Protonentorpedos"
-    ],
+    "dependencies": ["Protonenantrieb", "Protonentorpedos"],
     "eliminates": []
   },
   {
@@ -722,10 +608,7 @@
       "met": 70000,
       "kris": 35000
     },
-    "dependencies": [
-      "Protonenantrieb",
-      "Protonenlaserartillerie"
-    ],
+    "dependencies": ["Protonenantrieb", "Protonenlaserartillerie"],
     "eliminates": []
   },
   {
@@ -737,10 +620,7 @@
       "met": 130000,
       "kris": 170000
     },
-    "dependencies": [
-      "Nanofabriken",
-      "Plasmawerfer"
-    ],
+    "dependencies": ["Nanofabriken", "Plasmawerfer"],
     "eliminates": []
   },
   {
@@ -752,10 +632,7 @@
       "met": 170000,
       "kris": 130000
     },
-    "dependencies": [
-      "Nanofabriken",
-      "Plasmabomben"
-    ],
+    "dependencies": ["Nanofabriken", "Plasmabomben"],
     "eliminates": []
   },
   {
@@ -767,10 +644,7 @@
       "met": 215000,
       "kris": 170000
     },
-    "dependencies": [
-      "Fusionstorpedos",
-      "Nanofabriken"
-    ],
+    "dependencies": ["Fusionstorpedos", "Nanofabriken"],
     "eliminates": []
   },
   {
@@ -782,10 +656,7 @@
       "met": 215000,
       "kris": 170000
     },
-    "dependencies": [
-      "Fluxpartikelartillerie",
-      "Nanofabriken"
-    ],
+    "dependencies": ["Fluxpartikelartillerie", "Nanofabriken"],
     "eliminates": []
   },
   {
@@ -797,10 +668,7 @@
       "met": 850000,
       "kris": 1000000
     },
-    "dependencies": [
-      "Mak-tol Werften",
-      "Quantum Rotationskanonen"
-    ],
+    "dependencies": ["Mak-tol Werften", "Quantum Rotationskanonen"],
     "eliminates": []
   },
   {
@@ -812,10 +680,7 @@
       "met": 850000,
       "kris": 1000000
     },
-    "dependencies": [
-      "Antimaterieantrieb",
-      "Antimaterietorpedos"
-    ],
+    "dependencies": ["Antimaterieantrieb", "Antimaterietorpedos"],
     "eliminates": []
   },
   {
@@ -827,10 +692,7 @@
       "met": 650000,
       "kris": 700000
     },
-    "dependencies": [
-      "Antimaterieantrieb",
-      "Positronenlaserartillerie"
-    ],
+    "dependencies": ["Antimaterieantrieb", "Positronenlaserartillerie"],
     "eliminates": []
   },
   {
@@ -842,10 +704,7 @@
       "met": 1000000,
       "kris": 1200000
     },
-    "dependencies": [
-      "Antimaterieantrieb",
-      "Laserphalanx"
-    ],
+    "dependencies": ["Antimaterieantrieb", "Laserphalanx"],
     "eliminates": []
   },
   {
@@ -857,11 +716,7 @@
       "met": 1200000,
       "kris": 1000000
     },
-    "dependencies": [
-      "Antimaterieantrieb",
-      "Antimaterietorpedos",
-      "Kristalline KI"
-    ],
+    "dependencies": ["Antimaterieantrieb", "Antimaterietorpedos", "Kristalline KI"],
     "eliminates": []
   },
   {
@@ -873,9 +728,7 @@
       "met": 70000,
       "kris": 140000
     },
-    "dependencies": [
-      "Raumstation"
-    ],
+    "dependencies": ["Raumstation"],
     "eliminates": []
   },
   {
@@ -887,9 +740,7 @@
       "met": 25000,
       "kris": 20000
     },
-    "dependencies": [
-      "Waffenfabriken"
-    ],
+    "dependencies": ["Waffenfabriken"],
     "eliminates": []
   },
   {
@@ -901,9 +752,7 @@
       "met": 85000,
       "kris": 100000
     },
-    "dependencies": [
-      "Kinetische Raketen"
-    ],
+    "dependencies": ["Kinetische Raketen"],
     "eliminates": []
   },
   {
@@ -915,9 +764,7 @@
       "met": 110000,
       "kris": 145000
     },
-    "dependencies": [
-      "Protonentorpedos"
-    ],
+    "dependencies": ["Protonentorpedos"],
     "eliminates": []
   },
   {
@@ -929,9 +776,7 @@
       "met": 8500,
       "kris": 90000
     },
-    "dependencies": [
-      "Plasmawerfer"
-    ],
+    "dependencies": ["Plasmawerfer"],
     "eliminates": []
   },
   {
@@ -943,9 +788,7 @@
       "met": 30000,
       "kris": 35000
     },
-    "dependencies": [
-      "Plasmabomben"
-    ],
+    "dependencies": ["Plasmabomben"],
     "eliminates": []
   },
   {
@@ -957,9 +800,7 @@
       "met": 85000,
       "kris": 170000
     },
-    "dependencies": [
-      "Fusionstorpedos"
-    ],
+    "dependencies": ["Fusionstorpedos"],
     "eliminates": []
   },
   {
@@ -971,9 +812,7 @@
       "met": 85000,
       "kris": 170000
     },
-    "dependencies": [
-      "Quantum Rotationskanonen"
-    ],
+    "dependencies": ["Quantum Rotationskanonen"],
     "eliminates": []
   },
   {
@@ -985,9 +824,7 @@
       "met": 85000,
       "kris": 170000
     },
-    "dependencies": [
-      "Positronenlaserartillerie"
-    ],
+    "dependencies": ["Positronenlaserartillerie"],
     "eliminates": []
   },
   {
@@ -999,9 +836,7 @@
       "met": 85000,
       "kris": 130000
     },
-    "dependencies": [
-      "Waffenfabriken"
-    ],
+    "dependencies": ["Waffenfabriken"],
     "eliminates": []
   },
   {
@@ -1013,9 +848,7 @@
       "met": 130000,
       "kris": 170000
     },
-    "dependencies": [
-      "Artilleriesysteme"
-    ],
+    "dependencies": ["Artilleriesysteme"],
     "eliminates": []
   },
   {
@@ -1027,9 +860,7 @@
       "met": 30000,
       "kris": 35000
     },
-    "dependencies": [
-      "Protonenlaserartillerie"
-    ],
+    "dependencies": ["Protonenlaserartillerie"],
     "eliminates": []
   },
   {
@@ -1041,9 +872,7 @@
       "met": 215000,
       "kris": 255000
     },
-    "dependencies": [
-      "Fluxpartikelartillerie"
-    ],
+    "dependencies": ["Fluxpartikelartillerie"],
     "eliminates": []
   },
   {
@@ -1055,9 +884,7 @@
       "met": 25000,
       "kris": 20000
     },
-    "dependencies": [
-      "Raumfahrt"
-    ],
+    "dependencies": ["Raumfahrt"],
     "eliminates": []
   },
   {
@@ -1069,12 +896,8 @@
       "met": 1900000,
       "kris": 1500000
     },
-    "dependencies": [
-      "Marineakademie"
-    ],
-    "eliminates": [
-      "Akademieanbau: Defensive Kriegsführung"
-    ]
+    "dependencies": ["Marineakademie"],
+    "eliminates": ["Akademieanbau: Defensive Kriegsführung"]
   },
   {
     "name": "Akademieanbau: Defensive Kriegsführung",
@@ -1085,12 +908,8 @@
       "met": 1900000,
       "kris": 1500000
     },
-    "dependencies": [
-      "Marineakademie"
-    ],
-    "eliminates": [
-      "Akademieanbau: Offensive Kriegsführung"
-    ]
+    "dependencies": ["Marineakademie"],
+    "eliminates": ["Akademieanbau: Offensive Kriegsführung"]
   },
   {
     "name": "Hangar",
@@ -1101,10 +920,7 @@
       "met": 350000,
       "kris": 350000
     },
-    "dependencies": [
-      "Bergungstechnologie",
-      "Raumstation"
-    ],
+    "dependencies": ["Bergungstechnologie", "Raumstation"],
     "eliminates": []
   },
   {
@@ -1116,10 +932,7 @@
       "met": 240000,
       "kris": 180000
     },
-    "dependencies": [
-      "Bergungstechnologie",
-      "Raumstation"
-    ],
+    "dependencies": ["Bergungstechnologie", "Raumstation"],
     "eliminates": []
   },
   {
@@ -1131,9 +944,7 @@
       "met": 35000,
       "kris": 35000
     },
-    "dependencies": [
-      "Raumstation"
-    ],
+    "dependencies": ["Raumstation"],
     "eliminates": []
   }
 ]

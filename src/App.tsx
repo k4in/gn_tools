@@ -1,489 +1,207 @@
 import { useEffect, useMemo, useState } from "react";
-import techtreeData from "@/gn-data/techtree.json";
-import startData from "@/gn-data/start.json";
-import type { TechTreeEntry } from "@/types/gn";
+import planData from "@/gn-data/plan.json";
+import {
+  calculateFastestWayToGoal,
+  clockLabel,
+  computeCurrentTick,
+  formatEconomyOrderLabel,
+  formatRes,
+  formatTimeUntilTick,
+  formatWallClock,
+  getTechtree,
+  getUnlockedTechs,
+  isExtractorPlanEntry,
+  maxAffordableExtractors,
+  newEconomyOrderId,
+  type EconomyOrder,
+  type Job,
+  type JobKind,
+  type StartConfig,
+  type TickSnapshot,
+} from "@/lib/calculateFastestWayToGoal";
 
-const techtree = techtreeData as TechTreeEntry[];
-const GOAL = "Extraktor";
-const TICK_MINUTES = 15;
-const MAX_TICKS = 2500;
+const STORAGE_KEY = "gn_tool.plan";
+const FALLBACK_PLAN = ["Koloniezentrum"] as const;
+const defaultConfig = planData as StartConfig;
+/** Feste Meilensteine in der Übersicht (unabhängig vom letzten Plan-Eintrag). */
+const MILESTONES = ["Extraktor", "Kaperschiff", "Schildschiff"] as const;
 
-type StartConfig = {
-  start_time: string;
-  start_date: string;
-  starting_resources: { metall: number; kristall: number };
-};
-
-const start = startData as StartConfig;
-
-/** Absolute income per completed building (not cumulative across tiers). */
-const INCOME_BY_BUILDING: Record<string, { met: number; kris: number }> = {
-  Koloniezentrum: { met: 500, kris: 500 },
-  Kristallmine: { met: 0, kris: 1000 },
-  Metallmine: { met: 1000, kris: 0 },
-  "Zweite Kristallmine": { met: 0, kris: 2000 },
-  "Zweite Metallmine": { met: 2000, kris: 0 },
-  "Tiefe Kristallminen": { met: 0, kris: 4000 },
-  "Tiefe Metallminen": { met: 4000, kris: 0 },
-  "Vollautomatisierte Kristallmine": { met: 0, kris: 10000 },
-  "Vollautomatisierte Metallmine": { met: 10000, kris: 0 },
-};
-
-const MINE_TIERS = [
-  ["Kristallmine", "Metallmine"],
-  ["Zweite Kristallmine", "Zweite Metallmine"],
-  ["Tiefe Kristallminen", "Tiefe Metallminen"],
-  ["Vollautomatisierte Kristallmine", "Vollautomatisierte Metallmine"],
-] as const;
-
-type Res = { met: number; kris: number };
-
-type Job = {
-  name: string;
-  type: TechTreeEntry["type"];
-  startTick: number;
-  endTick: number;
-  cost: Res;
-};
-
-type NamedJob = {
-  name: string;
-  type: TechTreeEntry["type"];
-};
-
-type ActiveJob = NamedJob & {
-  remainingTicks: number;
-};
-
-type TickSnapshot = {
-  tick: number;
-  clockLabel: string;
-  met: number;
-  kris: number;
-  incomeMet: number;
-  incomeKris: number;
-  active: ActiveJob[];
-  started: NamedJob[];
-  finished: NamedJob[];
-};
-
-type PlanResult = {
-  goal: string;
-  finishTick: number;
-  mineTier: number;
-  steps: Job[];
-  ticks: TickSnapshot[];
-  targetSet: string[];
-  critical: Set<string>;
-  peakWaitTicks: number;
-  finalRes: Res;
-  start: StartConfig;
-};
-
-function byName(entries: TechTreeEntry[]) {
-  return new Map(entries.map((e) => [e.name, e]));
-}
-
-function addRes(a: Res, b: Res): Res {
-  return { met: a.met + b.met, kris: a.kris + b.kris };
-}
-
-function canAfford(res: Res, cost: Res) {
-  return res.met >= cost.met && res.kris >= cost.kris;
-}
-
-function pay(res: Res, cost: Res): Res {
-  return { met: res.met - cost.met, kris: res.kris - cost.kris };
-}
-
-function requiredClosure(goal: string, map: Map<string, TechTreeEntry>) {
-  const needed = new Set<string>();
-  const visit = (name: string) => {
-    if (needed.has(name)) return;
-    const entry = map.get(name);
-    if (!entry) throw new Error(`Unbekannte Technologie: ${name}`);
-    needed.add(name);
-    for (const dep of entry.dependencies) visit(dep);
-  };
-  visit(goal);
-  return needed;
-}
-
-function expandWithDeps(names: Iterable<string>, map: Map<string, TechTreeEntry>) {
-  const set = new Set<string>();
-  const visit = (name: string) => {
-    if (set.has(name)) return;
-    const entry = map.get(name);
-    if (!entry) throw new Error(`Unbekannte Technologie: ${name}`);
-    set.add(name);
-    for (const dep of entry.dependencies) visit(dep);
-  };
-  for (const n of names) visit(n);
-  return set;
-}
-
-function criticalPathTicks(
-  name: string,
-  map: Map<string, TechTreeEntry>,
-  memo = new Map<string, number>(),
-): number {
-  const cached = memo.get(name);
-  if (cached !== undefined) return cached;
-  const entry = map.get(name)!;
-  const depMax = entry.dependencies.length
-    ? Math.max(...entry.dependencies.map((d) => criticalPathTicks(d, map, memo)))
-    : 0;
-  const total = depMax + entry.ticks;
-  memo.set(name, total);
-  return total;
-}
-
-function criticalPathSet(goal: string, map: Map<string, TechTreeEntry>) {
-  const path = new Set<string>();
-  let current: string | undefined = goal;
-  while (current) {
-    path.add(current);
-    const entry = map.get(current)!;
-    if (!entry.dependencies.length) break;
-    current = entry.dependencies.reduce((best, d) =>
-      criticalPathTicks(d, map) > criticalPathTicks(best, map) ? d : best,
-    );
-  }
-  return path;
-}
-
-function incomeFrom(completed: Set<string>): Res {
-  let met = 0;
-  let kris = 0;
-  for (const name of completed) {
-    const inc = INCOME_BY_BUILDING[name];
-    if (!inc) continue;
-    met = Math.max(met, inc.met);
-    kris = Math.max(kris, inc.kris);
-  }
-  return { met, kris };
-}
-
-/** Buildings that raise income and are not yet completed. */
-function incomeGainIfBuilt(name: string, completed: Set<string>): number {
-  const inc = INCOME_BY_BUILDING[name];
-  if (!inc) return 0;
-  const now = incomeFrom(completed);
-  const next = incomeFrom(new Set([...completed, name]));
-  return next.met - now.met + (next.kris - now.kris);
-}
-
-function parseStartMinutes(time: string) {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
-}
-
-/** Lokale Start-DateTime aus start.json (ohne TZ-Drift durch ISO-Parse). */
-function startDateTime(startCfg: StartConfig): Date {
-  const [y, mo, d] = startCfg.start_date.split("-").map(Number);
-  const [h, m] = startCfg.start_time.split(":").map(Number);
-  return new Date(y, mo - 1, d, h, m, 0, 0);
-}
-
-/**
- * Verstrichene Ticks seit Planstart: floor((now − start) / 15min).
- * Beispiel: Start 18:00, jetzt 20:10 → 130min → Tick 8 ("nach Tick 8").
- */
-function computeCurrentTick(startCfg: StartConfig, now: Date = new Date()): number {
-  const start = startDateTime(startCfg);
-  const diffMs = now.getTime() - start.getTime();
-  return Math.floor(diffMs / (TICK_MINUTES * 60 * 1000));
-}
-
-function formatWallClock(date: Date) {
-  const d = String(date.getDate()).padStart(2, "0");
-  const mo = String(date.getMonth() + 1).padStart(2, "0");
-  const y = date.getFullYear();
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
-  return `${d}.${mo}.${y} ${hh}:${mm}`;
-}
-
-function tickDateTime(startCfg: StartConfig, tick: number): Date {
-  const start = startDateTime(startCfg);
-  return new Date(start.getTime() + tick * TICK_MINUTES * 60 * 1000);
-}
-
-/** Restzeit bis zu einem Tick, z.B. "in 2 Stunden und 05 Minuten". */
-function formatTimeUntilTick(
-  startCfg: StartConfig,
-  tick: number,
-  now: Date = new Date(),
-): string {
-  const target = tickDateTime(startCfg, tick);
-  const diffMs = target.getTime() - now.getTime();
-  if (diffMs <= 0) return "jetzt";
-
-  const totalMinutes = Math.ceil(diffMs / (60 * 1000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours <= 0) {
-    return `in ${minutes} ${minutes === 1 ? "Minute" : "Minuten"}`;
-  }
-  if (minutes === 0) {
-    return `in ${hours} ${hours === 1 ? "Stunde" : "Stunden"}`;
-  }
-  return `in ${hours} ${hours === 1 ? "Stunde" : "Stunden"} und ${String(minutes).padStart(2, "0")} Minuten`;
-}
-
-function clockLabel(startCfg: StartConfig, tick: number) {
-  const base = parseStartMinutes(startCfg.start_time);
-  const total = base + tick * TICK_MINUTES;
-  const dayOffset = Math.floor(total / (24 * 60));
-  const mins = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
-  const hh = String(Math.floor(mins / 60)).padStart(2, "0");
-  const mm = String(mins % 60).padStart(2, "0");
-  const date = new Date(`${startCfg.start_date}T00:00:00`);
-  date.setDate(date.getDate() + dayOffset);
-  const y = date.getFullYear();
-  const mo = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${d}.${mo}.${y} ${hh}:${mm}`;
-}
-
-function formatRes(n: number) {
-  return Math.round(n).toLocaleString("de-DE");
-}
-
-function economyExtras(tier: number): string[] {
-  const extras: string[] = [];
-  for (let i = 0; i < tier; i++) {
-    extras.push(...MINE_TIERS[i]);
-  }
-  return extras;
-}
-
-/**
- * Diskrete Tick-Simulation mit unbegrenzter Parallelität.
- *
- * t=0: Spielstart. Jobs können sofort gestartet werden; noch kein Einkommen.
- * Jeder spätere Tick t=1..n:
- *   1) Jobs mit endTick === t abschließen
- *   2) Einkommen aus früher fertigen Gebäuden gutschreiben
- *   3) Alle startbaren Jobs starten (Dependencies + Ressourcen),
- *      solange Kosten gedeckt sind — beliebig viele parallel
- */
-function simulate(
-  targets: Set<string>,
-  map: Map<string, TechTreeEntry>,
-  critical: Set<string>,
-  goal: string,
-  startCfg: StartConfig,
-): Omit<PlanResult, "mineTier" | "targetSet" | "critical" | "start"> | null {
-  const requiredForGoal = requiredClosure(goal, map);
-  let res: Res = {
-    met: startCfg.starting_resources.metall,
-    kris: startCfg.starting_resources.kristall,
-  };
-  const completed = new Set<string>();
-  const completedAt = new Map<string, number>();
-  let active: Job[] = [];
-  const steps: Job[] = [];
-  const ticks: TickSnapshot[] = [];
-  let peakWaitTicks = 0;
-  let waitStreak = 0;
-
-  const inProgress = () => new Set(active.map((j) => j.name));
-
-  const isReady = (name: string) => {
-    const e = map.get(name)!;
-    return e.dependencies.every((d) => completed.has(d));
+function normalizeConfig(raw: unknown): StartConfig {
+  const base: StartConfig = {
+    start_time: defaultConfig.start_time,
+    start_date: defaultConfig.start_date,
+    starting_resources: {
+      metall: defaultConfig.starting_resources.metall,
+      kristall: defaultConfig.starting_resources.kristall,
+    },
+    plan: defaultConfig.plan?.length ? [...defaultConfig.plan] : [...FALLBACK_PLAN],
+    economyOrders: normalizeEconomyOrders(
+      (defaultConfig as { economyOrders?: unknown }).economyOrders,
+    ),
   };
 
-  const score = (name: string) => {
-    const e = map.get(name)!;
-    const onCrit = critical.has(name) ? 1 : 0;
-    const forGoal = requiredForGoal.has(name) ? 1 : 0;
-    const gain = incomeGainIfBuilt(name, completed);
-    return onCrit * 1e9 + forGoal * 1e8 + gain * 1e3 - e.ticks + e.cost.met * 1e-9;
+  if (!raw || typeof raw !== "object") return base;
+  const obj = raw as Partial<StartConfig>;
+
+  const start_time =
+    typeof obj.start_time === "string" && obj.start_time.trim()
+      ? obj.start_time
+      : base.start_time;
+  const start_date =
+    typeof obj.start_date === "string" && obj.start_date.trim()
+      ? obj.start_date
+      : base.start_date;
+
+  const res = obj.starting_resources;
+  const metall =
+    res && typeof res.metall === "number" && Number.isFinite(res.metall)
+      ? res.metall
+      : base.starting_resources.metall;
+  const kristall =
+    res && typeof res.kristall === "number" && Number.isFinite(res.kristall)
+      ? res.kristall
+      : base.starting_resources.kristall;
+
+  const plan =
+    Array.isArray(obj.plan) && obj.plan.every((x) => typeof x === "string") && obj.plan.length > 0
+      ? [...obj.plan]
+      : base.plan;
+
+  const economyOrders = normalizeEconomyOrders(
+    (obj as { economyOrders?: unknown }).economyOrders,
+  );
+
+  return {
+    start_time,
+    start_date,
+    starting_resources: { metall, kristall },
+    plan,
+    economyOrders,
   };
-
-  /** Startet alle Jobs, die jetzt Dependencies + Ressourcen erfüllen. */
-  const tryStartAll = (tick: number) => {
-    const startedJobs: NamedJob[] = [];
-    let spent: Res = { met: 0, kris: 0 };
-    // Greedy: wiederholt den besten Kandidaten starten, bis nichts mehr geht
-    while (true) {
-      const busy = inProgress();
-      const candidates = [...targets]
-        .filter((n) => !completed.has(n))
-        .filter((n) => !busy.has(n))
-        .filter(isReady)
-        .filter((n) =>
-          canAfford(res, { met: map.get(n)!.cost.met, kris: map.get(n)!.cost.kris }),
-        )
-        .sort((a, b) => score(b) - score(a));
-
-      const pick = candidates[0];
-      if (!pick) break;
-
-      const entry = map.get(pick)!;
-      const cost = { met: entry.cost.met, kris: entry.cost.kris };
-      res = pay(res, cost);
-      spent = addRes(spent, cost);
-      const job: Job = {
-        name: pick,
-        type: entry.type,
-        startTick: tick,
-        endTick: tick + entry.ticks,
-        cost,
-      };
-      active.push(job);
-      steps.push(job);
-      startedJobs.push({ name: pick, type: entry.type });
-    }
-    return { startedJobs, spent };
-  };
-
-  const snapshot = (
-    tick: number,
-    started: NamedJob[],
-    finished: NamedJob[],
-    /** Netto-Änderung: Einkommen − in diesem Tick gezahlte Baukosten */
-    delta: Res,
-  ): TickSnapshot => ({
-    tick,
-    clockLabel: clockLabel(startCfg, tick),
-    met: res.met,
-    kris: res.kris,
-    incomeMet: delta.met,
-    incomeKris: delta.kris,
-    active: active
-      .map((j) => ({
-        name: j.name,
-        type: j.type,
-        remainingTicks: j.endTick - tick,
-      }))
-      .sort((a, b) => a.remainingTicks - b.remainingTicks || a.name.localeCompare(b.name)),
-    started,
-    finished,
-  });
-
-  // t = 0
-  {
-    const { startedJobs, spent } = tryStartAll(0);
-    ticks.push(
-      snapshot(0, startedJobs, [], { met: -spent.met, kris: -spent.kris }),
-    );
-  }
-
-  for (let t = 1; t <= MAX_TICKS; t++) {
-    // 1) Abschlüsse
-    const finishing = active.filter((j) => j.endTick === t);
-    active = active.filter((j) => j.endTick !== t);
-    const finishedJobs: NamedJob[] = [];
-    for (const job of finishing) {
-      completed.add(job.name);
-      completedAt.set(job.name, t);
-      finishedJobs.push({ name: job.name, type: job.type });
-    }
-
-    // 2) Einkommen (Gebäude, die vor diesem Tick fertig wurden)
-    const producing = new Set(
-      [...completed].filter((n) => (completedAt.get(n) ?? 0) < t),
-    );
-    const income = incomeFrom(producing);
-    if (income.met || income.kris) {
-      res = addRes(res, income);
-    }
-
-    // 3) Neue Jobs starten (beliebig parallel)
-    const { startedJobs, spent } = tryStartAll(t);
-
-    const waiting =
-      !completed.has(goal) &&
-      startedJobs.length === 0 &&
-      active.length === 0 &&
-      [...targets].some((n) => !completed.has(n));
-
-    if (waiting) {
-      waitStreak += 1;
-      peakWaitTicks = Math.max(peakWaitTicks, waitStreak);
-    } else {
-      waitStreak = 0;
-    }
-
-    const delta: Res = {
-      met: income.met - spent.met,
-      kris: income.kris - spent.kris,
-    };
-    ticks.push(snapshot(t, startedJobs, finishedJobs, delta));
-
-    if (completed.has(goal)) {
-      return {
-        goal,
-        finishTick: t,
-        steps,
-        ticks,
-        peakWaitTicks,
-        finalRes: res,
-      };
-    }
-
-    // Soft-Lock: nichts aktiv, kein Einkommen, nichts startbar
-    if (
-      active.length === 0 &&
-      income.met === 0 &&
-      income.kris === 0 &&
-      ![...targets].some(
-        (n) =>
-          !completed.has(n) &&
-          isReady(n) &&
-          canAfford(res, { met: map.get(n)!.cost.met, kris: map.get(n)!.cost.kris }),
-      )
-    ) {
-      const remaining = [...targets].filter((n) => !completed.has(n));
-      if (remaining.length) return null;
-    }
-  }
-
-  return null;
 }
 
-function planFastestToGoal(goal: string, startCfg: StartConfig): PlanResult {
-  const map = byName(techtree);
-  if (!map.has(goal)) throw new Error(`Ziel fehlt: ${goal}`);
-
-  const critical = criticalPathSet(goal, map);
-  const base = requiredClosure(goal, map);
-
-  let best: PlanResult | null = null;
-
-  for (let tier = 0; tier <= MINE_TIERS.length; tier++) {
-    const targets = expandWithDeps([...base, ...economyExtras(tier)], map);
-    const sim = simulate(targets, map, critical, goal, startCfg);
-    if (!sim) continue;
-    const candidate: PlanResult = {
-      ...sim,
-      mineTier: tier,
-      targetSet: [...targets].sort(),
-      critical,
-      start: startCfg,
-    };
-    if (!best || candidate.finishTick < best.finishTick) {
-      best = candidate;
+function normalizeEconomyOrders(raw: unknown): EconomyOrder[] {
+  if (!Array.isArray(raw)) return [];
+  const out: EconomyOrder[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const id = typeof o.id === "string" && o.id ? o.id : newEconomyOrderId();
+    const count = typeof o.count === "number" && o.count > 0 ? Math.floor(o.count) : 0;
+    const atTick =
+      typeof o.atTick === "number" && Number.isFinite(o.atTick)
+        ? Math.max(0, Math.floor(o.atTick))
+        : 0;
+    if (!count) continue;
+    if (o.kind === "asteroids") {
+      out.push({ id, kind: "asteroids", count, atTick });
+    } else if (o.kind === "extractors") {
+      const resource = o.resource === "kris" ? "kris" : "met";
+      out.push({ id, kind: "extractors", count, resource, atTick });
     }
   }
+  return out;
+}
 
-  if (!best) {
-    throw new Error("Kein erreichbarer Plan mit den aktuellen Regeln / Startressourcen");
+function loadStoredConfig(): StartConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      const initial = normalizeConfig(defaultConfig);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+      return initial;
+    }
+    return normalizeConfig(JSON.parse(raw));
+  } catch {
+    return normalizeConfig(defaultConfig);
   }
-  return best;
 }
 
 export default function App() {
-  const plan = useMemo(() => planFastestToGoal(GOAL, start), []);
+  const [startCfg, setStartCfg] = useState<StartConfig>(() => loadStoredConfig());
 
-  const maxTick = Math.max(plan.finishTick, 1);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(startCfg));
+    } catch (err) {
+      console.error("Konnte Plan nicht speichern", err);
+    }
+  }, [startCfg]);
+
+  const planNames = startCfg.plan;
+  const economyOrders = startCfg.economyOrders ?? [];
+  const hasObservatorium = planNames.includes("Observatorium");
+  const hasExtraktorTech = planNames.includes("Extraktor");
+  const canUseEconomy = hasExtraktorTech; // laut Spec: Extraktor-Tech freischalten
+
+  const plan = useMemo(() => {
+    try {
+      return calculateFastestWayToGoal(startCfg);
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }, [startCfg]);
+
+  /** Default-Tick: Fertigstellung Extraktor (bzw. Observatorium). */
+  const defaultEconomyTick = useMemo(() => {
+    if (!plan) return 0;
+    const ext = plan.steps.find((s) => s.name === "Extraktor");
+    if (ext) return ext.endTick;
+    const obs = plan.steps.find((s) => s.name === "Observatorium");
+    return obs?.endTick ?? plan.finishTick;
+  }, [plan]);
+
+  /** Max. Extraktoren finanzierbar zum Zeitpunkt der Extraktor-Tech-Fertigstellung. */
+  const maxExtractorsAtTech = useMemo(() => {
+    if (!plan || !hasExtraktorTech) return 0;
+    const job = plan.steps.find((s) => s.name === "Extraktor");
+    if (!job) return 0;
+    const snap = plan.ticks.find((t) => t.tick === job.endTick);
+    let met = snap?.met ?? plan.finalRes.met;
+    let kris = snap?.kris ?? plan.finalRes.kris;
+    for (const s of plan.steps) {
+      if (s.startTick === job.endTick && s.type === "economy") {
+        met += s.cost.met;
+        kris += s.cost.kris;
+      }
+    }
+    return maxAffordableExtractors({
+      met,
+      kris,
+      alreadyBuilt: 0,
+      asteroids: 0,
+      slots: 0,
+    });
+  }, [plan, hasExtraktorTech]);
+
+  const [asteroidCount, setAsteroidCount] = useState(1);
+  const [asteroidTick, setAsteroidTick] = useState(0);
+  const [extractorCount, setExtractorCount] = useState(1);
+  const [extractorResource, setExtractorResource] = useState<"met" | "kris">("met");
+  const [extractorTick, setExtractorTick] = useState(0);
+
+  useEffect(() => {
+    setAsteroidTick(defaultEconomyTick);
+    setExtractorTick(defaultEconomyTick);
+  }, [defaultEconomyTick]);
+
+  useEffect(() => {
+    if (canUseEconomy && maxExtractorsAtTech > 0) {
+      setExtractorCount(maxExtractorsAtTech);
+    }
+  }, [canUseEconomy, maxExtractorsAtTech]);
+
+  const unlocked = useMemo(() => getUnlockedTechs(planNames), [planNames]);
+  const techByName = useMemo(() => {
+    const m = new Map(getTechtree().map((t) => [t.name, t]));
+    return m;
+  }, []);
+
+  const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
-    () => plan.ticks.filter((t) => t.started.length > 0),
-    [plan.ticks],
+    () => (plan ? plan.ticks.filter((t) => t.started.length > 0) : []),
+    [plan],
   );
 
   const [now, setNow] = useState(() => new Date());
@@ -492,7 +210,7 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
 
-  const currentTick = computeCurrentTick(plan.start, now);
+  const currentTick = computeCurrentTick(startCfg, now);
   const upcomingActions = useMemo(
     () => actionTicks.filter((t) => t.tick >= currentTick).slice(0, 3),
     [actionTicks, currentTick],
@@ -500,13 +218,84 @@ export default function App() {
   const nextAction = upcomingActions[0] ?? null;
   const followingActions = upcomingActions.slice(1);
 
+  const addToPlan = (name: string) => {
+    setStartCfg((prev) =>
+      prev.plan.includes(name)
+        ? prev
+        : { ...prev, plan: [...prev.plan, name] },
+    );
+  };
+
+  const addAsteroidOrder = () => {
+    const count = Math.max(1, Math.floor(asteroidCount) || 1);
+    const atTick = Math.max(0, Math.floor(asteroidTick) || 0);
+    const order: EconomyOrder = {
+      id: newEconomyOrderId(),
+      kind: "asteroids",
+      count,
+      atTick,
+    };
+    setStartCfg((prev) => ({
+      ...prev,
+      economyOrders: [...(prev.economyOrders ?? []), order],
+    }));
+  };
+
+  const addExtractorOrder = () => {
+    const count = Math.max(1, Math.floor(extractorCount) || 1);
+    const atTick = Math.max(0, Math.floor(extractorTick) || 0);
+    const order: EconomyOrder = {
+      id: newEconomyOrderId(),
+      kind: "extractors",
+      count,
+      resource: extractorResource,
+      atTick,
+    };
+    setStartCfg((prev) => ({
+      ...prev,
+      economyOrders: [...(prev.economyOrders ?? []), order],
+    }));
+  };
+
+  const removeEconomyOrder = (id: string) => {
+    setStartCfg((prev) => ({
+      ...prev,
+      economyOrders: (prev.economyOrders ?? []).filter((o) => o.id !== id),
+    }));
+  };
+
+  const removeFromPlan = (index: number) => {
+    setStartCfg((prev) => {
+      const next = prev.plan.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        plan: next.length > 0 ? next : [...FALLBACK_PLAN],
+      };
+    });
+  };
+
+  const movePlanItem = (index: number, direction: -1 | 1) => {
+    setStartCfg((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.plan.length) return prev;
+      const next = [...prev.plan];
+      const tmp = next[index];
+      next[index] = next[target];
+      next[target] = tmp;
+      return { ...prev, plan: next };
+    });
+  };
+
+  const resetPlan = () => {
+    setStartCfg(normalizeConfig(defaultConfig));
+  };
+
   return (
     <main className="min-h-svh bg-background text-foreground">
       <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 md:px-8">
         {/* Übersicht */}
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
           <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-            {/* Links: Status & Ziel */}
             <div className="space-y-4">
               <div>
                 <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -523,19 +312,37 @@ export default function App() {
               </div>
               <div className="border-t border-border pt-4">
                 <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Ziel
+                  Meilensteine
                 </p>
-                <p className="mt-1 text-lg font-semibold">{GOAL}</p>
-                <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
-                  Tick {plan.finishTick} · {clockLabel(plan.start, plan.finishTick)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                  {formatTimeUntilTick(plan.start, plan.finishTick, now)}
-                </p>
+                <ul className="mt-2 space-y-2">
+                  {MILESTONES.map((name) => {
+                    const job = plan?.steps.find((s) => s.name === name);
+                    const finishTick = job?.endTick;
+                    return (
+                      <li key={name} className="text-sm">
+                        <p className="font-medium">{name}</p>
+                        {finishTick !== undefined ? (
+                          <>
+                            <p className="text-xs text-muted-foreground tabular-nums">
+                              Tick {finishTick} · {clockLabel(startCfg, finishTick)}
+                            </p>
+                            <p className="text-xs text-muted-foreground tabular-nums">
+                              {formatTimeUntilTick(startCfg, finishTick, now)}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">noch nicht im Plan</p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {!plan && (
+                  <p className="mt-2 text-sm text-red-500">Plan nicht berechenbar</p>
+                )}
               </div>
             </div>
 
-            {/* Rechts: Nächste Aktionen */}
             <div className="space-y-3 md:border-l md:border-border md:pl-8">
               <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                 Nächste Aktion
@@ -546,7 +353,7 @@ export default function App() {
                     Tick {nextAction.tick} · {nextAction.clockLabel}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                    {formatTimeUntilTick(plan.start, nextAction.tick, now)}
+                    {formatTimeUntilTick(startCfg, nextAction.tick, now)}
                   </p>
                   <div className="mt-1.5 text-sm leading-snug">
                     <JobList items={nextAction.started} />
@@ -571,7 +378,7 @@ export default function App() {
                           Tick {t.tick} · {t.clockLabel}
                         </p>
                         <p className="text-xs text-muted-foreground tabular-nums">
-                          {formatTimeUntilTick(plan.start, t.tick, now)}
+                          {formatTimeUntilTick(startCfg, t.tick, now)}
                         </p>
                         <div className="mt-1 leading-snug">
                           <JobList items={t.started} />
@@ -585,27 +392,353 @@ export default function App() {
           </div>
         </section>
 
+        {/* Timeline */}
+        <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <h2 className="text-lg font-semibold">Timeline</h2>
+          {plan ? (
+            <Timeline steps={plan.steps} maxTick={maxTick} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
+          )}
+        </section>
+
+        {/* Gebäude & Forschung */}
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Gebäude & Forschung</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Links freigeschaltete Technologien wählen — sie werden dem Plan hinzugefügt.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetPlan}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              Zurücksetzen
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Verfügbar */}
+            <div className="flex h-[28rem] max-h-[50vh] min-h-[16rem] flex-col rounded-lg border border-border bg-background/40">
+              <div className="border-b border-border px-3 py-2">
+                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Verfügbar ({unlocked.length})
+                </p>
+              </div>
+              <ul className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
+                {unlocked.length === 0 ? (
+                  <li className="px-2 py-3 text-sm text-muted-foreground">
+                    Keine weiteren freigeschalteten Technologien
+                  </li>
+                ) : (
+                  unlocked.map((tech) => (
+                    <li key={tech.name}>
+                      <button
+                        type="button"
+                        onClick={() => addToPlan(tech.name)}
+                        className="flex w-full items-start justify-between gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition hover:border-border hover:bg-muted/60"
+                      >
+                        <span className="min-w-0">
+                          <span className={jobTypeClass(tech.type)}>{tech.name}</span>
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                            {tech.ticks} Ticks · {formatRes(tech.cost.met)} Met ·{" "}
+                            {formatRes(tech.cost.kris)} Kris
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">+</span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+
+            {/* Plan */}
+            <div className="flex h-[28rem] max-h-[50vh] min-h-[16rem] flex-col rounded-lg border border-border bg-background/40">
+              <div className="border-b border-border px-3 py-2">
+                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                  Plan ({planNames.length})
+                </p>
+              </div>
+              <ol className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
+                {planNames.map((name, i) => {
+                  const tech = techByName.get(name);
+                  const isEcon = isExtractorPlanEntry(name);
+                  const fin = plan?.stepFinishTicks[i];
+                  const canUp = i > 0;
+                  const canDown = i < planNames.length - 1;
+                  return (
+                    <li
+                      key={`${name}-${i}`}
+                      className="flex items-start justify-between gap-2 rounded-md border border-border/60 px-2 py-2 text-sm"
+                    >
+                      <span className="min-w-0">
+                        <span className="text-muted-foreground tabular-nums">{i + 1}.</span>{" "}
+                        <span
+                          className={
+                            tech
+                              ? jobTypeClass(tech.type)
+                              : isEcon
+                                ? jobTypeClass("economy")
+                                : ""
+                          }
+                        >
+                          {name}
+                        </span>
+                        {fin !== undefined && fin >= 0 && (
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                            fertig Tick {fin}
+                            {plan ? ` · ${clockLabel(startCfg, fin)}` : ""}
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => movePlanItem(i, -1)}
+                          disabled={!canUp}
+                          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                          title="Nach oben"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => movePlanItem(i, 1)}
+                          disabled={!canDown}
+                          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+                          title="Nach unten"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeFromPlan(i)}
+                          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                          title="Entfernen"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        {/* Extraktoren & Einheiten */}
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Extraktoren & Einheiten</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Asteroiden und Extraktoren mit Ziel-Tick planen. Verfügbar sobald Extraktor im Tech-Plan ist.
+            </p>
+          </div>
+
+          {!canUseEconomy ? (
+            <p className="text-sm text-muted-foreground">
+              Noch gesperrt — füge zuerst <span className="font-medium text-foreground">Extraktor</span> im
+              Gebäude-&-Forschung-Plan hinzu.
+              {hasObservatorium ? "" : " (Observatorium wird für Asteroiden-Scans benötigt.)"}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Asteroiden scannen */}
+                <div className="rounded-lg border border-border bg-background/40 p-3">
+                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Asteroiden scannen
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-end gap-3">
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Anzahl
+                      <input
+                        type="number"
+                        min={1}
+                        value={asteroidCount}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setAsteroidCount(Math.max(1, Math.floor(n)));
+                        }}
+                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Ab Tick
+                      <input
+                        type="number"
+                        min={0}
+                        value={asteroidTick}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setAsteroidTick(Math.max(0, Math.floor(n)));
+                        }}
+                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addAsteroidOrder}
+                      className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium transition hover:bg-muted"
+                    >
+                      Hinzufügen
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground tabular-nums">
+                    Vorschlag Tick {defaultEconomyTick}
+                    {plan ? ` · ${clockLabel(startCfg, defaultEconomyTick)}` : ""} · 10.000 Kris / Asteroid
+                  </p>
+                </div>
+
+                {/* Extraktoren bauen */}
+                <div className="rounded-lg border border-border bg-background/40 p-3">
+                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Extraktoren bauen
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-end gap-3">
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Anzahl
+                      <input
+                        type="number"
+                        min={1}
+                        value={extractorCount}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setExtractorCount(Math.max(1, Math.floor(n)));
+                        }}
+                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      Ab Tick
+                      <input
+                        type="number"
+                        min={0}
+                        value={extractorTick}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setExtractorTick(Math.max(0, Math.floor(n)));
+                        }}
+                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
+                      />
+                    </label>
+                    <fieldset className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      <legend>Typ</legend>
+                      <div className="flex gap-3 text-sm text-foreground">
+                        <label className="flex items-center gap-1.5">
+                          <input
+                            type="radio"
+                            name="extractor-resource"
+                            checked={extractorResource === "met"}
+                            onChange={() => setExtractorResource("met")}
+                          />
+                          Metall
+                        </label>
+                        <label className="flex items-center gap-1.5">
+                          <input
+                            type="radio"
+                            name="extractor-resource"
+                            checked={extractorResource === "kris"}
+                            onChange={() => setExtractorResource("kris")}
+                          />
+                          Kristall
+                        </label>
+                      </div>
+                    </fieldset>
+                    <button
+                      type="button"
+                      onClick={addExtractorOrder}
+                      className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium transition hover:bg-muted"
+                    >
+                      Hinzufügen
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground tabular-nums">
+                    Max. nach Extraktor-Tech: {maxExtractorsAtTech} · braucht Asteroiden-Slots (20 / Asteroid)
+                  </p>
+                </div>
+              </div>
+
+              {/* Geplante Economy-Orders */}
+              <div className="rounded-lg border border-border bg-background/40">
+                <div className="border-b border-border px-3 py-2">
+                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                    Geplant ({economyOrders.length})
+                  </p>
+                </div>
+                {economyOrders.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-muted-foreground">Noch keine Economy-Aktionen.</p>
+                ) : (
+                  <ul className="divide-y divide-border/60">
+                    {economyOrders.map((order) => {
+                      const fin = plan?.economyOrderFinishTicks[order.id];
+                      return (
+                        <li
+                          key={order.id}
+                          className="flex items-start justify-between gap-2 px-3 py-2 text-sm"
+                        >
+                          <span className="min-w-0">
+                            <span className={jobTypeClass("economy")}>
+                              {formatEconomyOrderLabel(order)}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                              geplant ab Tick {order.atTick}
+                              {plan ? ` · ${clockLabel(startCfg, order.atTick)}` : ""}
+                              {fin !== undefined
+                                ? ` · fertig Tick ${fin} · ${clockLabel(startCfg, fin)}`
+                                : " · noch nicht erfüllt"}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeEconomyOrder(order.id)}
+                            className="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                            title="Entfernen"
+                          >
+                            ×
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
         {/* Nur Ticks mit User-Aktion (Start) */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Aktionsplan</h2>
-          <TickTable ticks={actionTicks} variant="actions" currentTick={currentTick} />
+          {plan ? (
+            <TickTable ticks={actionTicks} variant="actions" currentTick={currentTick} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
+          )}
         </section>
 
         {/* Vollständiges Tick-Log */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Tick-Protokoll</h2>
-          <TickTable
-            ticks={plan.ticks}
-            maxHeightClass="max-h-[36rem]"
-            variant="log"
-            currentTick={currentTick}
-          />
-        </section>
-
-        {/* Timeline */}
-        <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <h2 className="text-lg font-semibold">Timeline</h2>
-          <Timeline steps={plan.steps} maxTick={maxTick} />
+          {plan ? (
+            <TickTable
+              ticks={plan.ticks}
+              maxHeightClass="max-h-[36rem]"
+              variant="log"
+              currentTick={currentTick}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
+          )}
         </section>
       </div>
     </main>
@@ -635,7 +768,6 @@ function TickTable({
   currentTick: number;
 }) {
   const showResources = variant === "log";
-  // Letzter Tick ≤ jetzt (= aktuelle Position / letzte fällige Aktion)
   const highlightTick = ticks.reduce<number | null>((best, t) => {
     if (t.tick > currentTick) return best;
     if (best === null || t.tick > best) return t.tick;
@@ -700,16 +832,18 @@ function TickTable({
                       {formatRes(t.kris)}
                     </td>
                     <td
-                      className={["px-2 py-1.5 text-right font-mono tabular-nums", deltaClass(t.incomeMet)].join(
-                        " ",
-                      )}
+                      className={[
+                        "px-2 py-1.5 text-right font-mono tabular-nums",
+                        deltaClass(t.incomeMet),
+                      ].join(" ")}
                     >
                       {formatDelta(t.incomeMet)}
                     </td>
                     <td
-                      className={["px-2 py-1.5 text-right font-mono tabular-nums", deltaClass(t.incomeKris)].join(
-                        " ",
-                      )}
+                      className={[
+                        "px-2 py-1.5 text-right font-mono tabular-nums",
+                        deltaClass(t.incomeKris),
+                      ].join(" ")}
                     >
                       {formatDelta(t.incomeKris)}
                     </td>
@@ -743,18 +877,92 @@ function TickTable({
   );
 }
 
-function jobTypeClass(type: TechTreeEntry["type"]) {
-  return type === "building" ? "text-amber-500" : "text-fuchsia-500";
+function jobTypeClass(type: JobKind) {
+  if (type === "building") return "text-amber-500";
+  if (type === "research") return "text-fuchsia-500";
+  return "text-sky-500";
+}
+
+type DisplayJob = { name: string; type: JobKind; suffix?: string };
+
+/** Asteroiden/Extraktoren pro Tick zusammenfassen statt einzeln zu listen. */
+function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
+  let asteroids = 0;
+  let extractorsMet = 0;
+  let extractorsKris = 0;
+  let extractorsGeneric = 0;
+  const rest: DisplayJob[] = [];
+
+  for (const item of items) {
+    // Nur Economy-Jobs zusammenfassen — nicht die Tech "Extraktor"
+    if (item.type === "economy" && item.name.startsWith("Asteroid scannen")) {
+      asteroids += 1;
+      continue;
+    }
+    if (item.type === "economy" && item.name.startsWith("Extraktor (Metall)")) {
+      extractorsMet += 1;
+      continue;
+    }
+    if (item.type === "economy" && item.name.startsWith("Extraktor (Kristall)")) {
+      extractorsKris += 1;
+      continue;
+    }
+    if (item.type === "economy" && /^Extraktor\b/.test(item.name)) {
+      extractorsGeneric += 1;
+      continue;
+    }
+    rest.push(item);
+  }
+
+  const out: DisplayJob[] = [];
+  if (asteroids > 0) {
+    out.push({
+      name:
+        asteroids === 1
+          ? "1 Asteroid scannen"
+          : `${asteroids} Asteroiden scannen`,
+      type: "economy",
+    });
+  }
+  if (extractorsMet > 0) {
+    out.push({
+      name:
+        extractorsMet === 1
+          ? "1 Metallextraktor bauen"
+          : `${extractorsMet} Metallextraktoren bauen`,
+      type: "economy",
+    });
+  }
+  if (extractorsKris > 0) {
+    out.push({
+      name:
+        extractorsKris === 1
+          ? "1 Kristallextraktor bauen"
+          : `${extractorsKris} Kristallextraktoren bauen`,
+      type: "economy",
+    });
+  }
+  if (extractorsGeneric > 0) {
+    out.push({
+      name:
+        extractorsGeneric === 1
+          ? "1 Extraktor bauen"
+          : `${extractorsGeneric} Extraktoren bauen`,
+      type: "economy",
+    });
+  }
+  return [...out, ...rest];
 }
 
 function JobList({
   items,
 }: {
-  items: Array<{ name: string; type: TechTreeEntry["type"]; suffix?: string }>;
+  items: DisplayJob[];
 }) {
+  const collapsed = collapseEconomyJobs(items);
   return (
     <span className="inline">
-      {items.map((item, i) => (
+      {collapsed.map((item, i) => (
         <span key={`${item.name}-${i}`}>
           {i > 0 && <span className="text-muted-foreground">, </span>}
           <span className={jobTypeClass(item.type)}>
@@ -770,11 +978,10 @@ function JobList({
 }
 
 function Timeline({ steps, maxTick }: { steps: Job[]; maxTick: number }) {
-  // Überlappende Jobs in Zeilen stapeln
   const rows: Job[][] = [];
-  const sorted = [...steps].sort(
-    (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
-  );
+  const sorted = [...steps]
+    .filter((s) => s.type !== "economy")
+    .sort((a, b) => a.startTick - b.startTick || a.endTick - b.endTick);
   for (const job of sorted) {
     let placed = false;
     for (const row of rows) {
@@ -833,7 +1040,8 @@ function Timeline({ steps, maxTick }: { steps: Job[]; maxTick: number }) {
             className="absolute text-[10px] text-muted-foreground tabular-nums"
             style={{
               left: `${(t / maxTick) * 100}%`,
-              transform: t === 0 ? "none" : t === maxTick ? "translateX(-100%)" : "translateX(-50%)",
+              transform:
+                t === 0 ? "none" : t === maxTick ? "translateX(-100%)" : "translateX(-50%)",
             }}
           >
             {t}
@@ -843,4 +1051,3 @@ function Timeline({ steps, maxTick }: { steps: Job[]; maxTick: number }) {
     </div>
   );
 }
-

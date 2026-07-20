@@ -1,0 +1,41 @@
+{
+  "start_time": "18:00",
+  "start_date": "2026-07-19",
+  "starting_resources": {
+    "metall": 10000,
+    "kristall": 10000
+  },
+  "plan": [
+    "Koloniezentrum",
+    "Bergbau",
+    "Metallmine",
+    "Kristallmine",
+    "Robotik",
+    "Zweite Metallmine",
+    "Zweite Kristallmine",
+    "Tiefe Metallminen",
+    "Tiefe Kristallminen",
+    "Fortgeschrittene Robotik",
+    "Raumfahrt",
+    "Vollautomatisierte Metallmine",
+    "Vollautomatisierte Kristallmine",
+    "Planetare Werften",
+    "Wiederverwendbare Trägersysteme",
+    "Raumstation",
+    "Bergbaulaser",
+    "Observatorium",
+    "Extraktor",
+    "Waffenfabriken",
+    "Fabriken für Raumantriebe",
+    "Raumwerften",
+    "Traktorstrahl",
+    "Militärischer Ionenantrieb",
+    "Kinetische Raketen",
+    "Kaperschiff",
+    "Marineakademie",
+    "Sektorscan",
+    "Longsteen Feld",
+    "Schildschiff",
+    "Fregatte"
+  ]
+}
