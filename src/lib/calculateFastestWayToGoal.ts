@@ -1,14 +1,23 @@
-import techtreeData from "@/gn-data/techtree.json";
-import type { TechTreeEntry } from "@/types/gn";
-
-const techtree = techtreeData as TechTreeEntry[];
+import {
+  getExtractorCost,
+  getExtractorYield,
+  getRequiredAsteroidAmount,
+} from "@/gn-data/extractor";
+import { techtree, type TechTreeEntry } from "@/gn-data/techtree";
+import { utilities } from "@/gn-data/utility";
 
 export const TICK_MINUTES = 15;
 const MAX_TICKS = 5000;
-const ASTEROID_COST_KRIS = 10_000;
-const EXTRACTOR_SLOT_PER_ASTEROID = 20;
-const EXTRACTOR_INCOME = 50;
-const EXTRACTOR_COST_STEP = 65; // n-ter Extraktor kostet n * 65 Metall
+
+const asteroidUtility = utilities.find((u) => u.name === "Asteroid");
+const ASTEROID_COST_KRIS = asteroidUtility?.cost.kris ?? 10_000;
+/** Plätze pro Asteroid — abgeleitet aus getRequiredAsteroidAmount. */
+const EXTRACTOR_SLOT_PER_ASTEROID = (() => {
+  let n = 1;
+  while (getRequiredAsteroidAmount(n) === 1) n += 1;
+  return n - 1;
+})();
+const EXTRACTOR_INCOME_PER_UNIT = getExtractorYield(1);
 
 /** Absolute income per completed building (not cumulative across tiers). */
 const INCOME_BY_BUILDING: Record<string, { met: number; kris: number }> = {
@@ -100,7 +109,7 @@ export type PlanResult = {
   economyOrderFinishTicks: Record<string, number>;
 };
 
-export function byName(entries: TechTreeEntry[] = techtree) {
+export function byName(entries: TechTreeEntry[] = techtree): Map<string, TechTreeEntry> {
   return new Map(entries.map((e) => [e.name, e]));
 }
 
@@ -169,7 +178,7 @@ function criticalPathSet(goal: string, map: Map<string, TechTreeEntry>) {
     path.add(current);
     const entry: TechTreeEntry = map.get(current)!;
     if (!entry.dependencies.length) break;
-    current = entry.dependencies.reduce((best: string, d: string) =>
+    current = entry.dependencies.reduce((best, d) =>
       criticalPathTicks(d, map) > criticalPathTicks(best, map) ? d : best,
     );
   }
@@ -193,7 +202,7 @@ function parseStartMinutes(time: string) {
   return h * 60 + m;
 }
 
-/** Lokale Start-DateTime aus plan.json (ohne TZ-Drift durch ISO-Parse). */
+/** Lokale Start-DateTime aus plan-defaults (ohne TZ-Drift durch ISO-Parse). */
 function startDateTime(startCfg: StartConfig): Date {
   const [y, mo, d] = startCfg.start_date.split("-").map(Number);
   const [h, m] = startCfg.start_time.split(":").map(Number);
@@ -267,13 +276,15 @@ export function formatRes(n: number) {
 }
 
 export function extractorUnitCost(index1Based: number): number {
-  return index1Based * EXTRACTOR_COST_STEP;
+  return getExtractorCost(index1Based);
 }
 
 /** Gesamtkosten der ersten n Extraktoren (65+130+…+n*65). */
 export function totalExtractorCost(count: number): number {
   if (count <= 0) return 0;
-  return (EXTRACTOR_COST_STEP * count * (count + 1)) / 2;
+  let sum = 0;
+  for (let i = 1; i <= count; i++) sum += getExtractorCost(i);
+  return sum;
 }
 
 export function formatExtractorPlanStep(count: number, resource: "met" | "kris"): string {
@@ -312,7 +323,7 @@ export function newEconomyOrderId(): string {
 /**
  * Max. Extraktoren, die mit aktuellem Metall + Kristall (Asteroiden) finanzierbar sind,
  * ausgehend von bereits gebauten totalBuilt Extraktoren und vorhandenen Slots/Asteroiden.
- * Kauft optional Asteroiden (10k Kris / 20 Slots), solange Kristall reicht.
+ * Kauft optional Asteroiden (Kosten/Slots aus gn-data), solange Kristall reicht.
  */
 export function maxAffordableExtractors(opts: {
   met: number;
@@ -348,8 +359,8 @@ export function maxAffordableExtractors(opts: {
 
 function totalExtractorIncome(extractorsMet: number, extractorsKris: number): Res {
   return {
-    met: extractorsMet * EXTRACTOR_INCOME,
-    kris: extractorsKris * EXTRACTOR_INCOME,
+    met: extractorsMet * EXTRACTOR_INCOME_PER_UNIT,
+    kris: extractorsKris * EXTRACTOR_INCOME_PER_UNIT,
   };
 }
 
@@ -958,7 +969,7 @@ function simulatePlan(
 
 /**
  * Berechnet den Zeitplan anhand der vorgegebenen plan[]-Meilensteine.
- * Der User steuert die Strategie über die Reihenfolge in plan.json;
+ * Der User steuert die Strategie über die Reihenfolge im Plan;
  * hier wird nur noch simuliert, wann Ressourcen reichen und Jobs laufen.
  */
 export function calculateFastestWayToGoal(startCfg: StartConfig): PlanResult {

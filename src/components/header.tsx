@@ -1,6 +1,7 @@
+import { JobList } from "@/components/overview/actionplan";
+import { ResetBtn } from "@/components/reset-btn";
 import { Badge } from "@/components/shadcn/badge";
 import { Separator } from "@/components/shadcn/separator";
-import { JobList } from "@/components/overview/actionplan";
 import {
   clockLabel,
   formatTimeUntilTick,
@@ -9,6 +10,7 @@ import {
   type StartConfig,
   type TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
+
 const MILESTONES = ["Extraktor", "Kaperschiff", "Schildschiff"] as const;
 
 export type HeaderProps = {
@@ -17,13 +19,16 @@ export type HeaderProps = {
   startCfg: StartConfig;
   plan: PlanResult | null;
   nextAction: TickSnapshot | null;
+  onReset: () => void;
 };
 
-export function Header({ now, currentTick, startCfg, plan, nextAction }: HeaderProps) {
+export function Header({ now, currentTick, startCfg, plan, nextAction, onReset }: HeaderProps) {
   return (
     <header className="shrink-0 border-b border-border">
       <div className="flex items-stretch gap-0 px-4">
         <div className="flex items-center gap-6 py-3 pr-6">
+          <ResetBtn onReset={onReset} />
+          <Separator orientation="vertical" />
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Uhrzeit</span>
             <span className="font-heading text-xl font-semibold tracking-tight tabular-nums">{formatWallClock(now)}</span>

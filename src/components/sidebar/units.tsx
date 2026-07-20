@@ -25,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/shadcn/tooltip";
+import { utilities } from "@/gn-data/utility";
 import {
   clockLabel,
   formatEconomyOrderLabel,
@@ -33,6 +34,9 @@ import {
   type PlanResult,
   type StartConfig,
 } from "@/lib/calculateFastestWayToGoal";
+
+const asteroidUtility = utilities.find((x) => x.name === "Asteroid");
+const ASTEROID_COST_KRIS = asteroidUtility?.cost.kris ?? 10_000;
 
 export type UnitsProps = {
   canUse: boolean;
@@ -117,7 +121,7 @@ export function Units({
             <CardTitle>Asteroiden scannen</CardTitle>
             <CardDescription className="tabular-nums">
               Vorschlag T{defaultTick}
-              {plan ? ` · ${clockLabel(startCfg, defaultTick)}` : ""} · 10.000 Kris
+              {plan ? ` · ${clockLabel(startCfg, defaultTick)}` : ""} ·{" "}{ASTEROID_COST_KRIS.toLocaleString("de-DE")} Kris
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -169,7 +173,7 @@ export function Units({
           <CardHeader>
             <CardTitle>Extraktoren bauen</CardTitle>
             <CardDescription className="tabular-nums">
-              Max. nach Tech: {maxExtractorsAtTech} · 20 Slots / Asteroid
+              Max. nach Tech: {maxExtractorsAtTech} · Asteroiden-Slots
             </CardDescription>
           </CardHeader>
           <CardContent>

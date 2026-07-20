@@ -227,11 +227,8 @@ export function ActionPlan({ ticks, currentTick, hasPlan }: ActionPlanProps) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
 
-  const highlightTick = ticks.reduce<number | null>((best, t) => {
-    if (t.tick > currentTick) return best;
-    if (best === null || t.tick > best) return t.tick;
-    return best;
-  }, null);
+  const nextTick =
+    ticks.find((t) => t.tick >= currentTick)?.tick ?? null;
 
   return (
     <Table>
@@ -244,11 +241,13 @@ export function ActionPlan({ ticks, currentTick, hasPlan }: ActionPlanProps) {
       </TableHeader>
       <TableBody>
         {ticks.map((t) => {
-          const isCurrent = highlightTick !== null && t.tick === highlightTick;
+          const isNext = nextTick !== null && t.tick === nextTick;
           return (
             <TableRow key={t.tick}>
-              <TableCell>{t.tick}</TableCell>
-              <TableCell className={cn(isCurrent && "text-green-500")}>{t.clockLabel}</TableCell>
+              <TableCell className={cn(isNext && "text-green-500")}>
+                {t.tick}
+              </TableCell>
+              <TableCell className={cn(isNext && "text-green-500")}>{t.clockLabel}</TableCell>
               <TableCell>{t.started.length ? <JobList items={t.started} /> : "—"}</TableCell>
             </TableRow>
           );

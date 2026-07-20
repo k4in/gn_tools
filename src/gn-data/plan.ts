@@ -1,11 +1,11 @@
-{
-  "start_time": "18:00",
-  "start_date": "2026-07-19",
-  "starting_resources": {
-    "metall": 10000,
-    "kristall": 10000
+export const defaults = {
+  start_time: "18:00",
+  start_date: "2026-07-20",
+  starting_resources: {
+    metall: 10000,
+    kristall: 10000,
   },
-  "plan": [
+  plan: [
     "Koloniezentrum",
     "Bergbau",
     "Metallmine",
@@ -36,6 +36,6 @@
     "Sektorscan",
     "Longsteen Feld",
     "Schildschiff",
-    "Fregatte"
-  ]
-}
+    "Fregatte",
+  ],
+};

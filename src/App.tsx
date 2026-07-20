@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import planData from "@/gn-data/plan.json";
+import { defaults as defaultConfig } from "@/gn-data/plan";
 import { Header } from "@/components/header";
 import { Overview } from "@/components/overview/overview";
 import { Sidebar } from "@/components/sidebar/sidebar";
@@ -17,7 +17,6 @@ import { TooltipProvider } from "@/components/shadcn/tooltip";
 
 const STORAGE_KEY = "gn_tool.plan";
 const FALLBACK_PLAN = ["Koloniezentrum"] as const;
-const defaultConfig = planData as StartConfig;
 
 function normalizeEconomyOrders(raw: unknown): EconomyOrder[] {
   if (!Array.isArray(raw)) return [];
@@ -244,6 +243,7 @@ export default function App() {
           startCfg={startCfg}
           plan={plan}
           nextAction={nextAction}
+          onReset={resetPlan}
         />
         <div className="grid min-h-0 flex-1 grid-cols-[22rem_minmax(0,1fr)]">
           <Sidebar
@@ -262,7 +262,6 @@ export default function App() {
             onRemoveTech={removeFromPlan}
             onAddOrder={addEconomyOrder}
             onRemoveOrder={removeEconomyOrder}
-            onReset={resetPlan}
           />
           <Overview
             actionTicks={actionTicks}

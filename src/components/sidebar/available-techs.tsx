@@ -3,7 +3,7 @@ import { Badge } from "@/components/shadcn/badge";
 import { Button } from "@/components/shadcn/button";
 import { ScrollArea } from "@/components/shadcn/scroll-area";
 import { formatRes } from "@/lib/calculateFastestWayToGoal";
-import type { TechTreeEntry } from "@/types/gn";
+import type { TechTreeEntry } from "@/gn-data/techtree";
 
 export type AvailableTechsProps = {
   unlocked: TechTreeEntry[];

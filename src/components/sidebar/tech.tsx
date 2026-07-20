@@ -1,7 +1,7 @@
 import { AvailableTechs } from "@/components/sidebar/available-techs";
 import { PlannedTechs } from "@/components/sidebar/planned-techs";
 import type { PlanResult, StartConfig } from "@/lib/calculateFastestWayToGoal";
-import type { TechTreeEntry } from "@/types/gn";
+import type { TechTreeEntry } from "@/gn-data/techtree";
 
 export type TechProps = {
   unlocked: TechTreeEntry[];

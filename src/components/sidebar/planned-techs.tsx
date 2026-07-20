@@ -13,7 +13,7 @@ import {
   type PlanResult,
   type StartConfig,
 } from "@/lib/calculateFastestWayToGoal";
-import type { TechTreeEntry } from "@/types/gn";
+import type { TechTreeEntry } from "@/gn-data/techtree";
 
 export type PlannedTechsProps = {
   planNames: string[];
