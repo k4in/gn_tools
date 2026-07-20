@@ -19,6 +19,43 @@ import {
   type StartConfig,
   type TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
+import { Button } from "@/components/shadcn/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/shadcn/card";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/shadcn/field";
+import {
+  InputGroup,
+  InputGroupInput,
+} from "@/components/shadcn/input-group";
+import { RadioGroup, RadioGroupItem } from "@/components/shadcn/radio-group";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/shadcn/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/shadcn/tooltip";
+import { cn } from "@/lib/utils/cn";
 
 const STORAGE_KEY = "gn_tool.plan";
 const FALLBACK_PLAN = ["Koloniezentrum"] as const;
@@ -291,457 +328,537 @@ export default function App() {
   };
 
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 md:px-8">
-        {/* Übersicht */}
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-            <div className="space-y-4">
-              <div>
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Aktuell
-                </p>
-                <p className="mt-1 font-heading text-2xl font-semibold tracking-tight tabular-nums">
-                  {formatWallClock(now)}
-                </p>
-                <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
-                  {currentTick < 0
-                    ? `Start in ${Math.abs(currentTick)} Ticks`
-                    : `Tick ${currentTick}`}
-                </p>
-              </div>
-              <div className="border-t border-border pt-4">
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Meilensteine
-                </p>
-                <ul className="mt-2 space-y-2">
-                  {MILESTONES.map((name) => {
-                    const job = plan?.steps.find((s) => s.name === name);
-                    const finishTick = job?.endTick;
-                    return (
-                      <li key={name} className="text-sm">
-                        <p className="font-medium">{name}</p>
-                        {finishTick !== undefined ? (
-                          <>
-                            <p className="text-xs text-muted-foreground tabular-nums">
-                              Tick {finishTick} · {clockLabel(startCfg, finishTick)}
-                            </p>
-                            <p className="text-xs text-muted-foreground tabular-nums">
-                              {formatTimeUntilTick(startCfg, finishTick, now)}
-                            </p>
-                          </>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">noch nicht im Plan</p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {!plan && (
-                  <p className="mt-2 text-sm text-red-500">Plan nicht berechenbar</p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-3 md:border-l md:border-border md:pl-8">
-              <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                Nächste Aktion
-              </p>
-              {nextAction ? (
-                <div className="rounded-lg border border-border bg-background/50 p-3">
-                  <p className="text-sm font-medium tabular-nums">
-                    Tick {nextAction.tick} · {nextAction.clockLabel}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                    {formatTimeUntilTick(startCfg, nextAction.tick, now)}
-                  </p>
-                  <div className="mt-1.5 text-sm leading-snug">
-                    <JobList items={nextAction.started} />
+    <TooltipProvider>
+      <main className="min-h-svh bg-background text-foreground">
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 md:px-8">
+          {/* Übersicht */}
+          <Card>
+            <CardContent>
+              <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                      Aktuell
+                    </p>
+                    <p className="mt-1 font-heading text-2xl font-semibold tracking-tight tabular-nums">
+                      {formatWallClock(now)}
+                    </p>
+                    <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
+                      {currentTick < 0
+                        ? `Start in ${Math.abs(currentTick)} Ticks`
+                        : `Tick ${currentTick}`}
+                    </p>
+                  </div>
+                  <div className="border-t border-border pt-4">
+                    <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                      Meilensteine
+                    </p>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {MILESTONES.map((name) => {
+                        const job = plan?.steps.find((s) => s.name === name);
+                        const finishTick = job?.endTick;
+                        return (
+                          <li key={name} className="text-sm">
+                            <p className="font-medium">{name}</p>
+                            {finishTick !== undefined ? (
+                              <>
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  Tick {finishTick} · {clockLabel(startCfg, finishTick)}
+                                </p>
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  {formatTimeUntilTick(startCfg, finishTick, now)}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">noch nicht im Plan</p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {!plan && (
+                      <p className="mt-2 text-sm text-destructive">Plan nicht berechenbar</p>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Keine weiteren Aktionen</p>
-              )}
 
-              {followingActions.length > 0 && (
-                <div className="space-y-2 pt-1">
+                <div className="flex flex-col gap-3 md:border-l md:border-border md:pl-8">
                   <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Danach
+                    Nächste Aktion
                   </p>
-                  <ul className="space-y-2">
-                    {followingActions.map((t) => (
-                      <li
-                        key={t.tick}
-                        className="rounded-md border border-border/60 px-3 py-2 text-sm"
-                      >
-                        <p className="text-xs text-muted-foreground tabular-nums">
-                          Tick {t.tick} · {t.clockLabel}
+                  {nextAction ? (
+                    <Card size="sm" className="bg-background/50 ring-foreground/5">
+                      <CardContent className="flex flex-col gap-1.5">
+                        <p className="text-sm font-medium tabular-nums">
+                          Tick {nextAction.tick} · {nextAction.clockLabel}
                         </p>
                         <p className="text-xs text-muted-foreground tabular-nums">
-                          {formatTimeUntilTick(startCfg, t.tick, now)}
+                          {formatTimeUntilTick(startCfg, nextAction.tick, now)}
                         </p>
-                        <div className="mt-1 leading-snug">
-                          <JobList items={t.started} />
+                        <div className="text-sm leading-snug">
+                          <JobList items={nextAction.started} />
                         </div>
-                      </li>
-                    ))}
-                  </ul>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Keine weiteren Aktionen</p>
+                  )}
+
+                  {followingActions.length > 0 && (
+                    <div className="flex flex-col gap-2 pt-1">
+                      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                        Danach
+                      </p>
+                      <ul className="flex flex-col gap-2">
+                        {followingActions.map((t) => (
+                          <li key={t.tick}>
+                            <Card size="sm" className="ring-foreground/5">
+                              <CardContent className="flex flex-col gap-1 py-2">
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  Tick {t.tick} · {t.clockLabel}
+                                </p>
+                                <p className="text-xs text-muted-foreground tabular-nums">
+                                  {formatTimeUntilTick(startCfg, t.tick, now)}
+                                </p>
+                                <div className="text-sm leading-snug">
+                                  <JobList items={t.started} />
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Timeline */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {plan ? (
+                <Timeline steps={plan.steps} maxTick={maxTick} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gebäude & Forschung */}
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="text-lg">Gebäude & Forschung</CardTitle>
+              <CardDescription>
+                Links freigeschaltete Technologien wählen — sie werden dem Plan hinzugefügt.
+              </CardDescription>
+              <CardAction>
+                <Button type="button" variant="outline" size="sm" onClick={resetPlan}>
+                  Zurücksetzen
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Verfügbar */}
+                <Card size="sm" className="h-[28rem] max-h-[50vh] min-h-[16rem] bg-background/40">
+                  <CardHeader className="border-b py-2">
+                    <CardTitle className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                      Verfügbar ({unlocked.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="min-h-0 flex-1 overflow-auto p-2">
+                    <ul className="flex flex-col gap-1">
+                      {unlocked.length === 0 ? (
+                        <li className="px-2 py-3 text-sm text-muted-foreground">
+                          Keine weiteren freigeschalteten Technologien
+                        </li>
+                      ) : (
+                        unlocked.map((tech) => (
+                          <li key={tech.name}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => addToPlan(tech.name)}
+                              className="h-auto w-full justify-between gap-2 px-2 py-2 text-left font-normal whitespace-normal"
+                            >
+                              <span className="min-w-0">
+                                <span className={jobTypeClass(tech.type)}>{tech.name}</span>
+                                <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                                  {tech.ticks} Ticks · {formatRes(tech.cost.met)} Met ·{" "}
+                                  {formatRes(tech.cost.kris)} Kris
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-xs text-muted-foreground">+</span>
+                            </Button>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                {/* Plan */}
+                <Card size="sm" className="h-[28rem] max-h-[50vh] min-h-[16rem] bg-background/40">
+                  <CardHeader className="border-b py-2">
+                    <CardTitle className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                      Plan ({planNames.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="min-h-0 flex-1 overflow-auto p-2">
+                    <ol className="flex flex-col gap-1">
+                      {planNames.map((name, i) => {
+                        const tech = techByName.get(name);
+                        const isEcon = isExtractorPlanEntry(name);
+                        const fin = plan?.stepFinishTicks[i];
+                        const canUp = i > 0;
+                        const canDown = i < planNames.length - 1;
+                        return (
+                          <li
+                            key={`${name}-${i}`}
+                            className="flex items-start justify-between gap-2 rounded-md border border-border/60 px-2 py-2 text-sm"
+                          >
+                            <span className="min-w-0">
+                              <span className="text-muted-foreground tabular-nums">{i + 1}.</span>{" "}
+                              <span
+                                className={
+                                  tech
+                                    ? jobTypeClass(tech.type)
+                                    : isEcon
+                                      ? jobTypeClass("economy")
+                                      : ""
+                                }
+                              >
+                                {name}
+                              </span>
+                              {fin !== undefined && fin >= 0 && (
+                                <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                                  fertig Tick {fin}
+                                  {plan ? ` · ${clockLabel(startCfg, fin)}` : ""}
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-0.5">
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      onClick={() => movePlanItem(i, -1)}
+                                      disabled={!canUp}
+                                    />
+                                  }
+                                >
+                                  ↑
+                                </TooltipTrigger>
+                                <TooltipContent>Nach oben</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      onClick={() => movePlanItem(i, 1)}
+                                      disabled={!canDown}
+                                    />
+                                  }
+                                >
+                                  ↓
+                                </TooltipTrigger>
+                                <TooltipContent>Nach unten</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon-xs"
+                                      onClick={() => removeFromPlan(i)}
+                                    />
+                                  }
+                                >
+                                  ×
+                                </TooltipTrigger>
+                                <TooltipContent>Entfernen</TooltipContent>
+                              </Tooltip>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Extraktoren & Einheiten */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Extraktoren & Einheiten</CardTitle>
+              <CardDescription>
+                Asteroiden und Extraktoren mit Ziel-Tick planen. Verfügbar sobald Extraktor im
+                Tech-Plan ist.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!canUseEconomy ? (
+                <p className="text-sm text-muted-foreground">
+                  Noch gesperrt — füge zuerst{" "}
+                  <span className="font-medium text-foreground">Extraktor</span> im
+                  Gebäude-&-Forschung-Plan hinzu.
+                  {hasObservatorium ? "" : " (Observatorium wird für Asteroiden-Scans benötigt.)"}
+                </p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Asteroiden scannen */}
+                    <Card size="sm" className="bg-background/40">
+                      <CardHeader>
+                        <CardTitle className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                          Asteroiden scannen
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <FieldGroup className="gap-3">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <Field className="w-28">
+                              <FieldLabel htmlFor="asteroid-count">Anzahl</FieldLabel>
+                              <InputGroup>
+                                <InputGroupInput
+                                  id="asteroid-count"
+                                  type="number"
+                                  min={1}
+                                  value={asteroidCount}
+                                  onChange={(e) => {
+                                    const n = Number(e.target.value);
+                                    if (!Number.isFinite(n)) return;
+                                    setAsteroidCount(Math.max(1, Math.floor(n)));
+                                  }}
+                                  className="tabular-nums"
+                                />
+                              </InputGroup>
+                            </Field>
+                            <Field className="w-28">
+                              <FieldLabel htmlFor="asteroid-tick">Ab Tick</FieldLabel>
+                              <InputGroup>
+                                <InputGroupInput
+                                  id="asteroid-tick"
+                                  type="number"
+                                  min={0}
+                                  value={asteroidTick}
+                                  onChange={(e) => {
+                                    const n = Number(e.target.value);
+                                    if (!Number.isFinite(n)) return;
+                                    setAsteroidTick(Math.max(0, Math.floor(n)));
+                                  }}
+                                  className="tabular-nums"
+                                />
+                              </InputGroup>
+                            </Field>
+                            <Button type="button" variant="secondary" size="sm" onClick={addAsteroidOrder}>
+                              Hinzufügen
+                            </Button>
+                          </div>
+                          <FieldDescription className="tabular-nums">
+                            Vorschlag Tick {defaultEconomyTick}
+                            {plan ? ` · ${clockLabel(startCfg, defaultEconomyTick)}` : ""} · 10.000
+                            Kris / Asteroid
+                          </FieldDescription>
+                        </FieldGroup>
+                      </CardContent>
+                    </Card>
+
+                    {/* Extraktoren bauen */}
+                    <Card size="sm" className="bg-background/40">
+                      <CardHeader>
+                        <CardTitle className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                          Extraktoren bauen
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <FieldGroup className="gap-3">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <Field className="w-28">
+                              <FieldLabel htmlFor="extractor-count">Anzahl</FieldLabel>
+                              <InputGroup>
+                                <InputGroupInput
+                                  id="extractor-count"
+                                  type="number"
+                                  min={1}
+                                  value={extractorCount}
+                                  onChange={(e) => {
+                                    const n = Number(e.target.value);
+                                    if (!Number.isFinite(n)) return;
+                                    setExtractorCount(Math.max(1, Math.floor(n)));
+                                  }}
+                                  className="tabular-nums"
+                                />
+                              </InputGroup>
+                            </Field>
+                            <Field className="w-28">
+                              <FieldLabel htmlFor="extractor-tick">Ab Tick</FieldLabel>
+                              <InputGroup>
+                                <InputGroupInput
+                                  id="extractor-tick"
+                                  type="number"
+                                  min={0}
+                                  value={extractorTick}
+                                  onChange={(e) => {
+                                    const n = Number(e.target.value);
+                                    if (!Number.isFinite(n)) return;
+                                    setExtractorTick(Math.max(0, Math.floor(n)));
+                                  }}
+                                  className="tabular-nums"
+                                />
+                              </InputGroup>
+                            </Field>
+                            <FieldSet className="w-auto gap-1.5">
+                              <FieldLegend variant="label">Typ</FieldLegend>
+                              <RadioGroup
+                                value={extractorResource}
+                                onValueChange={(value) => {
+                                  if (value === "met" || value === "kris") {
+                                    setExtractorResource(value);
+                                  }
+                                }}
+                                className="flex w-auto flex-row gap-3"
+                              >
+                                <Field orientation="horizontal" className="w-auto">
+                                  <RadioGroupItem value="met" id="extractor-res-met" />
+                                  <FieldLabel htmlFor="extractor-res-met" className="font-normal">
+                                    Metall
+                                  </FieldLabel>
+                                </Field>
+                                <Field orientation="horizontal" className="w-auto">
+                                  <RadioGroupItem value="kris" id="extractor-res-kris" />
+                                  <FieldLabel htmlFor="extractor-res-kris" className="font-normal">
+                                    Kristall
+                                  </FieldLabel>
+                                </Field>
+                              </RadioGroup>
+                            </FieldSet>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={addExtractorOrder}
+                            >
+                              Hinzufügen
+                            </Button>
+                          </div>
+                          <FieldDescription className="tabular-nums">
+                            Max. nach Extraktor-Tech: {maxExtractorsAtTech} · braucht
+                            Asteroiden-Slots (20 / Asteroid)
+                          </FieldDescription>
+                        </FieldGroup>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Geplante Economy-Orders */}
+                  <Card size="sm" className="bg-background/40">
+                    <CardHeader className="border-b py-2">
+                      <CardTitle className="text-[11px] tracking-wide text-muted-foreground uppercase">
+                        Geplant ({economyOrders.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {economyOrders.length === 0 ? (
+                        <p className="px-3 py-3 text-sm text-muted-foreground">
+                          Noch keine Economy-Aktionen.
+                        </p>
+                      ) : (
+                        <ul className="divide-y divide-border/60">
+                          {economyOrders.map((order) => {
+                            const fin = plan?.economyOrderFinishTicks[order.id];
+                            return (
+                              <li
+                                key={order.id}
+                                className="flex items-start justify-between gap-2 px-3 py-2 text-sm"
+                              >
+                                <span className="min-w-0">
+                                  <span className={jobTypeClass("economy")}>
+                                    {formatEconomyOrderLabel(order)}
+                                  </span>
+                                  <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
+                                    geplant ab Tick {order.atTick}
+                                    {plan ? ` · ${clockLabel(startCfg, order.atTick)}` : ""}
+                                    {fin !== undefined
+                                      ? ` · fertig Tick ${fin} · ${clockLabel(startCfg, fin)}`
+                                      : " · noch nicht erfüllt"}
+                                  </span>
+                                </span>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={() => removeEconomyOrder(order.id)}
+                                      />
+                                    }
+                                  >
+                                    ×
+                                  </TooltipTrigger>
+                                  <TooltipContent>Entfernen</TooltipContent>
+                                </Tooltip>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
-            </div>
-          </div>
-        </section>
+            </CardContent>
+          </Card>
 
-        {/* Timeline */}
-        <section className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <h2 className="text-lg font-semibold">Timeline</h2>
-          {plan ? (
-            <Timeline steps={plan.steps} maxTick={maxTick} />
-          ) : (
-            <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
-          )}
-        </section>
+          {/* Nur Ticks mit User-Aktion (Start) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Aktionsplan</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {plan ? (
+                <TickTable ticks={actionTicks} variant="actions" currentTick={currentTick} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Gebäude & Forschung */}
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Gebäude & Forschung</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Links freigeschaltete Technologien wählen — sie werden dem Plan hinzugefügt.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={resetPlan}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              Zurücksetzen
-            </button>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Verfügbar */}
-            <div className="flex h-[28rem] max-h-[50vh] min-h-[16rem] flex-col rounded-lg border border-border bg-background/40">
-              <div className="border-b border-border px-3 py-2">
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Verfügbar ({unlocked.length})
-                </p>
-              </div>
-              <ul className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
-                {unlocked.length === 0 ? (
-                  <li className="px-2 py-3 text-sm text-muted-foreground">
-                    Keine weiteren freigeschalteten Technologien
-                  </li>
-                ) : (
-                  unlocked.map((tech) => (
-                    <li key={tech.name}>
-                      <button
-                        type="button"
-                        onClick={() => addToPlan(tech.name)}
-                        className="flex w-full items-start justify-between gap-2 rounded-md border border-transparent px-2 py-2 text-left text-sm transition hover:border-border hover:bg-muted/60"
-                      >
-                        <span className="min-w-0">
-                          <span className={jobTypeClass(tech.type)}>{tech.name}</span>
-                          <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
-                            {tech.ticks} Ticks · {formatRes(tech.cost.met)} Met ·{" "}
-                            {formatRes(tech.cost.kris)} Kris
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-xs text-muted-foreground">+</span>
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-
-            {/* Plan */}
-            <div className="flex h-[28rem] max-h-[50vh] min-h-[16rem] flex-col rounded-lg border border-border bg-background/40">
-              <div className="border-b border-border px-3 py-2">
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  Plan ({planNames.length})
-                </p>
-              </div>
-              <ol className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
-                {planNames.map((name, i) => {
-                  const tech = techByName.get(name);
-                  const isEcon = isExtractorPlanEntry(name);
-                  const fin = plan?.stepFinishTicks[i];
-                  const canUp = i > 0;
-                  const canDown = i < planNames.length - 1;
-                  return (
-                    <li
-                      key={`${name}-${i}`}
-                      className="flex items-start justify-between gap-2 rounded-md border border-border/60 px-2 py-2 text-sm"
-                    >
-                      <span className="min-w-0">
-                        <span className="text-muted-foreground tabular-nums">{i + 1}.</span>{" "}
-                        <span
-                          className={
-                            tech
-                              ? jobTypeClass(tech.type)
-                              : isEcon
-                                ? jobTypeClass("economy")
-                                : ""
-                          }
-                        >
-                          {name}
-                        </span>
-                        {fin !== undefined && fin >= 0 && (
-                          <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
-                            fertig Tick {fin}
-                            {plan ? ` · ${clockLabel(startCfg, fin)}` : ""}
-                          </span>
-                        )}
-                      </span>
-                      <span className="flex shrink-0 items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => movePlanItem(i, -1)}
-                          disabled={!canUp}
-                          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-                          title="Nach oben"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => movePlanItem(i, 1)}
-                          disabled={!canDown}
-                          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
-                          title="Nach unten"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeFromPlan(i)}
-                          className="rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                          title="Entfernen"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-          </div>
-        </section>
-
-        {/* Extraktoren & Einheiten */}
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm md:p-6">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold">Extraktoren & Einheiten</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Asteroiden und Extraktoren mit Ziel-Tick planen. Verfügbar sobald Extraktor im Tech-Plan ist.
-            </p>
-          </div>
-
-          {!canUseEconomy ? (
-            <p className="text-sm text-muted-foreground">
-              Noch gesperrt — füge zuerst <span className="font-medium text-foreground">Extraktor</span> im
-              Gebäude-&-Forschung-Plan hinzu.
-              {hasObservatorium ? "" : " (Observatorium wird für Asteroiden-Scans benötigt.)"}
-            </p>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                {/* Asteroiden scannen */}
-                <div className="rounded-lg border border-border bg-background/40 p-3">
-                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Asteroiden scannen
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-end gap-3">
-                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      Anzahl
-                      <input
-                        type="number"
-                        min={1}
-                        value={asteroidCount}
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          if (!Number.isFinite(n)) return;
-                          setAsteroidCount(Math.max(1, Math.floor(n)));
-                        }}
-                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      Ab Tick
-                      <input
-                        type="number"
-                        min={0}
-                        value={asteroidTick}
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          if (!Number.isFinite(n)) return;
-                          setAsteroidTick(Math.max(0, Math.floor(n)));
-                        }}
-                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={addAsteroidOrder}
-                      className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium transition hover:bg-muted"
-                    >
-                      Hinzufügen
-                    </button>
-                  </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground tabular-nums">
-                    Vorschlag Tick {defaultEconomyTick}
-                    {plan ? ` · ${clockLabel(startCfg, defaultEconomyTick)}` : ""} · 10.000 Kris / Asteroid
-                  </p>
-                </div>
-
-                {/* Extraktoren bauen */}
-                <div className="rounded-lg border border-border bg-background/40 p-3">
-                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Extraktoren bauen
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-end gap-3">
-                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      Anzahl
-                      <input
-                        type="number"
-                        min={1}
-                        value={extractorCount}
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          if (!Number.isFinite(n)) return;
-                          setExtractorCount(Math.max(1, Math.floor(n)));
-                        }}
-                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      Ab Tick
-                      <input
-                        type="number"
-                        min={0}
-                        value={extractorTick}
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          if (!Number.isFinite(n)) return;
-                          setExtractorTick(Math.max(0, Math.floor(n)));
-                        }}
-                        className="w-24 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground tabular-nums"
-                      />
-                    </label>
-                    <fieldset className="flex flex-col gap-1 text-xs text-muted-foreground">
-                      <legend>Typ</legend>
-                      <div className="flex gap-3 text-sm text-foreground">
-                        <label className="flex items-center gap-1.5">
-                          <input
-                            type="radio"
-                            name="extractor-resource"
-                            checked={extractorResource === "met"}
-                            onChange={() => setExtractorResource("met")}
-                          />
-                          Metall
-                        </label>
-                        <label className="flex items-center gap-1.5">
-                          <input
-                            type="radio"
-                            name="extractor-resource"
-                            checked={extractorResource === "kris"}
-                            onChange={() => setExtractorResource("kris")}
-                          />
-                          Kristall
-                        </label>
-                      </div>
-                    </fieldset>
-                    <button
-                      type="button"
-                      onClick={addExtractorOrder}
-                      className="rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-medium transition hover:bg-muted"
-                    >
-                      Hinzufügen
-                    </button>
-                  </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground tabular-nums">
-                    Max. nach Extraktor-Tech: {maxExtractorsAtTech} · braucht Asteroiden-Slots (20 / Asteroid)
-                  </p>
-                </div>
-              </div>
-
-              {/* Geplante Economy-Orders */}
-              <div className="rounded-lg border border-border bg-background/40">
-                <div className="border-b border-border px-3 py-2">
-                  <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                    Geplant ({economyOrders.length})
-                  </p>
-                </div>
-                {economyOrders.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-muted-foreground">Noch keine Economy-Aktionen.</p>
-                ) : (
-                  <ul className="divide-y divide-border/60">
-                    {economyOrders.map((order) => {
-                      const fin = plan?.economyOrderFinishTicks[order.id];
-                      return (
-                        <li
-                          key={order.id}
-                          className="flex items-start justify-between gap-2 px-3 py-2 text-sm"
-                        >
-                          <span className="min-w-0">
-                            <span className={jobTypeClass("economy")}>
-                              {formatEconomyOrderLabel(order)}
-                            </span>
-                            <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
-                              geplant ab Tick {order.atTick}
-                              {plan ? ` · ${clockLabel(startCfg, order.atTick)}` : ""}
-                              {fin !== undefined
-                                ? ` · fertig Tick ${fin} · ${clockLabel(startCfg, fin)}`
-                                : " · noch nicht erfüllt"}
-                            </span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => removeEconomyOrder(order.id)}
-                            className="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                            title="Entfernen"
-                          >
-                            ×
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Nur Ticks mit User-Aktion (Start) */}
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Aktionsplan</h2>
-          {plan ? (
-            <TickTable ticks={actionTicks} variant="actions" currentTick={currentTick} />
-          ) : (
-            <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
-          )}
-        </section>
-
-        {/* Vollständiges Tick-Log */}
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Tick-Protokoll</h2>
-          {plan ? (
-            <TickTable
-              ticks={plan.ticks}
-              maxHeightClass="max-h-[36rem]"
-              variant="log"
-              currentTick={currentTick}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
-          )}
-        </section>
-      </div>
-    </main>
+          {/* Vollständiges Tick-Log */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Tick-Protokoll</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {plan ? (
+                <TickTable
+                  ticks={plan.ticks}
+                  variant="log"
+                  currentTick={currentTick}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">Kein Plan berechenbar.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </TooltipProvider>
   );
 }
 
@@ -758,12 +875,10 @@ function formatDelta(n: number) {
 
 function TickTable({
   ticks,
-  maxHeightClass,
   variant = "log",
   currentTick,
 }: {
   ticks: TickSnapshot[];
-  maxHeightClass?: string;
   variant?: "actions" | "log";
   currentTick: number;
 }) {
@@ -775,105 +890,69 @@ function TickTable({
   }, null);
 
   return (
-    <div
-      className={["overflow-auto rounded-xl border border-border", maxHeightClass]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <table className="w-full min-w-[720px] border-collapse text-left text-xs">
-        <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-          <tr className="border-b border-border text-[10px] tracking-wide text-muted-foreground uppercase">
-            <th className="px-2 py-2 font-medium">Tick</th>
-            <th className="px-2 py-2 font-medium">Uhrzeit</th>
-            {showResources && (
-              <>
-                <th className="px-2 py-2 font-medium text-right">Met</th>
-                <th className="px-2 py-2 font-medium text-right">Kris</th>
-                <th className="px-2 py-2 font-medium text-right">+M</th>
-                <th className="px-2 py-2 font-medium text-right">+K</th>
-              </>
-            )}
-            <th className="px-2 py-2 font-medium">Aktiv</th>
-            <th className="px-2 py-2 font-medium">Start</th>
-            <th className="px-2 py-2 font-medium">Ende</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ticks.map((t) => {
-            const hasStart = t.started.length > 0;
-            const isCurrent = highlightTick !== null && t.tick === highlightTick;
-            return (
-              <tr
-                key={t.tick}
-                className={[
-                  "border-b border-border/60",
-                  variant === "actions"
-                    ? "bg-background/50"
-                    : hasStart
-                      ? "bg-card"
-                      : "bg-background/50 text-muted-foreground",
-                ].join(" ")}
-              >
-                <td className="px-2 py-1.5 font-mono tabular-nums">{t.tick}</td>
-                <td
-                  className={[
-                    "px-2 py-1.5 whitespace-nowrap tabular-nums",
-                    isCurrent ? "font-medium text-green-500" : "",
-                  ].join(" ")}
-                >
-                  {t.clockLabel}
-                </td>
-                {showResources && (
-                  <>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                      {formatRes(t.met)}
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                      {formatRes(t.kris)}
-                    </td>
-                    <td
-                      className={[
-                        "px-2 py-1.5 text-right font-mono tabular-nums",
-                        deltaClass(t.incomeMet),
-                      ].join(" ")}
-                    >
-                      {formatDelta(t.incomeMet)}
-                    </td>
-                    <td
-                      className={[
-                        "px-2 py-1.5 text-right font-mono tabular-nums",
-                        deltaClass(t.incomeKris),
-                      ].join(" ")}
-                    >
-                      {formatDelta(t.incomeKris)}
-                    </td>
-                  </>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Tick</TableHead>
+          <TableHead>Uhrzeit</TableHead>
+          {showResources && (
+            <>
+              <TableHead className="text-right">Met</TableHead>
+              <TableHead className="text-right">Kris</TableHead>
+              <TableHead className="text-right">+M</TableHead>
+              <TableHead className="text-right">+K</TableHead>
+            </>
+          )}
+          <TableHead>Aktiv</TableHead>
+          <TableHead>Start</TableHead>
+          <TableHead>Ende</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {ticks.map((t) => {
+          const isCurrent = highlightTick !== null && t.tick === highlightTick;
+          return (
+            <TableRow key={t.tick}>
+              <TableCell>{t.tick}</TableCell>
+              <TableCell className={cn(isCurrent && "text-green-500")}>
+                {t.clockLabel}
+              </TableCell>
+              {showResources && (
+                <>
+                  <TableCell className="text-right">{formatRes(t.met)}</TableCell>
+                  <TableCell className="text-right">{formatRes(t.kris)}</TableCell>
+                  <TableCell className={cn("text-right", deltaClass(t.incomeMet))}>
+                    {formatDelta(t.incomeMet)}
+                  </TableCell>
+                  <TableCell className={cn("text-right", deltaClass(t.incomeKris))}>
+                    {formatDelta(t.incomeKris)}
+                  </TableCell>
+                </>
+              )}
+              <TableCell>
+                {t.active.length ? (
+                  <JobList
+                    items={t.active.map((j) => ({
+                      name: j.name,
+                      type: j.type,
+                      suffix: `(${j.remainingTicks})`,
+                    }))}
+                  />
+                ) : (
+                  "—"
                 )}
-                <td className="max-w-[18rem] px-2 py-1.5 text-[11px] leading-snug">
-                  {t.active.length ? (
-                    <JobList
-                      items={t.active.map((j) => ({
-                        name: j.name,
-                        type: j.type,
-                        suffix: `(${j.remainingTicks})`,
-                      }))}
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
-                  {t.started.length ? <JobList items={t.started} /> : "—"}
-                </td>
-                <td className="max-w-[14rem] px-2 py-1.5 text-[11px] leading-snug">
-                  {t.finished.length ? <JobList items={t.finished} /> : "—"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+              </TableCell>
+              <TableCell>
+                {t.started.length ? <JobList items={t.started} /> : "—"}
+              </TableCell>
+              <TableCell>
+                {t.finished.length ? <JobList items={t.finished} /> : "—"}
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 
@@ -1002,7 +1081,7 @@ function Timeline({ steps, maxTick }: { steps: Job[]; maxTick: number }) {
   if (markers[markers.length - 1] !== maxTick) markers.push(maxTick);
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       <div className="relative rounded-md bg-muted/50" style={{ height }}>
         {rows.map((row, rowIndex) =>
           row.map((s) => {
