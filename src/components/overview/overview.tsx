@@ -16,6 +16,7 @@ export type OverviewProps = {
   maxTick: number;
   currentTick: number;
   hasPlan: boolean;
+  onEditJob?: (planEntryId: string | undefined) => void;
 };
 
 export function Overview({
@@ -25,6 +26,7 @@ export function Overview({
   maxTick,
   currentTick,
   hasPlan,
+  onEditJob,
 }: OverviewProps) {
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -46,6 +48,7 @@ export function Overview({
               maxTick={maxTick}
               currentTick={currentTick}
               hasPlan={hasPlan}
+              onEditJob={onEditJob}
             />
           </div>
           <div className="min-h-0 flex-[3] overflow-auto">

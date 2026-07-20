@@ -19,6 +19,8 @@ export type DisplayJob = { name: string; type: JobKind; suffix?: string };
 export function jobTypeClass(type: JobKind) {
   if (type === "building") return "text-amber-500";
   if (type === "research") return "text-fuchsia-500";
+  if (type === "unit") return "text-sky-400";
+  if (type === "recon") return "text-emerald-400";
   return "text-sky-500";
 }
 
@@ -47,6 +49,7 @@ export function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
       extractorsGeneric += 1;
       continue;
     }
+    // Already batched unit/recon labels pass through as-is
     rest.push(item);
   }
 

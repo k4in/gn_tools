@@ -35,7 +35,8 @@ export function AvailableTechs({ unlocked, onAdd }: AvailableTechsProps) {
                   <span className="min-w-0">
                     <span className={jobTypeClass(tech.type)}>{tech.name}</span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground tabular-nums">
-                      {tech.ticks} T · {formatRes(tech.cost.met)} M · {formatRes(tech.cost.kris)} K
+                      {tech.ticks} T · {formatRes(tech.cost.met)} M ·{" "}
+                      {formatRes(tech.cost.kris)} K
                     </span>
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">+</span>

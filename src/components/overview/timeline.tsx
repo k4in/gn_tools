@@ -9,23 +9,50 @@ export type TimelineProps = {
   maxTick: number;
   currentTick: number;
   hasPlan: boolean;
+  onEditJob?: (planEntryId: string | undefined) => void;
 };
 
-export function Timeline({ steps, maxTick, currentTick, hasPlan }: TimelineProps) {
+export function Timeline({
+  steps,
+  maxTick,
+  currentTick,
+  hasPlan,
+  onEditJob,
+}: TimelineProps) {
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
 
   const totalTicks = Math.max(maxTick, 1);
   const rows: Job[][] = [];
-  const sorted = [...steps]
-    .filter((s) => s.type !== "economy")
-    .sort((a, b) => a.startTick - b.startTick || a.endTick - b.endTick);
+  // Group multi-unit/economy micro-jobs that share planEntryId into one bar
+  const grouped = new Map<string, Job>();
+  for (const s of steps) {
+    const key = s.planEntryId ?? `${s.name}@${s.startTick}`;
+    const prev = grouped.get(key);
+    if (!prev) {
+      grouped.set(key, { ...s });
+      continue;
+    }
+    grouped.set(key, {
+      ...prev,
+      startTick: Math.min(prev.startTick, s.startTick),
+      endTick: Math.max(prev.endTick, s.endTick),
+      name: prev.planEntryId ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "") : prev.name,
+    });
+  }
+  const sorted = [...grouped.values()].sort(
+    (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
+  );
   for (const job of sorted) {
     let placed = false;
     for (const row of rows) {
       const last = row[row.length - 1];
-      if (last.endTick <= job.startTick) {
+      const lastEnd = Math.max(
+        last.endTick,
+        last.startTick + (last.endTick === last.startTick ? 0.5 : 0),
+      );
+      if (lastEnd <= job.startTick) {
         row.push(job);
         placed = true;
         break;
@@ -43,20 +70,6 @@ export function Timeline({ steps, maxTick, currentTick, hasPlan }: TimelineProps
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          Gebäude & Forschung
-        </span>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          Viewport {TIMELINE_VIEWPORT_TICKS} Ticks · Plan 0 – {totalTicks}
-        </span>
-      </div>
-
-      {/*
-        Vertikal: bei vielen parallelen Rows scrollen.
-        Horizontal: eigener Wrapper in Content-Höhe, damit die Scrollbar
-        direkt unter der Track liegt (nicht am Boden des flex-1-Panels).
-      */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="overflow-x-auto px-3 pt-3 pb-2">
           <div
@@ -89,30 +102,40 @@ export function Timeline({ steps, maxTick, currentTick, hasPlan }: TimelineProps
               {rows.map((row, rowIndex) =>
                 row.map((s) => {
                   const start = Math.max(0, Math.min(s.startTick, totalTicks));
-                  const end = Math.max(start, Math.min(s.endTick, totalTicks));
+                  const displayEnd = s.endTick === s.startTick ? s.startTick + 0.5 : s.endTick;
+                  const endClamped = Math.max(start, Math.min(displayEnd, totalTicks));
                   const left = (start / totalTicks) * 100;
-                  const width = Math.max(((end - start) / totalTicks) * 100, 0.25);
+                  const widthPct = Math.max(((endClamped - start) / totalTicks) * 100, 0.25);
                   const isBuilding = s.type === "building";
+                  const isResearch = s.type === "research";
                   const top = 4 + rowIndex * rowHeight;
+                  const clickable = !!s.planEntryId && !!onEditJob;
                   return (
-                    <div
-                      key={`${s.name}-${s.startTick}`}
-                      title={`${s.name}: t${s.startTick}–${s.endTick}`}
+                    <button
+                      key={`${s.name}-${s.startTick}-${s.planEntryId ?? ""}`}
+                      type="button"
+                      title={`${s.name}: t${s.startTick}–${s.endTick}${clickable ? " · klicken zum Bearbeiten" : ""}`}
+                      disabled={!clickable}
+                      onClick={() => onEditJob?.(s.planEntryId)}
                       className={cn(
-                        "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-[10px] leading-tight ring-1 ring-inset",
-                        isBuilding
-                          ? "bg-amber-500/20 text-amber-300 ring-amber-500/40"
-                          : "bg-fuchsia-500/20 text-fuchsia-300 ring-fuchsia-500/40",
+                        "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-inset",
+                        isBuilding && "bg-amber-500/20 text-amber-300 ring-amber-500/40",
+                        isResearch && "bg-fuchsia-500/20 text-fuchsia-300 ring-fuchsia-500/40",
+                        s.type === "unit" && "bg-sky-500/20 text-sky-300 ring-sky-500/40",
+                        s.type === "recon" && "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40",
+                        s.type === "economy" && "bg-cyan-500/20 text-cyan-300 ring-cyan-500/40",
+                        clickable && "cursor-pointer hover:brightness-125",
+                        !clickable && "cursor-default",
                       )}
                       style={{
                         left: `${left}%`,
-                        width: `${width}%`,
+                        width: `${widthPct}%`,
                         top,
                         height: rowHeight - 8,
                       }}
                     >
                       <span className="block truncate font-medium">{s.name}</span>
-                    </div>
+                    </button>
                   );
                 }),
               )}

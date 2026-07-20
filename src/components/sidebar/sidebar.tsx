@@ -8,39 +8,34 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/shadcn/tabs";
-import type {
-  EconomyOrder,
-  PlanResult,
-  StartConfig,
-} from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
+import type { Ship } from "@/gn-data/ships";
+import type { Utility } from "@/gn-data/utility";
 
 export type SidebarProps = {
   unlocked: TechTreeEntry[];
-  plan: PlanResult | null;
-  startCfg: StartConfig;
-  canUseUnits: boolean;
+  availableShips: Ship[];
+  availableRecon: Utility[];
   hasObservatorium: boolean;
-  economyOrders: EconomyOrder[];
-  defaultEconomyTick: number;
-  maxExtractorsAtTech: number;
+  hasExtraktorTech: boolean;
   onAddTech: (name: string) => void;
-  onAddOrder: (order: EconomyOrder) => void;
-  onRemoveOrder: (id: string) => void;
+  onAddUnit: (name: string) => void;
+  onAddRecon: (name: string) => void;
+  onAddAsteroids: () => void;
+  onAddExtractors: (resource?: "met" | "kris") => void;
 };
 
 export function Sidebar({
   unlocked,
-  plan,
-  startCfg,
-  canUseUnits,
+  availableShips,
+  availableRecon,
   hasObservatorium,
-  economyOrders,
-  defaultEconomyTick,
-  maxExtractorsAtTech,
+  hasExtraktorTech,
   onAddTech,
-  onAddOrder,
-  onRemoveOrder,
+  onAddUnit,
+  onAddRecon,
+  onAddAsteroids,
+  onAddExtractors,
 }: SidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border">
@@ -66,15 +61,10 @@ export function Sidebar({
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
           <Resources
-            canUse={canUseUnits}
             hasObservatorium={hasObservatorium}
-            economyOrders={economyOrders}
-            plan={plan}
-            startCfg={startCfg}
-            defaultTick={defaultEconomyTick}
-            maxExtractorsAtTech={maxExtractorsAtTech}
-            onAddOrder={onAddOrder}
-            onRemoveOrder={onRemoveOrder}
+            hasExtraktorTech={hasExtraktorTech}
+            onAddAsteroids={onAddAsteroids}
+            onAddExtractors={onAddExtractors}
           />
         </TabsContent>
 
@@ -82,14 +72,14 @@ export function Sidebar({
           value="units"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Units />
+          <Units ships={availableShips} onAdd={onAddUnit} />
         </TabsContent>
 
         <TabsContent
           value="recon"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Recon />
+          <Recon items={availableRecon} onAdd={onAddRecon} />
         </TabsContent>
       </Tabs>
     </aside>

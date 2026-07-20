@@ -4,40 +4,90 @@ import { Header } from "@/components/header";
 import { Overview } from "@/components/overview/overview";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import {
+  PlanEntryDialog,
+  type PlanEntryDialogTarget,
+} from "@/components/plan-entry-dialog";
+import {
   calculateFastestWayToGoal,
   computeCurrentTick,
+  getAvailableRecon,
+  getAvailableShips,
+  getEarliestAsteroidStartTick,
+  getEarliestBuildStartTick,
+  getEarliestExtractorStartTick,
+  getEarliestTechStartTick,
+  getMaxBuildCountAtTick,
+  getMaxExtractorsAtTick,
   getUnlockedTechs,
-  maxAffordableExtractors,
-  newEconomyOrderId,
-  type EconomyOrder,
+  hasTechInPlan,
+  newPlanEntryId,
+  removePlanEntryCascade,
+  type PlanEntry,
   type StartConfig,
 } from "@/lib/calculateFastestWayToGoal";
 import { TooltipProvider } from "@/components/shadcn/tooltip";
+import { byName } from "@/lib/calculateFastestWayToGoal";
+import { ASTEROID_COST } from "@/lib/calculateFastestWayToGoal";
 
 const STORAGE_KEY = "gn_tool.plan";
-const FALLBACK_PLAN = ["Koloniezentrum"] as const;
 
-function normalizeEconomyOrders(raw: unknown): EconomyOrder[] {
-  if (!Array.isArray(raw)) return [];
-  const out: EconomyOrder[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    const id = typeof o.id === "string" && o.id ? o.id : newEconomyOrderId();
-    const count = typeof o.count === "number" && o.count > 0 ? Math.floor(o.count) : 0;
-    const atTick =
-      typeof o.atTick === "number" && Number.isFinite(o.atTick)
-        ? Math.max(0, Math.floor(o.atTick))
-        : 0;
-    if (!count) continue;
-    if (o.kind === "asteroids") {
-      out.push({ id, kind: "asteroids", count, atTick });
-    } else if (o.kind === "extractors") {
-      const resource = o.resource === "kris" ? "kris" : "met";
-      out.push({ id, kind: "extractors", count, resource, atTick });
-    }
+function isPlanEntry(raw: unknown): raw is PlanEntry {
+  if (!raw || typeof raw !== "object") return false;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== "string" || !o.id) return false;
+  if (typeof o.startTick !== "number" || !Number.isFinite(o.startTick)) return false;
+  const tick = Math.max(0, Math.floor(o.startTick));
+  (o as { startTick: number }).startTick = tick;
+
+  switch (o.kind) {
+    case "tech":
+      return typeof o.name === "string" && !!o.name;
+    case "unit":
+    case "recon":
+      return (
+        typeof o.name === "string" &&
+        !!o.name &&
+        typeof o.count === "number" &&
+        o.count > 0
+      );
+    case "extractors":
+      return (
+        (o.resource === "met" || o.resource === "kris") &&
+        typeof o.count === "number" &&
+        o.count > 0
+      );
+    case "asteroids":
+      return typeof o.count === "number" && o.count > 0;
+    default:
+      return false;
   }
-  return out;
+}
+
+function normalizePlan(raw: unknown): PlanEntry[] {
+  if (!Array.isArray(raw)) return [...defaultConfig.plan];
+  const out: PlanEntry[] = [];
+  for (const item of raw) {
+    // migrate legacy string entries
+    if (typeof item === "string" && item.trim()) {
+      out.push({
+        id: newPlanEntryId("legacy"),
+        kind: "tech",
+        name: item.trim(),
+        startTick: 0,
+      });
+      continue;
+    }
+    if (!isPlanEntry(item)) continue;
+    const e = item as PlanEntry;
+    out.push({
+      ...e,
+      startTick: Math.max(0, Math.floor(e.startTick)),
+      ...("count" in e
+        ? { count: Math.max(1, Math.floor(e.count)) }
+        : {}),
+    } as PlanEntry);
+  }
+  return out.length ? out : [...defaultConfig.plan];
 }
 
 function normalizeConfig(raw: unknown): StartConfig {
@@ -48,14 +98,11 @@ function normalizeConfig(raw: unknown): StartConfig {
       metall: defaultConfig.starting_resources.metall,
       kristall: defaultConfig.starting_resources.kristall,
     },
-    plan: defaultConfig.plan?.length ? [...defaultConfig.plan] : [...FALLBACK_PLAN],
-    economyOrders: normalizeEconomyOrders(
-      (defaultConfig as { economyOrders?: unknown }).economyOrders,
-    ),
+    plan: [...defaultConfig.plan],
   };
 
   if (!raw || typeof raw !== "object") return base;
-  const obj = raw as Partial<StartConfig>;
+  const obj = raw as Partial<StartConfig> & { economyOrders?: unknown };
 
   const start_time =
     typeof obj.start_time === "string" && obj.start_time.trim()
@@ -76,21 +123,41 @@ function normalizeConfig(raw: unknown): StartConfig {
       ? res.kristall
       : base.starting_resources.kristall;
 
-  const plan =
-    Array.isArray(obj.plan) && obj.plan.every((x) => typeof x === "string") && obj.plan.length > 0
-      ? [...obj.plan]
-      : base.plan;
+  let plan = normalizePlan(obj.plan);
 
-  const economyOrders = normalizeEconomyOrders(
-    (obj as { economyOrders?: unknown }).economyOrders,
-  );
+  // Migrate legacy economyOrders into plan entries
+  if (Array.isArray(obj.economyOrders)) {
+    for (const item of obj.economyOrders) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const id =
+        typeof o.id === "string" && o.id ? o.id : newPlanEntryId("eco");
+      const count =
+        typeof o.count === "number" && o.count > 0 ? Math.floor(o.count) : 0;
+      const atTick =
+        typeof o.atTick === "number" && Number.isFinite(o.atTick)
+          ? Math.max(0, Math.floor(o.atTick))
+          : 0;
+      if (!count) continue;
+      if (o.kind === "asteroids") {
+        plan.push({ id, kind: "asteroids", count, startTick: atTick });
+      } else if (o.kind === "extractors") {
+        plan.push({
+          id,
+          kind: "extractors",
+          count,
+          startTick: atTick,
+          resource: o.resource === "kris" ? "kris" : "met",
+        });
+      }
+    }
+  }
 
   return {
     start_time,
     start_date,
     starting_resources: { metall, kristall },
     plan,
-    economyOrders,
   };
 }
 
@@ -119,12 +186,6 @@ export default function App() {
     }
   }, [startCfg]);
 
-  const planNames = startCfg.plan;
-  const economyOrders = startCfg.economyOrders ?? [];
-  const hasObservatorium = planNames.includes("Observatorium");
-  const hasExtraktorTech = planNames.includes("Extraktor");
-  const canUseUnits = hasExtraktorTech;
-
   const plan = useMemo(() => {
     try {
       return calculateFastestWayToGoal(startCfg);
@@ -134,37 +195,18 @@ export default function App() {
     }
   }, [startCfg]);
 
-  const defaultEconomyTick = useMemo(() => {
-    if (!plan) return 0;
-    const ext = plan.steps.find((s) => s.name === "Extraktor");
-    if (ext) return ext.endTick;
-    const obs = plan.steps.find((s) => s.name === "Observatorium");
-    return obs?.endTick ?? plan.finishTick;
-  }, [plan]);
+  const unlocked = useMemo(() => getUnlockedTechs(startCfg.plan), [startCfg.plan]);
+  const availableShips = useMemo(
+    () => getAvailableShips(startCfg.plan),
+    [startCfg.plan],
+  );
+  const availableRecon = useMemo(
+    () => getAvailableRecon(startCfg.plan),
+    [startCfg.plan],
+  );
 
-  const maxExtractorsAtTech = useMemo(() => {
-    if (!plan || !hasExtraktorTech) return 0;
-    const job = plan.steps.find((s) => s.name === "Extraktor");
-    if (!job) return 0;
-    const snap = plan.ticks.find((t) => t.tick === job.endTick);
-    let met = snap?.met ?? plan.finalRes.met;
-    let kris = snap?.kris ?? plan.finalRes.kris;
-    for (const s of plan.steps) {
-      if (s.startTick === job.endTick && s.type === "economy") {
-        met += s.cost.met;
-        kris += s.cost.kris;
-      }
-    }
-    return maxAffordableExtractors({
-      met,
-      kris,
-      alreadyBuilt: 0,
-      asteroids: 0,
-      slots: 0,
-    });
-  }, [plan, hasExtraktorTech]);
-
-  const unlocked = useMemo(() => getUnlockedTechs(planNames), [planNames]);
+  const hasObservatorium = hasTechInPlan(startCfg.plan, "Observatorium");
+  const hasExtraktorTech = hasTechInPlan(startCfg.plan, "Extraktor");
 
   const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
@@ -184,24 +226,278 @@ export default function App() {
     [actionTicks, currentTick],
   );
 
-  const addToPlan = (name: string) => {
-    setStartCfg((prev) =>
-      prev.plan.includes(name) ? prev : { ...prev, plan: [...prev.plan, name] },
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+  const [dialogTarget, setDialogTarget] = useState<PlanEntryDialogTarget | null>(
+    null,
+  );
+  const [editingEntry, setEditingEntry] = useState<PlanEntry | null>(null);
+
+  const openAddTech = (name: string) => {
+    const tech = byName().get(name);
+    if (!tech) return;
+    const defaultTick = getEarliestTechStartTick(startCfg, name);
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({ kind: "tech", tech, defaultTick });
+    setDialogOpen(true);
+  };
+
+  const openAddUnit = (name: string) => {
+    const ship = availableShips.find((s) => s.name === name);
+    if (!ship) return;
+    const defaultTick = getEarliestBuildStartTick(startCfg, "unit", name);
+    const maxCount = Math.max(
+      1,
+      getMaxBuildCountAtTick(startCfg, "unit", name, defaultTick),
     );
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "unit",
+      name: ship.name,
+      ticks: ship.ticks,
+      cost: ship.cost,
+      dependencies: ship.dependencies,
+      defaultTick,
+      defaultCount: maxCount,
+      maxCount,
+    });
+    setDialogOpen(true);
   };
 
-  const addEconomyOrder = (order: EconomyOrder) => {
-    setStartCfg((prev) => ({
-      ...prev,
-      economyOrders: [...(prev.economyOrders ?? []), order],
-    }));
+  const openAddRecon = (name: string) => {
+    const item = availableRecon.find((s) => s.name === name);
+    if (!item) return;
+    const defaultTick = getEarliestBuildStartTick(startCfg, "recon", name);
+    const maxCount = Math.max(
+      1,
+      getMaxBuildCountAtTick(startCfg, "recon", name, defaultTick),
+    );
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "recon",
+      name: item.name,
+      ticks: item.ticks,
+      cost: item.cost,
+      dependencies: item.dependencies,
+      defaultTick,
+      defaultCount: maxCount,
+      maxCount,
+    });
+    setDialogOpen(true);
   };
 
-  const removeEconomyOrder = (id: string) => {
+  const openAddAsteroids = () => {
+    const defaultTick = getEarliestAsteroidStartTick(startCfg);
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "asteroids",
+      defaultTick,
+      defaultCount: 1,
+      costKris: ASTEROID_COST.kris,
+    });
+    setDialogOpen(true);
+  };
+
+  const openAddExtractors = (resource: "met" | "kris" = "met") => {
+    const defaultTick = getEarliestExtractorStartTick(startCfg);
+    const info = getMaxExtractorsAtTick(startCfg, defaultTick);
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "extractors",
+      resource,
+      defaultTick,
+      defaultCount: Math.max(1, info.max),
+      maxCount: info.max,
+      freeSlots: info.freeSlots,
+      asteroids: info.asteroids,
+    });
+    setDialogOpen(true);
+  };
+
+  const openEditEntry = (id: string) => {
+    const entry = startCfg.plan.find((e) => e.id === id);
+    if (!entry) return;
+    setDialogMode("edit");
+    setEditingEntry(entry);
+
+    if (entry.kind === "tech") {
+      const tech = byName().get(entry.name);
+      if (!tech) return;
+      setDialogTarget({
+        kind: "tech",
+        tech,
+        defaultTick: entry.startTick,
+      });
+    } else if (entry.kind === "unit") {
+      const ship = availableShips.find((s) => s.name === entry.name) ?? {
+        name: entry.name as never,
+        ticks: 0,
+        time: 0,
+        cost: { met: 0, kris: 0 },
+        dependencies: [],
+      };
+      const maxCount = Math.max(
+        entry.count,
+        getMaxBuildCountAtTick(startCfg, "unit", entry.name, entry.startTick),
+      );
+      setDialogTarget({
+        kind: "unit",
+        name: entry.name,
+        ticks: ship.ticks,
+        cost: ship.cost,
+        dependencies: ship.dependencies,
+        defaultTick: entry.startTick,
+        defaultCount: entry.count,
+        maxCount,
+      });
+    } else if (entry.kind === "recon") {
+      const item = availableRecon.find((s) => s.name === entry.name);
+      const maxCount = Math.max(
+        entry.count,
+        getMaxBuildCountAtTick(startCfg, "recon", entry.name, entry.startTick),
+      );
+      setDialogTarget({
+        kind: "recon",
+        name: entry.name,
+        ticks: item?.ticks ?? 0,
+        cost: item?.cost ?? { met: 0, kris: 0 },
+        dependencies: item?.dependencies ?? [],
+        defaultTick: entry.startTick,
+        defaultCount: entry.count,
+        maxCount,
+      });
+    } else if (entry.kind === "asteroids") {
+      setDialogTarget({
+        kind: "asteroids",
+        defaultTick: entry.startTick,
+        defaultCount: entry.count,
+        costKris: ASTEROID_COST.kris,
+      });
+    } else if (entry.kind === "extractors") {
+      const info = getMaxExtractorsAtTick(startCfg, entry.startTick);
+      setDialogTarget({
+        kind: "extractors",
+        resource: entry.resource,
+        defaultTick: entry.startTick,
+        defaultCount: entry.count,
+        maxCount: Math.max(entry.count, info.max),
+        freeSlots: info.freeSlots + entry.count,
+        asteroids: info.asteroids,
+      });
+    }
+    setDialogOpen(true);
+  };
+
+  const handleDialogSubmit = (values: {
+    startTick: number;
+    count?: number;
+    resource?: "met" | "kris";
+  }) => {
+    if (!dialogTarget) return;
+
+    if (dialogMode === "edit" && editingEntry) {
+      setStartCfg((prev) => ({
+        ...prev,
+        plan: prev.plan.map((e) => {
+          if (e.id !== editingEntry.id) return e;
+          if (e.kind === "tech") {
+            return { ...e, startTick: values.startTick };
+          }
+          if (e.kind === "extractors") {
+            return {
+              ...e,
+              startTick: values.startTick,
+              count: values.count ?? e.count,
+              resource: values.resource ?? e.resource,
+            };
+          }
+          return {
+            ...e,
+            startTick: values.startTick,
+            count: values.count ?? ("count" in e ? e.count : 1),
+          } as PlanEntry;
+        }),
+      }));
+      return;
+    }
+
+    // add
+    if (dialogTarget.kind === "tech") {
+      const name = dialogTarget.tech.name;
+      setStartCfg((prev) => {
+        if (prev.plan.some((e) => e.kind === "tech" && e.name === name)) return prev;
+        const entry: PlanEntry = {
+          id: newPlanEntryId("tech"),
+          kind: "tech",
+          name,
+          startTick: values.startTick,
+        };
+        return { ...prev, plan: [...prev.plan, entry] };
+      });
+      return;
+    }
+
+    if (dialogTarget.kind === "unit") {
+      const entry: PlanEntry = {
+        id: newPlanEntryId("unit"),
+        kind: "unit",
+        name: dialogTarget.name,
+        startTick: values.startTick,
+        count: Math.max(1, values.count ?? 1),
+      };
+      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      return;
+    }
+
+    if (dialogTarget.kind === "recon") {
+      const entry: PlanEntry = {
+        id: newPlanEntryId("recon"),
+        kind: "recon",
+        name: dialogTarget.name,
+        startTick: values.startTick,
+        count: Math.max(1, values.count ?? 1),
+      };
+      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      return;
+    }
+
+    if (dialogTarget.kind === "asteroids") {
+      const entry: PlanEntry = {
+        id: newPlanEntryId("ast"),
+        kind: "asteroids",
+        startTick: values.startTick,
+        count: Math.max(1, values.count ?? 1),
+      };
+      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      return;
+    }
+
+    if (dialogTarget.kind === "extractors") {
+      const entry: PlanEntry = {
+        id: newPlanEntryId("ext"),
+        kind: "extractors",
+        resource: values.resource ?? dialogTarget.resource,
+        startTick: values.startTick,
+        count: Math.max(1, values.count ?? 1),
+      };
+      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+    }
+  };
+
+  const handleDialogRemove = () => {
+    if (!editingEntry) return;
     setStartCfg((prev) => ({
       ...prev,
-      economyOrders: (prev.economyOrders ?? []).filter((o) => o.id !== id),
+      plan: removePlanEntryCascade(prev.plan, editingEntry.id),
     }));
+    setDialogOpen(false);
+    setEditingEntry(null);
   };
 
   const resetPlan = () => {
@@ -222,16 +518,15 @@ export default function App() {
         <div className="grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]">
           <Sidebar
             unlocked={unlocked}
-            plan={plan}
-            startCfg={startCfg}
-            canUseUnits={canUseUnits}
+            availableShips={availableShips}
+            availableRecon={availableRecon}
             hasObservatorium={hasObservatorium}
-            economyOrders={economyOrders}
-            defaultEconomyTick={defaultEconomyTick}
-            maxExtractorsAtTech={maxExtractorsAtTech}
-            onAddTech={addToPlan}
-            onAddOrder={addEconomyOrder}
-            onRemoveOrder={removeEconomyOrder}
+            hasExtraktorTech={hasExtraktorTech}
+            onAddTech={openAddTech}
+            onAddUnit={openAddUnit}
+            onAddRecon={openAddRecon}
+            onAddAsteroids={openAddAsteroids}
+            onAddExtractors={openAddExtractors}
           />
           <Overview
             actionTicks={actionTicks}
@@ -240,8 +535,74 @@ export default function App() {
             maxTick={maxTick}
             currentTick={currentTick}
             hasPlan={!!plan}
+            onEditJob={(planEntryId) => {
+              if (planEntryId) openEditEntry(planEntryId);
+            }}
           />
         </div>
+
+        <PlanEntryDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          mode={dialogMode}
+          target={dialogTarget}
+          entry={editingEntry}
+          onSubmit={handleDialogSubmit}
+          onRemove={dialogMode === "edit" ? handleDialogRemove : undefined}
+          resolveMaxCount={(tick) => {
+            if (!dialogTarget) return 1;
+            // When editing, refund this entry's cost into the affordability budget
+            // (simulation still includes the entry, so leftover resources alone undercount).
+            if (dialogTarget.kind === "unit") {
+              const max = getMaxBuildCountAtTick(
+                startCfg,
+                "unit",
+                dialogTarget.name,
+                tick,
+              );
+              const bonus =
+                dialogMode === "edit" && editingEntry?.kind === "unit"
+                  ? editingEntry.count
+                  : 0;
+              return max + bonus;
+            }
+            if (dialogTarget.kind === "recon") {
+              const max = getMaxBuildCountAtTick(
+                startCfg,
+                "recon",
+                dialogTarget.name,
+                tick,
+              );
+              const bonus =
+                dialogMode === "edit" && editingEntry?.kind === "recon"
+                  ? editingEntry.count
+                  : 0;
+              return max + bonus;
+            }
+            if (dialogTarget.kind === "extractors") {
+              const info = getMaxExtractorsAtTick(startCfg, tick);
+              const bonus =
+                dialogMode === "edit" && editingEntry?.kind === "extractors"
+                  ? editingEntry.count
+                  : 0;
+              return info.max + bonus;
+            }
+            return 999;
+          }}
+          resolveFreeSlots={(tick) => {
+            const info = getMaxExtractorsAtTick(startCfg, tick);
+            const bonus =
+              dialogMode === "edit" && editingEntry?.kind === "extractors"
+                ? editingEntry.count
+                : 0;
+            return {
+              freeSlots: info.freeSlots + bonus,
+              asteroids: info.asteroids,
+              // editing: treat this batch as not yet built for cost preview
+              alreadyBuilt: Math.max(0, info.alreadyBuilt - bonus),
+            };
+          }}
+        />
       </main>
     </TooltipProvider>
   );
