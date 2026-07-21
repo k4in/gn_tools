@@ -23,7 +23,9 @@ export type TechName =
   | "Observatorium"
   | "Sektorscan"
   | "Einheitenscan"
+  | "Einheitenscan (+Def)"
   | "Geschützscan"
+  | "Geschützscan (+Unit)"
   | "Militärscan"
   | "Nachrichtenscan"
   | "Aufwertung des Militärscans"
@@ -346,7 +348,19 @@ export const techtree: TechTreeEntry[] = [
       kris: 60000,
     },
     dependencies: ["Sektorscan"],
-    eliminates: ["Geschützscan", "Nachrichtenscan", "Aufwertung des Nachrichtenscans"],
+    eliminates: ["Geschützscan"],
+  },
+  {
+    name: "Einheitenscan (+Def)",
+    type: "research",
+    ticks: 72,
+    time: 1080,
+    cost: {
+      met: 40000,
+      kris: 60000,
+    },
+    dependencies: ["Geschützscan"],
+    eliminates: ["Nachrichtenscan"],
   },
   {
     name: "Geschützscan",
@@ -358,7 +372,19 @@ export const techtree: TechTreeEntry[] = [
       kris: 60000,
     },
     dependencies: ["Sektorscan"],
-    eliminates: ["Einheitenscan", "Militärscan", "Aufwertung des Militärscans"],
+    eliminates: ["Einheitenscan"],
+  },
+  {
+    name: "Geschützscan (+Unit)",
+    type: "research",
+    ticks: 72,
+    time: 1080,
+    cost: {
+      met: 40000,
+      kris: 60000,
+    },
+    dependencies: ["Einheitenscan"],
+    eliminates: ["Militärscan"],
   },
   {
     name: "Militärscan",
@@ -370,7 +396,7 @@ export const techtree: TechTreeEntry[] = [
       kris: 130000,
     },
     dependencies: ["Einheitenscan"],
-    eliminates: [],
+    eliminates: ["Geschützscan (+Unit)"],
   },
   {
     name: "Nachrichtenscan",
@@ -382,7 +408,7 @@ export const techtree: TechTreeEntry[] = [
       kris: 130000,
     },
     dependencies: ["Geschützscan"],
-    eliminates: [],
+    eliminates: ["Einheitenscan (+Def)"],
   },
   {
     name: "Aufwertung des Militärscans",

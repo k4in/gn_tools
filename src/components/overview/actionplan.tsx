@@ -134,7 +134,7 @@ function TruncateCell({
   );
 }
 
-/** Vollständiges Tick-Protokoll (Ressourcen + Aktiv/Start/Ende). */
+/** Vollständiges Tick-Protokoll (Ressourcen + Aktiv/Start/Quest). */
 export function TickTable({
   ticks,
   currentTick,
@@ -171,7 +171,7 @@ export function TickTable({
           <TableHead className="text-right">+K</TableHead>
           <TableHead>Aktiv</TableHead>
           <TableHead>Start</TableHead>
-          <TableHead>Ende</TableHead>
+          <TableHead>Quest</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -205,11 +205,9 @@ export function TickTable({
                 )}
               </TruncateCell>
               <TruncateCell>
-                {t.started.length ? <JobList items={t.started} /> : "—"}
+                {t.started.length ? <JobList items={t.started} /> : null}
               </TruncateCell>
-              <TruncateCell>
-                {t.finished.length ? <JobList items={t.finished} /> : "—"}
-              </TruncateCell>
+              <TruncateCell />
             </TableRow>
           );
         })}

@@ -17,11 +17,11 @@ export const defaults: {
   starting_resources: { metall: number; kristall: number };
   plan: PlanEntry[];
 } = {
-  start_time: "18:00",
+  start_time: "17:45",
   start_date: "2026-07-20",
   starting_resources: {
-    metall: 10000,
-    kristall: 10000,
+    metall: 10500,
+    kristall: 10500,
   },
   /**
    * Legacy string-plan (pre tick-based planner). Kept as reference only.

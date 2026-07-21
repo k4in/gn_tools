@@ -889,8 +889,10 @@ function simulatePlan(
       });
     }
 
+    // Income starts on the finish tick (endTick), not one tick later.
+    // e.g. Koloniezentrum 2 ticks from 17:45 → done at 18:15 and produces at 18:15.
     const producing = new Set(
-      [...completed].filter((n) => (completedAt.get(n) ?? 0) < t),
+      [...completed].filter((n) => (completedAt.get(n) ?? 0) <= t),
     );
     const mineIncome = incomeFrom(producing);
     const extIncome = totalExtractorIncome(extractorsMet, extractorsKris);
