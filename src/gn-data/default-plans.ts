@@ -1,4 +1,5 @@
-const fastShip = [
+/** Draft default plan (not wired into app yet). */
+export const fastShip = [
   {
     id: "default_koloniezentrum",
     kind: "tech",
