@@ -40,3 +40,32 @@ Die folgenden Werte sind absolut, nicht komulierend. Die Werte gelten immer ab d
 - Ein Extraktor kann gebaut werden nachdem die Extraktoren-Technologie erforscht ist.
 - Der erste Extraktor kostet 65 Metall. Jeder weitere Extraktor kostet 65 weitere Metalleinheiten. (Der erste kostet 65, der zweite 130, der dritte 195, etc..)
 - Ein Extraktor liefert immer 50 Rohstoffe pro Tick nachdem er gebaut wurde. Es gibt Metallextraktoren und Kristallextraktoren, die Metall bzw. Kristall fördern.
+
+# Techtree-Pfade (reine Bau-/Forschzeiten, Summe der Ticks)
+
+## Pfad 1 — Antrieb / Werften
+
+| Step | Tech | Ticks | Cumulative | Dependency of (ships) |
+|------|------|------:|----------:|-----------------------|
+| 1 | Militärischer Ionenantrieb | 144 | **144** | Fregatte |
+| 2 | Protonenantrieb | 144 | **288** | Zerstörer |
+| 3 | Fusionsantrieb | 108 | **396** | — |
+| 4 | Nanofabriken | 144 | **540** | Jäger, Bomber, Kreuzer |
+| 5 | Mak-tol Werften | 180 | **720** | Trägerschiff |
+| 6 | Antimaterieantrieb | 108 | **828** | Schlachtschiff, Kommandoschiff |
+
+**Total: 828 ticks**
+
+## Pfad 2 — Waffen
+
+| Step | Tech | Ticks | Cumulative | Dependency of (ships) |
+|------|------|------:|----------:|-----------------------|
+| 1 | Kinetische Raketen | 72 | **72** | Fregatte |
+| 2 | Protonentorpedos | 72 | **144** | Zerstörer |
+| 3 | Plasmawerfer | 72 | **216** | Jäger |
+| 4 | Plasmabomben | 108 | **324** | Bomber |
+| 5 | Fusionstorpedos | 108 | **432** | Kreuzer |
+| 6 | Quantum Rotationskanonen | 108 | **540** | Trägerschiff |
+| 7 | Antimaterietorpedos | 108 | **648** | Schlachtschiff, Kommandoschiff |
+
+**Total: 648 ticks**

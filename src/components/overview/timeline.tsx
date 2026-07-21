@@ -27,8 +27,19 @@ export function Timeline({
   const rows: Job[][] = [];
   // Group multi-unit/economy micro-jobs that share planEntryId into one bar
   const grouped = new Map<string, Job>();
+  const economyParts = new Map<
+    string,
+    { asteroids: number; metExt: number; krisExt: number }
+  >();
   for (const s of steps) {
     const key = s.planEntryId ?? `${s.name}@${s.startTick}`;
+    if (s.type === "economy" && s.planEntryId) {
+      const parts = economyParts.get(key) ?? { asteroids: 0, metExt: 0, krisExt: 0 };
+      if (s.name.startsWith("Asteroid")) parts.asteroids += 1;
+      else if (s.name.includes("Metall")) parts.metExt += 1;
+      else if (s.name.includes("Kristall")) parts.krisExt += 1;
+      economyParts.set(key, parts);
+    }
     const prev = grouped.get(key);
     if (!prev) {
       grouped.set(key, { ...s });
@@ -38,8 +49,33 @@ export function Timeline({
       ...prev,
       startTick: Math.min(prev.startTick, s.startTick),
       endTick: Math.max(prev.endTick, s.endTick),
-      name: prev.planEntryId ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "") : prev.name,
+      name: prev.planEntryId
+        ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "")
+        : prev.name,
     });
+  }
+  for (const [key, parts] of economyParts) {
+    const job = grouped.get(key);
+    if (!job) continue;
+    const labels: string[] = [];
+    if (parts.asteroids > 0) {
+      labels.push(
+        parts.asteroids === 1
+          ? "1 Asteroid"
+          : `${parts.asteroids} Asteroiden`,
+      );
+    }
+    if (parts.metExt > 0) {
+      labels.push(
+        parts.metExt === 1 ? "1 Met-Ext" : `${parts.metExt} Met-Ext`,
+      );
+    }
+    if (parts.krisExt > 0) {
+      labels.push(
+        parts.krisExt === 1 ? "1 Kris-Ext" : `${parts.krisExt} Kris-Ext`,
+      );
+    }
+    if (labels.length) job.name = labels.join(" + ");
   }
   const sorted = [...grouped.values()].sort(
     (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,

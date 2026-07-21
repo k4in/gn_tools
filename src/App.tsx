@@ -17,7 +17,9 @@ import {
   getEarliestExtractorStartTick,
   getEarliestTechStartTick,
   getMaxBuildCountAtTick,
+  extractorBatchCost,
   getMaxExtractorsAtTick,
+  getResourcesAtTick,
   getUnlockedTechs,
   hasTechInPlan,
   newPlanEntryId,
@@ -50,6 +52,22 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
         typeof o.count === "number" &&
         o.count > 0
       );
+    case "economy": {
+      const asteroids =
+        typeof o.asteroids === "number" && Number.isFinite(o.asteroids)
+          ? Math.max(0, Math.floor(o.asteroids))
+          : 0;
+      const extractors =
+        typeof o.extractors === "number" && Number.isFinite(o.extractors)
+          ? Math.max(0, Math.floor(o.extractors))
+          : 0;
+      if (asteroids <= 0 && extractors <= 0) return false;
+      if (extractors > 0 && o.resource !== "met" && o.resource !== "kris") {
+        return false;
+      }
+      return true;
+    }
+    // legacy kinds — accepted then migrated in normalizePlan
     case "extractors":
       return (
         (o.resource === "met" || o.resource === "kris") &&
@@ -61,6 +79,43 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
     default:
       return false;
   }
+}
+
+function toEconomyEntry(raw: PlanEntry): Extract<PlanEntry, { kind: "economy" }> | null {
+  if (raw.kind === "economy") {
+    const asteroids = Math.max(0, Math.floor(raw.asteroids));
+    const extractors = Math.max(0, Math.floor(raw.extractors));
+    if (asteroids <= 0 && extractors <= 0) return null;
+    return {
+      id: raw.id,
+      kind: "economy",
+      startTick: Math.max(0, Math.floor(raw.startTick)),
+      asteroids,
+      extractors,
+      resource: extractors > 0 ? raw.resource : "met",
+    };
+  }
+  if (raw.kind === "asteroids") {
+    return {
+      id: raw.id,
+      kind: "economy",
+      startTick: Math.max(0, Math.floor(raw.startTick)),
+      asteroids: Math.max(1, Math.floor(raw.count)),
+      extractors: 0,
+      resource: "met",
+    };
+  }
+  if (raw.kind === "extractors") {
+    return {
+      id: raw.id,
+      kind: "economy",
+      startTick: Math.max(0, Math.floor(raw.startTick)),
+      asteroids: 0,
+      extractors: Math.max(1, Math.floor(raw.count)),
+      resource: raw.resource,
+    };
+  }
+  return null;
 }
 
 function normalizePlan(raw: unknown): PlanEntry[] {
@@ -79,6 +134,11 @@ function normalizePlan(raw: unknown): PlanEntry[] {
     }
     if (!isPlanEntry(item)) continue;
     const e = item as PlanEntry;
+    if (e.kind === "economy" || e.kind === "asteroids" || e.kind === "extractors") {
+      const eco = toEconomyEntry(e);
+      if (eco) out.push(eco);
+      continue;
+    }
     out.push({
       ...e,
       startTick: Math.max(0, Math.floor(e.startTick)),
@@ -94,6 +154,8 @@ function normalizeConfig(raw: unknown): StartConfig {
   const base: StartConfig = {
     start_time: defaultConfig.start_time,
     start_date: defaultConfig.start_date,
+    tick_minutes: defaultConfig.tick_minutes,
+    max_ticks: defaultConfig.max_ticks,
     starting_resources: {
       metall: defaultConfig.starting_resources.metall,
       kristall: defaultConfig.starting_resources.kristall,
@@ -140,12 +202,20 @@ function normalizeConfig(raw: unknown): StartConfig {
           : 0;
       if (!count) continue;
       if (o.kind === "asteroids") {
-        plan.push({ id, kind: "asteroids", count, startTick: atTick });
+        plan.push({
+          id,
+          kind: "economy",
+          asteroids: count,
+          extractors: 0,
+          resource: "met",
+          startTick: atTick,
+        });
       } else if (o.kind === "extractors") {
         plan.push({
           id,
-          kind: "extractors",
-          count,
+          kind: "economy",
+          asteroids: 0,
+          extractors: count,
           startTick: atTick,
           resource: o.resource === "kris" ? "kris" : "met",
         });
@@ -153,9 +223,20 @@ function normalizeConfig(raw: unknown): StartConfig {
     }
   }
 
+  const tick_minutes =
+    typeof obj.tick_minutes === "number" && obj.tick_minutes > 0
+      ? obj.tick_minutes
+      : base.tick_minutes;
+  const max_ticks =
+    typeof obj.max_ticks === "number" && obj.max_ticks > 0
+      ? obj.max_ticks
+      : base.max_ticks;
+
   return {
     start_time,
     start_date,
+    tick_minutes,
+    max_ticks,
     starting_resources: { metall, kristall },
     plan,
   };
@@ -290,32 +371,34 @@ export default function App() {
     setDialogOpen(true);
   };
 
-  const openAddAsteroids = () => {
-    const defaultTick = getEarliestAsteroidStartTick(startCfg);
-    setDialogMode("add");
-    setEditingEntry(null);
-    setDialogTarget({
-      kind: "asteroids",
-      defaultTick,
-      defaultCount: 1,
-      costKris: ASTEROID_COST.kris,
-    });
-    setDialogOpen(true);
-  };
-
-  const openAddExtractors = (resource: "met" | "kris" = "met") => {
-    const defaultTick = getEarliestExtractorStartTick(startCfg);
+  const openAddEconomy = (preset: {
+    asteroids?: number;
+    extractors?: number;
+    resource?: "met" | "kris";
+  } = {}) => {
+    const defaultTick = Math.max(
+      hasObservatorium ? getEarliestAsteroidStartTick(startCfg) : 0,
+      hasExtraktorTech ? getEarliestExtractorStartTick(startCfg) : 0,
+    );
     const info = getMaxExtractorsAtTick(startCfg, defaultTick);
+    const wantAst = preset.asteroids ?? (hasObservatorium ? 1 : 0);
+    const wantExt =
+      preset.extractors ??
+      (hasExtraktorTech ? Math.max(1, info.max) : 0);
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
-      kind: "extractors",
-      resource,
+      kind: "economy",
       defaultTick,
-      defaultCount: Math.max(1, info.max),
-      maxCount: info.max,
+      defaultAsteroids: wantAst,
+      defaultExtractors: wantExt,
+      resource: preset.resource ?? "met",
       freeSlots: info.freeSlots,
-      asteroids: info.asteroids,
+      asteroidsOwned: info.asteroids,
+      alreadyBuilt: info.alreadyBuilt,
+      canAsteroids: hasObservatorium,
+      canExtractors: hasExtraktorTech,
+      costKrisPerAsteroid: ASTEROID_COST.kris,
     });
     setDialogOpen(true);
   };
@@ -372,23 +455,46 @@ export default function App() {
         defaultCount: entry.count,
         maxCount,
       });
-    } else if (entry.kind === "asteroids") {
+    } else if (
+      entry.kind === "economy" ||
+      entry.kind === "asteroids" ||
+      entry.kind === "extractors"
+    ) {
+      const eco =
+        entry.kind === "economy"
+          ? entry
+          : entry.kind === "asteroids"
+            ? {
+                asteroids: entry.count,
+                extractors: 0,
+                resource: "met" as const,
+                startTick: entry.startTick,
+              }
+            : {
+                asteroids: 0,
+                extractors: entry.count,
+                resource: entry.resource,
+                startTick: entry.startTick,
+              };
+      const info = getMaxExtractorsAtTick(startCfg, eco.startTick);
+      const asteroidsOwned = Math.max(0, info.asteroids - eco.asteroids);
+      const alreadyBuilt = Math.max(0, info.alreadyBuilt - eco.extractors);
+      const freeSlots = Math.max(
+        0,
+        asteroidsOwned * 20 - alreadyBuilt,
+      );
       setDialogTarget({
-        kind: "asteroids",
-        defaultTick: entry.startTick,
-        defaultCount: entry.count,
-        costKris: ASTEROID_COST.kris,
-      });
-    } else if (entry.kind === "extractors") {
-      const info = getMaxExtractorsAtTick(startCfg, entry.startTick);
-      setDialogTarget({
-        kind: "extractors",
-        resource: entry.resource,
-        defaultTick: entry.startTick,
-        defaultCount: entry.count,
-        maxCount: Math.max(entry.count, info.max),
-        freeSlots: info.freeSlots + entry.count,
-        asteroids: info.asteroids,
+        kind: "economy",
+        defaultTick: eco.startTick,
+        defaultAsteroids: eco.asteroids,
+        defaultExtractors: eco.extractors,
+        resource: eco.resource,
+        freeSlots,
+        asteroidsOwned,
+        alreadyBuilt,
+        canAsteroids: hasObservatorium,
+        canExtractors: hasExtraktorTech,
+        costKrisPerAsteroid: ASTEROID_COST.kris,
       });
     }
     setDialogOpen(true);
@@ -398,6 +504,8 @@ export default function App() {
     startTick: number;
     count?: number;
     resource?: "met" | "kris";
+    asteroids?: number;
+    extractors?: number;
   }) => {
     if (!dialogTarget) return;
 
@@ -409,12 +517,20 @@ export default function App() {
           if (e.kind === "tech") {
             return { ...e, startTick: values.startTick };
           }
-          if (e.kind === "extractors") {
+          if (
+            e.kind === "economy" ||
+            e.kind === "asteroids" ||
+            e.kind === "extractors"
+          ) {
+            const asteroids = Math.max(0, values.asteroids ?? 0);
+            const extractors = Math.max(0, values.extractors ?? 0);
             return {
-              ...e,
+              id: e.id,
+              kind: "economy" as const,
               startTick: values.startTick,
-              count: values.count ?? e.count,
-              resource: values.resource ?? e.resource,
+              asteroids,
+              extractors,
+              resource: values.resource ?? "met",
             };
           }
           return {
@@ -467,24 +583,17 @@ export default function App() {
       return;
     }
 
-    if (dialogTarget.kind === "asteroids") {
+    if (dialogTarget.kind === "economy") {
+      const asteroids = Math.max(0, values.asteroids ?? 0);
+      const extractors = Math.max(0, values.extractors ?? 0);
+      if (asteroids <= 0 && extractors <= 0) return;
       const entry: PlanEntry = {
-        id: newPlanEntryId("ast"),
-        kind: "asteroids",
+        id: newPlanEntryId("eco"),
+        kind: "economy",
         startTick: values.startTick,
-        count: Math.max(1, values.count ?? 1),
-      };
-      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
-      return;
-    }
-
-    if (dialogTarget.kind === "extractors") {
-      const entry: PlanEntry = {
-        id: newPlanEntryId("ext"),
-        kind: "extractors",
+        asteroids,
+        extractors,
         resource: values.resource ?? dialogTarget.resource,
-        startTick: values.startTick,
-        count: Math.max(1, values.count ?? 1),
       };
       setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
     }
@@ -525,8 +634,7 @@ export default function App() {
             onAddTech={openAddTech}
             onAddUnit={openAddUnit}
             onAddRecon={openAddRecon}
-            onAddAsteroids={openAddAsteroids}
-            onAddExtractors={openAddExtractors}
+            onAddEconomy={openAddEconomy}
           />
           <Overview
             actionTicks={actionTicks}
@@ -579,27 +687,42 @@ export default function App() {
                   : 0;
               return max + bonus;
             }
-            if (dialogTarget.kind === "extractors") {
-              const info = getMaxExtractorsAtTick(startCfg, tick);
-              const bonus =
-                dialogMode === "edit" && editingEntry?.kind === "extractors"
-                  ? editingEntry.count
-                  : 0;
-              return info.max + bonus;
-            }
             return 999;
           }}
-          resolveFreeSlots={(tick) => {
+          resolveEconomyAtTick={(tick) => {
             const info = getMaxExtractorsAtTick(startCfg, tick);
-            const bonus =
-              dialogMode === "edit" && editingEntry?.kind === "extractors"
-                ? editingEntry.count
+            const snap = getResourcesAtTick(startCfg, tick);
+            let bonusAst = 0;
+            let bonusExt = 0;
+            let bonusResource: "met" | "kris" = "met";
+            if (dialogMode === "edit" && editingEntry) {
+              if (editingEntry.kind === "economy") {
+                bonusAst = editingEntry.asteroids;
+                bonusExt = editingEntry.extractors;
+                bonusResource = editingEntry.resource;
+              } else if (editingEntry.kind === "asteroids") {
+                bonusAst = editingEntry.count;
+              } else if (editingEntry.kind === "extractors") {
+                bonusExt = editingEntry.count;
+                bonusResource = editingEntry.resource;
+              }
+            }
+            const asteroids = Math.max(0, info.asteroids - bonusAst);
+            const alreadyBuilt = Math.max(0, info.alreadyBuilt - bonusExt);
+            const freeSlots = Math.max(0, asteroids * 20 - alreadyBuilt);
+            // Refund costs of the entry being edited so max reflects free budget.
+            const refundKris = bonusAst * ASTEROID_COST.kris;
+            const refundMet =
+              bonusExt > 0
+                ? extractorBatchCost(alreadyBuilt, bonusExt)
                 : 0;
+            void bonusResource;
             return {
-              freeSlots: info.freeSlots + bonus,
-              asteroids: info.asteroids,
-              // editing: treat this batch as not yet built for cost preview
-              alreadyBuilt: Math.max(0, info.alreadyBuilt - bonus),
+              freeSlots,
+              asteroids,
+              alreadyBuilt,
+              met: snap.met + refundMet,
+              kris: snap.kris + refundKris,
             };
           }}
         />

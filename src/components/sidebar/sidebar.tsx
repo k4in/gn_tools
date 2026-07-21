@@ -21,8 +21,11 @@ export type SidebarProps = {
   onAddTech: (name: string) => void;
   onAddUnit: (name: string) => void;
   onAddRecon: (name: string) => void;
-  onAddAsteroids: () => void;
-  onAddExtractors: (resource?: "met" | "kris") => void;
+  onAddEconomy: (preset?: {
+    asteroids?: number;
+    extractors?: number;
+    resource?: "met" | "kris";
+  }) => void;
 };
 
 export function Sidebar({
@@ -34,8 +37,7 @@ export function Sidebar({
   onAddTech,
   onAddUnit,
   onAddRecon,
-  onAddAsteroids,
-  onAddExtractors,
+  onAddEconomy,
 }: SidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border">
@@ -63,8 +65,7 @@ export function Sidebar({
           <Resources
             hasObservatorium={hasObservatorium}
             hasExtraktorTech={hasExtraktorTech}
-            onAddAsteroids={onAddAsteroids}
-            onAddExtractors={onAddExtractors}
+            onAddEconomy={onAddEconomy}
           />
         </TabsContent>
 

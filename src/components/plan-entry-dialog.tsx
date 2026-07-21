@@ -11,9 +11,12 @@ import {
 import { Field, FieldLabel } from "@/components/shadcn/field";
 import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group";
 import {
+  ASTEROID_COST,
+  ASTEROID_SLOT_CAPACITY,
   extractorBatchCost,
   extractorUnitCost,
   formatRes,
+  maxAffordableExtractors,
   type PlanEntry,
 } from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
@@ -39,28 +42,36 @@ type CountableTarget = {
   maxCount: number;
 };
 
-type ExtractorTarget = {
-  kind: "extractors";
+/** Unified asteroids + extractors dialog target. */
+type EconomyTarget = {
+  kind: "economy";
+  defaultTick: number;
+  defaultAsteroids: number;
+  defaultExtractors: number;
   resource: "met" | "kris";
-  defaultTick: number;
-  defaultCount: number;
-  maxCount: number;
+  /** Free slots before this entry's own asteroids/extractors. */
   freeSlots: number;
-  asteroids: number;
-};
-
-type AsteroidTarget = {
-  kind: "asteroids";
-  defaultTick: number;
-  defaultCount: number;
-  costKris: number;
+  asteroidsOwned: number;
+  alreadyBuilt: number;
+  /** Whether Observatorium is available for asteroid part. */
+  canAsteroids: boolean;
+  /** Whether Extraktor tech is available. */
+  canExtractors: boolean;
+  costKrisPerAsteroid: number;
 };
 
 export type PlanEntryDialogTarget =
   | TechTarget
   | CountableTarget
-  | ExtractorTarget
-  | AsteroidTarget;
+  | EconomyTarget;
+
+export type PlanEntryDialogSubmit = {
+  startTick: number;
+  count?: number;
+  resource?: "met" | "kris";
+  asteroids?: number;
+  extractors?: number;
+};
 
 export type PlanEntryDialogProps = {
   open: boolean;
@@ -69,18 +80,17 @@ export type PlanEntryDialogProps = {
   target: PlanEntryDialogTarget | null;
   /** Existing entry when editing. */
   entry?: PlanEntry | null;
-  onSubmit: (values: {
-    startTick: number;
-    count?: number;
-    resource?: "met" | "kris";
-  }) => void;
+  onSubmit: (values: PlanEntryDialogSubmit) => void;
   onRemove?: () => void;
-  /** Dynamic max/count when tick changes (units/recon/extractors). */
+  /** Dynamic max/count when tick changes (units/recon). */
   resolveMaxCount?: (startTick: number) => number;
-  resolveFreeSlots?: (startTick: number) => {
+  resolveEconomyAtTick?: (startTick: number) => {
     freeSlots: number;
     asteroids: number;
     alreadyBuilt: number;
+    /** Ressourcen am Tick (ggf. mit Edit-Refund des aktuellen Eintrags). */
+    met: number;
+    kris: number;
   };
 };
 
@@ -93,45 +103,70 @@ export function PlanEntryDialog({
   onSubmit,
   onRemove,
   resolveMaxCount,
-  resolveFreeSlots,
+  resolveEconomyAtTick,
 }: PlanEntryDialogProps) {
   const [startTick, setStartTick] = useState(0);
   const [count, setCount] = useState(1);
+  const [asteroidCount, setAsteroidCount] = useState(0);
+  const [extractorCount, setExtractorCount] = useState(0);
   const [resource, setResource] = useState<"met" | "kris">("met");
 
   useEffect(() => {
     if (!open || !target) return;
     if (mode === "edit" && entry) {
       setStartTick(entry.startTick);
+      if (entry.kind === "economy") {
+        setAsteroidCount(Math.max(0, entry.asteroids));
+        setExtractorCount(Math.max(0, entry.extractors));
+        setResource(entry.resource);
+        return;
+      }
+      if (entry.kind === "asteroids") {
+        setAsteroidCount(Math.max(0, entry.count));
+        setExtractorCount(0);
+        setResource("met");
+        return;
+      }
+      if (entry.kind === "extractors") {
+        setAsteroidCount(0);
+        setExtractorCount(Math.max(0, entry.count));
+        setResource(entry.resource);
+        return;
+      }
       if ("count" in entry) setCount(entry.count);
-      if (entry.kind === "extractors") setResource(entry.resource);
       return;
     }
+
     setStartTick(target.defaultTick);
-    if (target.kind === "unit" || target.kind === "recon" || target.kind === "extractors") {
+    if (target.kind === "unit" || target.kind === "recon") {
       setCount(Math.max(1, target.defaultCount));
-    } else if (target.kind === "asteroids") {
-      setCount(Math.max(1, target.defaultCount));
+    } else if (target.kind === "economy") {
+      setAsteroidCount(Math.max(0, target.defaultAsteroids));
+      setExtractorCount(Math.max(0, target.defaultExtractors));
+      setResource(target.resource);
     } else {
       setCount(1);
     }
-    if (target.kind === "extractors") setResource(target.resource);
   }, [open, target, mode, entry]);
 
   const liveMax = useMemo(() => {
     if (!target) return 1;
     if (resolveMaxCount) return Math.max(0, resolveMaxCount(startTick));
-    if (target.kind === "unit" || target.kind === "recon" || target.kind === "extractors") {
-      return target.maxCount;
-    }
+    if (target.kind === "unit" || target.kind === "recon") return target.maxCount;
     return 999;
   }, [target, startTick, resolveMaxCount]);
 
-  const liveSlots = useMemo(() => {
-    if (!target || target.kind !== "extractors") return null;
-    if (resolveFreeSlots) return resolveFreeSlots(startTick);
-    return { freeSlots: target.freeSlots, asteroids: target.asteroids, alreadyBuilt: 0 };
-  }, [target, startTick, resolveFreeSlots]);
+  const liveEconomy = useMemo(() => {
+    if (!target || target.kind !== "economy") return null;
+    if (resolveEconomyAtTick) return resolveEconomyAtTick(startTick);
+    return {
+      freeSlots: target.freeSlots,
+      asteroids: target.asteroidsOwned,
+      alreadyBuilt: target.alreadyBuilt,
+      met: 0,
+      kris: 0,
+    };
+  }, [target, startTick, resolveEconomyAtTick]);
 
   const unitTotalCost = useMemo(() => {
     if (!target || (target.kind !== "unit" && target.kind !== "recon")) return null;
@@ -142,47 +177,74 @@ export function PlanEntryDialog({
     };
   }, [target, count]);
 
-  const extractorCosts = useMemo(() => {
-    if (!target || target.kind !== "extractors" || !liveSlots) return null;
-    const alreadyBuilt = liveSlots.alreadyBuilt;
-    const nextCost = extractorUnitCost(alreadyBuilt + 1);
-    const total = extractorBatchCost(alreadyBuilt, Math.max(0, count));
-    return { alreadyBuilt, nextCost, total };
-  }, [target, liveSlots, count]);
+  const economyCosts = useMemo(() => {
+    if (!target || target.kind !== "economy" || !liveEconomy) return null;
+    const a = Math.max(0, asteroidCount);
+    const e = Math.max(0, extractorCount);
+    const costPerAst = target.costKrisPerAsteroid || ASTEROID_COST.kris;
+    const slotsFromNew = a * ASTEROID_SLOT_CAPACITY;
+    const freeAfterAst = liveEconomy.freeSlots + slotsFromNew;
+    const alreadyBuilt = liveEconomy.alreadyBuilt;
+    const totalKris = a * costPerAst;
+    // Asteroiden zuerst zahlen → restliches Metall bestimmt Max-Extraktoren.
+    const krisAfterAst = Math.max(0, liveEconomy.kris - totalKris);
+    const maxExtractors = maxAffordableExtractors({
+      met: liveEconomy.met,
+      kris: krisAfterAst,
+      alreadyBuilt,
+      asteroids: liveEconomy.asteroids + a,
+      slots: alreadyBuilt + freeAfterAst,
+      allowBuyAsteroids: false,
+    });
+    const nextCost = e > 0 ? extractorUnitCost(alreadyBuilt + 1) : 0;
+    const totalMet = extractorBatchCost(alreadyBuilt, e);
+    return {
+      alreadyBuilt,
+      freeAfterAst,
+      nextCost,
+      totalMet,
+      totalKris,
+      maxExtractors,
+    };
+  }, [target, liveEconomy, asteroidCount, extractorCount]);
 
   if (!target) return null;
 
   const title = (() => {
     if (target.kind === "tech") return target.tech.name;
     if (target.kind === "unit" || target.kind === "recon") return target.name;
-    if (target.kind === "extractors") {
-      return resource === "met" ? "Metallextraktoren" : "Kristallextraktoren";
-    }
-    return "Asteroiden scannen";
+    return "Asteroiden & Extraktoren";
   })();
-
-  const extractorBlocked =
-    target.kind === "extractors" && (liveSlots?.freeSlots ?? 0) <= 0;
 
   const canSubmit = (() => {
     if (startTick < 0) return false;
     if (target.kind === "tech") return true;
-    if (count < 1) return false;
-    if (target.kind === "asteroids") return true;
-    // liveMax already includes the current entry's budget when editing
-    const maxAllowed = Math.max(1, liveMax);
-    if (target.kind === "extractors") {
-      return !extractorBlocked && count <= maxAllowed;
+    if (target.kind === "unit" || target.kind === "recon") {
+      return count >= 1 && count <= Math.max(1, liveMax);
     }
-    return count <= maxAllowed;
+    if (target.kind === "economy") {
+      const a = Math.max(0, asteroidCount);
+      const e = Math.max(0, extractorCount);
+      if (a <= 0 && e <= 0) return false;
+      if (a > 0 && !target.canAsteroids) return false;
+      if (e > 0 && !target.canExtractors) return false;
+      if (economyCosts && e > economyCosts.maxExtractors) return false;
+      return true;
+    }
+    return false;
   })();
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     if (target.kind === "tech") {
       onSubmit({ startTick });
-    } else if (target.kind === "extractors") {
-      onSubmit({ startTick, count: Math.max(1, count), resource });
+    } else if (target.kind === "economy") {
+      onSubmit({
+        startTick,
+        asteroids: Math.max(0, asteroidCount),
+        extractors: Math.max(0, extractorCount),
+        resource,
+      });
     } else {
       onSubmit({ startTick, count: Math.max(1, count) });
     }
@@ -242,40 +304,44 @@ export function PlanEntryDialog({
             </dl>
           )}
 
-          {target.kind === "asteroids" && (
-            <div className="space-y-1 text-xs text-muted-foreground">
+          {target.kind === "economy" && (
+            <div className="space-y-2 text-xs text-muted-foreground">
               <p className="tabular-nums">
-                Kosten / Stück: {formatRes(target.costKris)} K · 20 Extraktor-Slots
+                Besitzt: {liveEconomy?.asteroids ?? 0} Asteroiden ·{" "}
+                {liveEconomy?.alreadyBuilt ?? 0} Extraktoren ·{" "}
+                {liveEconomy?.freeSlots ?? 0} freie Slots
               </p>
-              <p className="tabular-nums font-medium text-foreground">
-                Gesamtkosten: {formatRes(target.costKris * Math.max(0, count))} K
-              </p>
-            </div>
-          )}
-
-          {target.kind === "extractors" && (
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <p className="tabular-nums">
-                Freie Slots: {liveSlots?.freeSlots ?? 0} · Asteroiden:{" "}
-                {liveSlots?.asteroids ?? 0}
-                {extractorCosts ? ` · bereits gebaut: ${extractorCosts.alreadyBuilt}` : ""}
-              </p>
-              {extractorCosts && (
+              {economyCosts && (
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                  <dt>Nächster Extraktor</dt>
+                  <dt>Asteroiden-Kosten</dt>
                   <dd className="tabular-nums font-medium text-foreground">
-                    {formatRes(extractorCosts.nextCost)} M
+                    {formatRes(economyCosts.totalKris)} K
                   </dd>
-                  <dt>Gesamtkosten ({Math.max(0, count)}×)</dt>
+                  <dt>Extraktor-Kosten</dt>
                   <dd className="tabular-nums font-medium text-foreground">
-                    {formatRes(extractorCosts.total)} M
+                    {formatRes(economyCosts.totalMet)} M
+                    {extractorCount > 0
+                      ? ` (nächster ${formatRes(economyCosts.nextCost)} M)`
+                      : ""}
+                  </dd>
+                  <dt>Slots nach Asteroiden</dt>
+                  <dd className="tabular-nums font-medium text-foreground">
+                    {economyCosts.freeAfterAst}
                   </dd>
                 </dl>
               )}
-              {extractorBlocked && (
-                <p className="text-amber-500">
-                  Keine freien Extraktor-Slots — zuerst Asteroiden scannen.
-                </p>
+              {extractorCount > 0 &&
+                economyCosts &&
+                extractorCount > economyCosts.maxExtractors && (
+                  <p className="text-amber-500">
+                    Zu viele Extraktoren — begrenzt durch Slots und/oder Metall bei diesem Tick.
+                  </p>
+                )}
+              {asteroidCount > 0 && !target.canAsteroids && (
+                <p className="text-amber-500">Observatorium fehlt im Plan.</p>
+              )}
+              {extractorCount > 0 && !target.canExtractors && (
+                <p className="text-amber-500">Extraktor-Tech fehlt im Plan.</p>
               )}
             </div>
           )}
@@ -299,7 +365,7 @@ export function PlanEntryDialog({
               </InputGroup>
             </Field>
 
-            {target.kind !== "tech" && (
+            {(target.kind === "unit" || target.kind === "recon") && (
               <Field className="w-28">
                 <FieldLabel htmlFor="plan-count">Anzahl</FieldLabel>
                 <InputGroup>
@@ -307,7 +373,7 @@ export function PlanEntryDialog({
                     id="plan-count"
                     type="number"
                     min={1}
-                    max={target.kind === "asteroids" ? undefined : Math.max(1, liveMax)}
+                    max={Math.max(1, liveMax)}
                     value={count}
                     onChange={(e) => {
                       const n = Number(e.target.value);
@@ -319,9 +385,50 @@ export function PlanEntryDialog({
                 </InputGroup>
               </Field>
             )}
+
+            {target.kind === "economy" && (
+              <>
+                <Field className="w-28">
+                  <FieldLabel htmlFor="plan-asteroids">Asteroiden</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-asteroids"
+                      type="number"
+                      min={0}
+                      disabled={!target.canAsteroids}
+                      value={asteroidCount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setAsteroidCount(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field className="w-28">
+                  <FieldLabel htmlFor="plan-extractors">Extraktoren</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-extractors"
+                      type="number"
+                      min={0}
+                      disabled={!target.canExtractors}
+                      value={extractorCount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setExtractorCount(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+              </>
+            )}
           </div>
 
-          {target.kind === "extractors" && mode === "add" && (
+          {target.kind === "economy" && target.canExtractors && (
             <div className="flex gap-2 text-xs">
               <Button
                 type="button"
@@ -342,9 +449,17 @@ export function PlanEntryDialog({
             </div>
           )}
 
-          {target.kind !== "tech" && target.kind !== "asteroids" && liveMax > 0 && (
+          {(target.kind === "unit" || target.kind === "recon") && liveMax > 0 && (
             <p className="text-[11px] text-muted-foreground tabular-nums">
               Max. bei Tick {startTick}: {liveMax}
+            </p>
+          )}
+
+          {target.kind === "economy" && economyCosts && (
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              Max. Extraktoren bei Tick {startTick} (Slots + Metall, nach Asteroiden-Kosten):{" "}
+              {economyCosts.maxExtractors}
+              {" · "}Slots: {economyCosts.freeAfterAst}
             </p>
           )}
         </div>

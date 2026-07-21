@@ -207,7 +207,18 @@ export function TickTable({
               <TruncateCell>
                 {t.started.length ? <JobList items={t.started} /> : null}
               </TruncateCell>
-              <TruncateCell />
+              <TruncateCell>
+                {t.quests.length ? (
+                  <span className="text-green-500">
+                    {t.quests.map((q, i) => (
+                      <span key={q.id}>
+                        {i > 0 && <span className="text-muted-foreground">, </span>}
+                        {q.label}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+              </TruncateCell>
             </TableRow>
           );
         })}

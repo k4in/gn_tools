@@ -1,7 +1,5 @@
-import { Button } from "@/components/shadcn/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -11,15 +9,17 @@ import { ScrollArea } from "@/components/shadcn/scroll-area";
 export type ResourcesProps = {
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
-  onAddAsteroids: () => void;
-  onAddExtractors: (resource?: "met" | "kris") => void;
+  onAddEconomy: (preset?: {
+    asteroids?: number;
+    extractors?: number;
+    resource?: "met" | "kris";
+  }) => void;
 };
 
 export function Resources({
   hasObservatorium,
   hasExtraktorTech,
-  onAddAsteroids,
-  onAddExtractors,
+  onAddEconomy,
 }: ResourcesProps) {
   if (!hasExtraktorTech && !hasObservatorium) {
     return (
@@ -37,57 +37,25 @@ export function Resources({
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="flex flex-col gap-3 p-3">
-        <Card size="sm">
+        <Card
+          size="sm"
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => onAddEconomy()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onAddEconomy();
+            }
+          }}
+        >
           <CardHeader>
-            <CardTitle>Asteroiden scannen</CardTitle>
+            <CardTitle>Asteroiden & Extraktoren</CardTitle>
             <CardDescription>
-              {hasObservatorium
-                ? "Öffnet den Plan-Dialog mit Start-Tick und Anzahl."
-                : "Benötigt Observatorium im Plan."}
+              Asteroiden scannen und/oder Extraktoren bauen — einzeln oder kombiniert.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={!hasObservatorium}
-              onClick={onAddAsteroids}
-            >
-              Asteroiden planen…
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Extraktoren bauen</CardTitle>
-            <CardDescription>
-              {hasExtraktorTech
-                ? "Kosten steigen pro Extraktor. Benötigt freie Asteroiden-Slots."
-                : "Benötigt Extraktor-Tech im Plan."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={!hasExtraktorTech}
-              onClick={() => onAddExtractors("met")}
-            >
-              Metall…
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={!hasExtraktorTech}
-              onClick={() => onAddExtractors("kris")}
-            >
-              Kristall…
-            </Button>
-          </CardContent>
         </Card>
       </div>
     </ScrollArea>

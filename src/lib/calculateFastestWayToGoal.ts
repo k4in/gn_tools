@@ -3,15 +3,20 @@ import {
   getExtractorYield,
   getRequiredAsteroidAmount,
 } from "@/gn-data/extractor";
-import { type PlanEntry } from "@/gn-data/plan";
+import { defaults, type PlanEntry } from "@/gn-data/plan";
+import {
+  evaluateQuests,
+  type QuestDef,
+  type QuestReward,
+} from "@/gn-data/quests";
 import { ships, type Ship } from "@/gn-data/ships";
 import { techtree, type TechTreeEntry } from "@/gn-data/techtree";
 import { utilities, type Utility } from "@/gn-data/utility";
 
 export type { PlanEntry };
 
-export const TICK_MINUTES = 15;
-const MAX_TICKS = 5000;
+/** @deprecated use startCfg.tick_minutes / defaults.tick_minutes */
+export const TICK_MINUTES = defaults.tick_minutes;
 
 const asteroidUtility = utilities.find((u) => u.name === "Asteroid");
 const ASTEROID_COST_KRIS = asteroidUtility?.cost.kris ?? 10_000;
@@ -43,9 +48,21 @@ const INCOME_BY_BUILDING: Record<string, { met: number; kris: number }> = {
 export type StartConfig = {
   start_time: string;
   start_date: string;
+  /** Länge eines Ticks in Minuten. */
+  tick_minutes: number;
+  /** Simulations-Horizont / Safety-Cap in Ticks. */
+  max_ticks: number;
   starting_resources: { metall: number; kristall: number };
   plan: PlanEntry[];
 };
+
+function tickMinutesOf(startCfg: StartConfig) {
+  return startCfg.tick_minutes > 0 ? startCfg.tick_minutes : defaults.tick_minutes;
+}
+
+function maxTicksOf(startCfg: StartConfig) {
+  return startCfg.max_ticks > 0 ? startCfg.max_ticks : defaults.max_ticks;
+}
 
 export type Res = { met: number; kris: number };
 
@@ -71,6 +88,12 @@ export type ActiveJob = NamedJob & {
   remainingTicks: number;
 };
 
+export type QuestEvent = {
+  id: string;
+  label: string;
+  reward: QuestReward;
+};
+
 export type TickSnapshot = {
   tick: number;
   clockLabel: string;
@@ -81,6 +104,8 @@ export type TickSnapshot = {
   active: ActiveJob[];
   started: NamedJob[];
   finished: NamedJob[];
+  /** Quests, die in diesem Tick ausgeschüttet wurden. */
+  quests: QuestEvent[];
   asteroids: number;
   extractorsMet: number;
   extractorsKris: number;
@@ -219,12 +244,12 @@ function startDateTime(startCfg: StartConfig): Date {
 }
 
 /**
- * Verstrichene Ticks seit Planstart: floor((now − start) / 15min).
+ * Verstrichene Ticks seit Planstart: floor((now − start) / tick_minutes).
  */
 export function computeCurrentTick(startCfg: StartConfig, now: Date = new Date()): number {
   const start = startDateTime(startCfg);
   const diffMs = now.getTime() - start.getTime();
-  return Math.floor(diffMs / (TICK_MINUTES * 60 * 1000));
+  return Math.floor(diffMs / (tickMinutesOf(startCfg) * 60 * 1000));
 }
 
 export function formatWallClock(date: Date) {
@@ -238,7 +263,7 @@ export function formatWallClock(date: Date) {
 
 function tickDateTime(startCfg: StartConfig, tick: number): Date {
   const start = startDateTime(startCfg);
-  return new Date(start.getTime() + tick * TICK_MINUTES * 60 * 1000);
+  return new Date(start.getTime() + tick * tickMinutesOf(startCfg) * 60 * 1000);
 }
 
 /** Restzeit bis zu einem Tick, z.B. "in 2 Stunden und 05 Minuten". */
@@ -266,7 +291,7 @@ export function formatTimeUntilTick(
 
 export function clockLabel(startCfg: StartConfig, tick: number) {
   const base = parseStartMinutes(startCfg.start_time);
-  const total = base + tick * TICK_MINUTES;
+  const total = base + tick * tickMinutesOf(startCfg);
   const dayOffset = Math.floor(total / (24 * 60));
   const mins = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
   const hh = String(Math.floor(mins / 60)).padStart(2, "0");
@@ -316,6 +341,17 @@ export function newEconomyOrderId(): string {
   return newPlanEntryId("eco");
 }
 
+function formatExtractorLabel(resource: "met" | "kris", count: number): string {
+  if (resource === "met") {
+    return count === 1 ? "1 Metallextraktor" : `${count} Metallextraktoren`;
+  }
+  return count === 1 ? "1 Kristallextraktor" : `${count} Kristallextraktoren`;
+}
+
+function formatAsteroidLabel(count: number): string {
+  return count === 1 ? "1 Asteroid scannen" : `${count} Asteroiden scannen`;
+}
+
 export function formatPlanEntryLabel(entry: PlanEntry): string {
   switch (entry.kind) {
     case "tech":
@@ -324,21 +360,18 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return entry.count === 1 ? entry.name : `${entry.count}× ${entry.name}`;
     case "recon":
       return entry.count === 1 ? entry.name : `${entry.count}× ${entry.name}`;
-    case "extractors": {
-      const base =
-        entry.resource === "met"
-          ? entry.count === 1
-            ? "1 Metallextraktor"
-            : `${entry.count} Metallextraktoren`
-          : entry.count === 1
-            ? "1 Kristallextraktor"
-            : `${entry.count} Kristallextraktoren`;
-      return base;
+    case "economy": {
+      const parts: string[] = [];
+      if (entry.asteroids > 0) parts.push(formatAsteroidLabel(entry.asteroids));
+      if (entry.extractors > 0) {
+        parts.push(formatExtractorLabel(entry.resource, entry.extractors));
+      }
+      return parts.join(" + ") || "Economy";
     }
+    case "extractors":
+      return formatExtractorLabel(entry.resource, entry.count);
     case "asteroids":
-      return entry.count === 1
-        ? "1 Asteroid scannen"
-        : `${entry.count} Asteroiden scannen`;
+      return formatAsteroidLabel(entry.count);
   }
 }
 
@@ -476,6 +509,13 @@ export function removePlanEntryCascade(plan: PlanEntry[], id: string): PlanEntry
           toRemove.add(entry.id);
           changed = true;
         }
+      } else if (entry.kind === "economy") {
+        const needsExt = entry.extractors > 0 && removedTechNames.has("Extraktor");
+        const needsAst = entry.asteroids > 0 && removedTechNames.has("Observatorium");
+        if (needsExt || needsAst) {
+          toRemove.add(entry.id);
+          changed = true;
+        }
       } else if (entry.kind === "extractors") {
         if (removedTechNames.has("Extraktor")) {
           toRemove.add(entry.id);
@@ -507,16 +547,11 @@ type PendingUnit = {
   desiredTick: number;
 };
 
-type PendingExtractors = {
+type PendingEconomy = {
   entryId: string;
   resource: "met" | "kris";
-  remaining: number;
-  desiredTick: number;
-};
-
-type PendingAsteroids = {
-  entryId: string;
-  remaining: number;
+  remainingAsteroids: number;
+  remainingExtractors: number;
   desiredTick: number;
 };
 
@@ -538,6 +573,7 @@ function simulatePlan(
   };
   const completed = new Set<string>();
   const completedAt = new Map<string, number>();
+  const claimedQuests = new Set<string>();
   let active: Job[] = [];
   const steps: Job[] = [];
   const ticks: TickSnapshot[] = [];
@@ -567,8 +603,7 @@ function simulatePlan(
   }
 
   const pendingUnits: PendingUnit[] = [];
-  const pendingExtractors: PendingExtractors[] = [];
-  const pendingAsteroids: PendingAsteroids[] = [];
+  const pendingEconomy: PendingEconomy[] = [];
 
   for (const e of plan) {
     if (e.kind === "unit") {
@@ -595,17 +630,33 @@ function simulatePlan(
         remaining: Math.max(1, e.count),
         desiredTick: e.startTick,
       });
-    } else if (e.kind === "extractors") {
-      pendingExtractors.push({
+    } else if (e.kind === "economy") {
+      const asteroids = Math.max(0, e.asteroids);
+      const extractors = Math.max(0, e.extractors);
+      if (asteroids <= 0 && extractors <= 0) continue;
+      pendingEconomy.push({
         entryId: e.id,
         resource: e.resource,
-        remaining: Math.max(1, e.count),
+        remainingAsteroids: asteroids,
+        remainingExtractors: extractors,
+        desiredTick: e.startTick,
+      });
+    } else if (e.kind === "extractors") {
+      // legacy
+      pendingEconomy.push({
+        entryId: e.id,
+        resource: e.resource,
+        remainingAsteroids: 0,
+        remainingExtractors: Math.max(1, e.count),
         desiredTick: e.startTick,
       });
     } else if (e.kind === "asteroids") {
-      pendingAsteroids.push({
+      // legacy
+      pendingEconomy.push({
         entryId: e.id,
-        remaining: Math.max(1, e.count),
+        resource: "met",
+        remainingAsteroids: Math.max(1, e.count),
+        remainingExtractors: 0,
         desiredTick: e.startTick,
       });
     }
@@ -621,8 +672,13 @@ function simulatePlan(
   const allDone = () => {
     if (pendingTechs.size > 0) return false;
     if (pendingUnits.some((u) => u.remaining > 0)) return false;
-    if (pendingExtractors.some((u) => u.remaining > 0)) return false;
-    if (pendingAsteroids.some((u) => u.remaining > 0)) return false;
+    if (
+      pendingEconomy.some(
+        (u) => u.remainingAsteroids > 0 || u.remainingExtractors > 0,
+      )
+    ) {
+      return false;
+    }
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
     return true;
@@ -727,76 +783,87 @@ function simulatePlan(
         continue;
       }
 
-      if (entry.kind === "asteroids") {
-        const pending = pendingAsteroids.find((p) => p.entryId === entry.id);
-        if (!pending || pending.remaining <= 0) continue;
+      if (
+        entry.kind === "economy" ||
+        entry.kind === "asteroids" ||
+        entry.kind === "extractors"
+      ) {
+        const pending = pendingEconomy.find((p) => p.entryId === entry.id);
+        if (!pending) continue;
+        if (pending.remainingAsteroids <= 0 && pending.remainingExtractors <= 0) {
+          continue;
+        }
         if (tick < pending.desiredTick) continue;
-        if (!completed.has("Observatorium")) continue;
 
-        let bought = 0;
-        while (pending.remaining > 0 && canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })) {
-          const cost = { met: 0, kris: ASTEROID_COST_KRIS };
-          res = pay(res, cost);
-          spent = addRes(spent, cost);
-          asteroids += 1;
-          extractorSlots += EXTRACTOR_SLOT_PER_ASTEROID;
-          pending.remaining -= 1;
-          bought += 1;
-          const name = `Asteroid scannen #${asteroids}`;
-          const job: Job = {
-            name,
-            type: "economy",
-            startTick: tick,
-            endTick: tick,
-            cost,
-            planEntryId: entry.id,
-          };
-          steps.push(job);
-          startedJobs.push({ name, type: "economy", planEntryId: entry.id });
-          finishedJobs.push({ name, type: "economy", planEntryId: entry.id });
-          markEntryStart(entry.id, tick);
-        }
-        if (bought > 0 && pending.remaining <= 0) {
-          markEntryFinish(entry.id, tick);
-        }
-        continue;
-      }
+        let didWork = false;
 
-      if (entry.kind === "extractors") {
-        const pending = pendingExtractors.find((p) => p.entryId === entry.id);
-        if (!pending || pending.remaining <= 0) continue;
-        if (tick < pending.desiredTick) continue;
-        if (!completed.has("Extraktor")) continue;
-
-        let built = 0;
-        while (pending.remaining > 0 && totalExtractors() < extractorSlots) {
-          const nextIndex = totalExtractors() + 1;
-          const cost = { met: extractorUnitCost(nextIndex), kris: 0 };
-          if (!canAfford(res, cost)) break;
-          res = pay(res, cost);
-          spent = addRes(spent, cost);
-          if (pending.resource === "met") extractorsMet += 1;
-          else extractorsKris += 1;
-          pending.remaining -= 1;
-          built += 1;
-          const label =
-            pending.resource === "met"
-              ? `Extraktor (Metall) #${extractorsMet}`
-              : `Extraktor (Kristall) #${extractorsKris}`;
-          const job: Job = {
-            name: label,
-            type: "economy",
-            startTick: tick,
-            endTick: tick,
-            cost,
-            planEntryId: entry.id,
-          };
-          steps.push(job);
-          startedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
-          finishedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
-          markEntryStart(entry.id, tick);
+        // Asteroids first so slots open for extractors in the same entry/tick.
+        if (pending.remainingAsteroids > 0 && completed.has("Observatorium")) {
+          while (
+            pending.remainingAsteroids > 0 &&
+            canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })
+          ) {
+            const cost = { met: 0, kris: ASTEROID_COST_KRIS };
+            res = pay(res, cost);
+            spent = addRes(spent, cost);
+            asteroids += 1;
+            extractorSlots += EXTRACTOR_SLOT_PER_ASTEROID;
+            pending.remainingAsteroids -= 1;
+            didWork = true;
+            const name = `Asteroid scannen #${asteroids}`;
+            const job: Job = {
+              name,
+              type: "economy",
+              startTick: tick,
+              endTick: tick,
+              cost,
+              planEntryId: entry.id,
+            };
+            steps.push(job);
+            startedJobs.push({ name, type: "economy", planEntryId: entry.id });
+            finishedJobs.push({ name, type: "economy", planEntryId: entry.id });
+            markEntryStart(entry.id, tick);
+          }
         }
-        if (built > 0 && pending.remaining <= 0) {
+
+        if (pending.remainingExtractors > 0 && completed.has("Extraktor")) {
+          while (
+            pending.remainingExtractors > 0 &&
+            totalExtractors() < extractorSlots
+          ) {
+            const nextIndex = totalExtractors() + 1;
+            const cost = { met: extractorUnitCost(nextIndex), kris: 0 };
+            if (!canAfford(res, cost)) break;
+            res = pay(res, cost);
+            spent = addRes(spent, cost);
+            if (pending.resource === "met") extractorsMet += 1;
+            else extractorsKris += 1;
+            pending.remainingExtractors -= 1;
+            didWork = true;
+            const label =
+              pending.resource === "met"
+                ? `Extraktor (Metall) #${extractorsMet}`
+                : `Extraktor (Kristall) #${extractorsKris}`;
+            const job: Job = {
+              name: label,
+              type: "economy",
+              startTick: tick,
+              endTick: tick,
+              cost,
+              planEntryId: entry.id,
+            };
+            steps.push(job);
+            startedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
+            finishedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
+            markEntryStart(entry.id, tick);
+          }
+        }
+
+        if (
+          didWork &&
+          pending.remainingAsteroids <= 0 &&
+          pending.remainingExtractors <= 0
+        ) {
           markEntryFinish(entry.id, tick);
         }
       }
@@ -805,11 +872,36 @@ function simulatePlan(
     return { startedJobs, finishedJobs, spent };
   };
 
+  const applyQuestRewards = (quests: QuestDef[]): QuestEvent[] => {
+    const events: QuestEvent[] = [];
+    for (const q of quests) {
+      claimedQuests.add(q.id);
+      if (q.reward.kind === "res") {
+        res = addRes(res, { met: q.reward.met, kris: q.reward.kris });
+      } else if (q.reward.resource === "met") {
+        extractorsMet += q.reward.count;
+      } else {
+        extractorsKris += q.reward.count;
+      }
+      events.push({ id: q.id, label: q.label, reward: q.reward });
+    }
+    return events;
+  };
+
+  const claimReadyQuests = (): QuestEvent[] =>
+    applyQuestRewards(
+      evaluateQuests(
+        { completed, asteroids, extractorsMet, extractorsKris },
+        claimedQuests,
+      ),
+    );
+
   const snapshot = (
     tick: number,
     started: NamedJob[],
     finished: NamedJob[],
     delta: Res,
+    quests: QuestEvent[] = [],
   ): TickSnapshot => ({
     tick,
     clockLabel: clockLabel(startCfg, tick),
@@ -827,6 +919,7 @@ function simulatePlan(
       .sort((a, b) => a.remainingTicks - b.remainingTicks || a.name.localeCompare(b.name)),
     started,
     finished,
+    quests,
     asteroids,
     extractorsMet,
     extractorsKris,
@@ -864,7 +957,8 @@ function simulatePlan(
     if (allDone()) return resultAt(0);
   }
 
-  for (let t = 1; t <= MAX_TICKS; t++) {
+  const maxTicks = maxTicksOf(startCfg);
+  for (let t = 1; t <= maxTicks; t++) {
     const finishing = active.filter((j) => j.endTick === t);
     active = active.filter((j) => j.endTick !== t);
     const finishedJobs: NamedJob[] = [];
@@ -904,8 +998,25 @@ function simulatePlan(
       res = addRes(res, income);
     }
 
+    // Resource quests fire with income (tech finishes). Economy quests
+    // (asteroid + extractors) are re-checked after tryStart same tick.
+    const questEventsEarly = claimReadyQuests();
+
     const { startedJobs, finishedJobs: instantFinished, spent } = tryStart(t);
     const allFinished = [...finishedJobs, ...instantFinished];
+
+    // e.g. 1 Asteroid + ≥10 Met-Ext → +10 free Kris-Ext, immediate this tick.
+    // Free extractors count toward total for later cost indices, but not for
+    // builds already paid this tick (tryStart ran first).
+    const questEventsLate = claimReadyQuests();
+    const questEvents = [...questEventsEarly, ...questEventsLate];
+    const questRes: Res = questEvents.reduce(
+      (acc, q) =>
+        q.reward.kind === "res"
+          ? addRes(acc, { met: q.reward.met, kris: q.reward.kris })
+          : acc,
+      { met: 0, kris: 0 },
+    );
 
     const waiting =
       !allDone() && startedJobs.length === 0 && active.length === 0;
@@ -918,10 +1029,10 @@ function simulatePlan(
     }
 
     const delta: Res = {
-      met: income.met - spent.met,
-      kris: income.kris - spent.kris,
+      met: income.met + questRes.met - spent.met,
+      kris: income.kris + questRes.kris - spent.kris,
     };
-    ticks.push(snapshot(t, startedJobs, allFinished, delta));
+    ticks.push(snapshot(t, startedJobs, allFinished, delta, questEvents));
 
     if (allDone()) {
       const finishTick = Math.max(
@@ -945,26 +1056,26 @@ function simulatePlan(
         const c = map.get(n)!.cost;
         return !canAfford(res, { met: c.met, kris: c.kris });
       });
-      const stuckAst = pendingAsteroids.some(
-        (p) =>
-          p.remaining > 0 &&
-          t >= p.desiredTick &&
-          (!completed.has("Observatorium") || res.kris < ASTEROID_COST_KRIS),
-      );
-      const stuckExt = pendingExtractors.some(
-        (p) =>
-          p.remaining > 0 &&
-          t >= p.desiredTick &&
+      const stuckEco = pendingEconomy.some((p) => {
+        if (t < p.desiredTick) return false;
+        const stuckAst =
+          p.remainingAsteroids > 0 &&
+          (!completed.has("Observatorium") || res.kris < ASTEROID_COST_KRIS);
+        const stuckExt =
+          p.remainingExtractors > 0 &&
           (!completed.has("Extraktor") ||
             totalExtractors() >= extractorSlots ||
-            res.met < extractorUnitCost(totalExtractors() + 1)),
+            res.met < extractorUnitCost(totalExtractors() + 1));
+        return stuckAst || stuckExt;
+      });
+      const hasPendingEco = pendingEconomy.some(
+        (p) => p.remainingAsteroids > 0 || p.remainingExtractors > 0,
       );
       if (
         (pendingTechs.size > 0 ||
           pendingUnits.some((u) => u.remaining > 0) ||
-          pendingAsteroids.some((p) => p.remaining > 0) ||
-          pendingExtractors.some((p) => p.remaining > 0)) &&
-        (stuckTech || stuckAst || stuckExt || pendingUnits.some((u) => u.remaining > 0))
+          hasPendingEco) &&
+        (stuckTech || stuckEco || pendingUnits.some((u) => u.remaining > 0))
       ) {
         // If purely waiting for income that will never come
         const anyFutureIncome =
@@ -979,7 +1090,7 @@ function simulatePlan(
     }
   }
 
-  throw new Error(`Plan nicht in ${MAX_TICKS} Ticks abgeschlossen`);
+  throw new Error(`Plan nicht in ${maxTicks} Ticks abgeschlossen`);
 }
 
 /**
@@ -1058,7 +1169,7 @@ export function getEarliestTechStartTick(
   const steady = last ? estimateSteadyIncome(plan) : { met: 0, kris: 0 };
   let met = plan.finalRes.met;
   let kris = plan.finalRes.kris;
-  for (let t = (last?.tick ?? 0) + 1; t <= MAX_TICKS; t++) {
+  for (let t = (last?.tick ?? 0) + 1; t <= maxTicksOf(startCfg); t++) {
     met += steady.met;
     kris += steady.kris;
     if (met >= cost.met && kris >= cost.kris) return Math.max(t, depsReady);
@@ -1114,7 +1225,7 @@ export function getEarliestBuildStartTick(
   let met = plan.finalRes.met;
   let kris = plan.finalRes.kris;
   const lastTick = plan.ticks[plan.ticks.length - 1]?.tick ?? 0;
-  for (let t = lastTick + 1; t <= MAX_TICKS; t++) {
+  for (let t = lastTick + 1; t <= maxTicksOf(startCfg); t++) {
     met += steady.met;
     kris += steady.kris;
     if (met >= cost.met && kris >= cost.kris) return Math.max(t, depsReady);

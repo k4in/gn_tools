@@ -2,6 +2,19 @@ export type PlanEntry =
   | { id: string; kind: "tech"; name: string; startTick: number }
   | { id: string; kind: "unit"; name: string; startTick: number; count: number }
   | { id: string; kind: "recon"; name: string; startTick: number; count: number }
+  /** Asteroiden scannen und/oder Extraktoren bauen — ein Timeline-Event. */
+  | {
+      id: string;
+      kind: "economy";
+      startTick: number;
+      /** Anzahl Asteroiden (0 = nur Extraktoren). */
+      asteroids: number;
+      /** Anzahl Extraktoren (0 = nur Asteroiden). */
+      extractors: number;
+      /** Ressource der Extraktoren (irrelevant wenn extractors === 0). */
+      resource: "met" | "kris";
+    }
+  /** @deprecated migrated to economy */
   | {
       id: string;
       kind: "extractors";
@@ -9,57 +22,27 @@ export type PlanEntry =
       startTick: number;
       count: number;
     }
+  /** @deprecated migrated to economy */
   | { id: string; kind: "asteroids"; startTick: number; count: number };
 
 export const defaults: {
   start_time: string;
   start_date: string;
+  /** Länge eines Ticks in Minuten (GN: normalerweise 15). */
+  tick_minutes: number;
+  /** Simulations-Horizont / Safety-Cap in Ticks. */
+  max_ticks: number;
   starting_resources: { metall: number; kristall: number };
   plan: PlanEntry[];
 } = {
-  start_time: "17:45",
+  start_time: "18:00",
   start_date: "2026-07-20",
+  tick_minutes: 15,
+  max_ticks: 5000,
   starting_resources: {
     metall: 10500,
     kristall: 10500,
   },
-  /**
-   * Legacy string-plan (pre tick-based planner). Kept as reference only.
-   *
-   * [
-   *   "Koloniezentrum",
-   *   "Bergbau",
-   *   "Metallmine",
-   *   "Kristallmine",
-   *   "Robotik",
-   *   "Zweite Metallmine",
-   *   "Zweite Kristallmine",
-   *   "Tiefe Metallminen",
-   *   "Tiefe Kristallminen",
-   *   "Fortgeschrittene Robotik",
-   *   "Raumfahrt",
-   *   "Vollautomatisierte Metallmine",
-   *   "Vollautomatisierte Kristallmine",
-   *   "Planetare Werften",
-   *   "Wiederverwendbare Trägersysteme",
-   *   "Raumstation",
-   *   "Bergbaulaser",
-   *   "Observatorium",
-   *   "Extraktor",
-   *   "Waffenfabriken",
-   *   "Fabriken für Raumantriebe",
-   *   "Raumwerften",
-   *   "Traktorstrahl",
-   *   "Militärischer Ionenantrieb",
-   *   "Kinetische Raketen",
-   *   "Kaperschiff",
-   *   "Marineakademie",
-   *   "Sektorscan",
-   *   "Longsteen Feld",
-   *   "Schildschiff",
-   *   "Fregatte",
-   * ]
-   */
   plan: [
     {
       id: "default_koloniezentrum",
@@ -116,310 +99,210 @@ export const defaults: {
       startTick: 16,
     },
     {
-      id: "tech_mrtlpqsf_eru9ll",
+      id: "tech_mrupldiq_gzl32m",
       kind: "tech",
       name: "Fortgeschrittene Robotik",
-      startTick: 25,
+      startTick: 24,
     },
     {
-      id: "tech_mrtlrpzy_zzebww",
+      id: "tech_mrupmso1_llr8pa",
       kind: "tech",
       name: "Raumfahrt",
-      startTick: 27,
+      startTick: 24,
     },
     {
-      id: "tech_mrtltmnb_crmg6s",
-      kind: "tech",
-      name: "Vollautomatisierte Metallmine",
-      startTick: 41,
-    },
-    {
-      id: "tech_mrtltr87_31hy3b",
-      kind: "tech",
-      name: "Vollautomatisierte Kristallmine",
-      startTick: 41,
-    },
-    {
-      id: "tech_mrtlujvj_mveepn",
+      id: "tech_mrupnkgx_nhtpwz",
       kind: "tech",
       name: "Planetare Werften",
-      startTick: 41,
+      startTick: 38,
     },
     {
-      id: "tech_mrtlvq6f_3mpf7m",
+      id: "tech_mrupnplu_p8p690",
+      kind: "tech",
+      name: "Vollautomatisierte Metallmine",
+      startTick: 40,
+    },
+    {
+      id: "tech_mrupns6y_py5ux1",
+      kind: "tech",
+      name: "Vollautomatisierte Kristallmine",
+      startTick: 40,
+    },
+    {
+      id: "tech_mrupo4oy_nzizr3",
       kind: "tech",
       name: "Wiederverwendbare Trägersysteme",
-      startTick: 65,
+      startTick: 62,
     },
     {
-      id: "tech_mrtlw5vz_bnfp7e",
-      kind: "tech",
-      name: "Raumstation",
-      startTick: 77,
-    },
-    {
-      id: "tech_mrtlwjm7_2edjc8",
+      id: "tech_mrupobex_cd2x36",
       kind: "tech",
       name: "Bergbaulaser",
-      startTick: 61,
+      startTick: 62,
     },
     {
-      id: "tech_mrtlxe3j_dho9ui",
+      id: "tech_mrupos8j_wwn9cq",
+      kind: "tech",
+      name: "Raumstation",
+      startTick: 74,
+    },
+    {
+      id: "tech_mrupoyih_zgpkew",
       kind: "tech",
       name: "Observatorium",
-      startTick: 77,
+      startTick: 74,
     },
     {
-      id: "tech_mrtlxv2e_j57qbw",
+      id: "tech_mruppj9l_088jh1",
       kind: "tech",
       name: "Extraktor",
-      startTick: 101,
+      startTick: 98,
     },
     {
-      id: "tech_mrtm05yv_mxtbao",
-      kind: "tech",
-      name: "Waffenfabriken",
-      startTick: 101,
-    },
-    {
-      id: "tech_mrtm0kb4_r3mv74",
+      id: "tech_mruqaz6j_pe4in1",
       kind: "tech",
       name: "Fabriken für Raumantriebe",
-      startTick: 110,
+      startTick: 98,
     },
     {
-      id: "tech_mrtm2xu7_2qkpys",
+      id: "tech_mruqbebf_z8ybhg",
       kind: "tech",
-      name: "Raumwerften",
-      startTick: 111,
+      name: "Waffenfabriken",
+      startTick: 105,
     },
     {
-      id: "ast_mrtm3ydj_8fx86y",
-      kind: "asteroids",
-      startTick: 121,
-      count: 4,
-    },
-    {
-      id: "ext_mrtm4go0_s2ffza",
-      kind: "extractors",
-      resource: "met",
-      startTick: 121,
-      count: 74,
-    },
-    {
-      id: "tech_mrtm6p5q_d14r16",
+      id: "tech_mruqdr0j_ychpqb",
       kind: "tech",
       name: "Traktorstrahl",
-      startTick: 149,
+      startTick: 153,
     },
     {
-      id: "tech_mrtm8h7b_440iuy",
+      id: "tech_mruqmmcs_1igb1b",
       kind: "tech",
-      name: "Kaperschiff",
-      startTick: 175,
+      name: "Raumwerften",
+      startTick: 126,
     },
     {
-      id: "tech_mrtm93mn_dbps8w",
-      kind: "tech",
-      name: "Longsteen Feld",
-      startTick: 217,
-    },
-    {
-      id: "tech_mrtm95v3_u3jflz",
-      kind: "tech",
-      name: "Schildschiff",
-      startTick: 253,
-    },
-    {
-      id: "tech_mrtm9y1j_d6ig8p",
-      kind: "tech",
-      name: "Marineakademie",
-      startTick: 181,
-    },
-    {
-      id: "tech_mrtmbtvb_mc8ufd",
-      kind: "tech",
-      name: "Sektorscan",
-      startTick: 200,
-    },
-    {
-      id: "recon_mrtmd053_qyz4ag",
-      kind: "recon",
-      name: "Scanverstärker",
-      startTick: 200,
-      count: 10,
-    },
-    {
-      id: "tech_mrtme41r_vi1kmb",
+      id: "tech_mruqs0tx_c64xam",
       kind: "tech",
       name: "Kinetische Raketen",
-      startTick: 149,
+      startTick: 153,
     },
     {
-      id: "tech_mrtmenjs_mq2puz",
+      id: "tech_mruqs9ks_estbk4",
       kind: "tech",
       name: "Militärischer Ionenantrieb",
-      startTick: 166,
+      startTick: 154,
     },
     {
-      id: "tech_mrtmim3r_ek3wl7",
+      id: "tech_mruqsjus_1o9s2i",
       kind: "tech",
-      name: "Fregatte",
-      startTick: 310,
+      name: "Kaperschiff",
+      startTick: 179,
     },
     {
-      id: "ast_mrtmjys7_amxo21",
-      kind: "asteroids",
-      startTick: 122,
-      count: 1,
-    },
-    {
-      id: "ext_mrtmkewf_c82jz3",
-      kind: "extractors",
-      resource: "met",
-      startTick: 122,
-      count: 3,
-    },
-    {
-      id: "ext_mrtml89j_pqqqzc",
-      kind: "extractors",
-      resource: "met",
-      startTick: 123,
-      count: 2,
-    },
-    {
-      id: "ext_mrtmm5vb_arbwia",
-      kind: "extractors",
-      resource: "met",
-      startTick: 124,
-      count: 3,
-    },
-    {
-      id: "ast_mrtmxewn_rngo00",
-      kind: "asteroids",
-      startTick: 149,
-      count: 5,
-    },
-    {
-      id: "ext_mrtmy62n_popdku",
-      kind: "extractors",
-      resource: "met",
-      startTick: 149,
-      count: 46,
-    },
-    {
-      id: "ext_mrtn0lbn_gqdcwv",
-      kind: "extractors",
-      resource: "met",
-      startTick: 166,
-      count: 28,
-    },
-    {
-      id: "ext_mrtn4l0f_ax7ats",
-      kind: "extractors",
-      resource: "met",
-      startTick: 175,
-      count: 14,
-    },
-    {
-      id: "ext_mrtn5hsn_wcgaex",
-      kind: "extractors",
-      resource: "met",
-      startTick: 181,
-      count: 8,
-    },
-    {
-      id: "unit_mrtn7wtr_gbsl90",
-      kind: "unit",
-      name: "Cleptor",
-      startTick: 217,
-      count: 400,
-    },
-    {
-      id: "ext_mrtncuxz_1rg83b",
-      kind: "extractors",
-      resource: "met",
-      startTick: 200,
-      count: 4,
-    },
-    {
-      id: "tech_mrtnj7wf_zyl96u",
+      id: "tech_mruqt0md_erdee5",
       kind: "tech",
-      name: "Abfangjäger",
-      startTick: 253,
-    },
-    {
-      id: "tech_mrtnkus0_pz5ssh",
-      kind: "tech",
-      name: "Planetarer Schild",
-      startTick: 253,
-    },
-    {
-      id: "tech_mrtnmcjs_8v7imf",
-      kind: "tech",
-      name: "Geschützscan",
-      startTick: 310,
-    },
-    {
-      id: "tech_mrtnn28g_e8smlj",
-      kind: "tech",
-      name: "Protonenantrieb",
-      startTick: 310,
-    },
-    {
-      id: "tech_mrtnni8h_uexw0r",
-      kind: "tech",
-      name: "Protonentorpedos",
+      name: "Longsteen Feld",
       startTick: 221,
     },
     {
-      id: "ast_mrtnthk8_aneh0c",
-      kind: "asteroids",
-      startTick: 253,
-      count: 20,
+      id: "tech_mruqt2w5_gm18k9",
+      kind: "tech",
+      name: "Schildschiff",
+      startTick: 257,
     },
     {
-      id: "ext_mrtntwcv_wnk1zf",
-      kind: "extractors",
+      id: "eco_mruqw5k4_cdhnus",
+      kind: "economy",
+      startTick: 118,
+      asteroids: 10,
+      extractors: 91,
       resource: "met",
-      startTick: 253,
-      count: 30,
     },
     {
-      id: "tech_mrtnzc89_6atso7",
+      id: "tech_mrusauj2_p5lcu0",
       kind: "tech",
-      name: "Artilleriesysteme",
-      startTick: 382,
+      name: "Marineakademie",
+      startTick: 185,
     },
     {
-      id: "tech_mrtnzl74_o0pdza",
+      id: "tech_mrusbre6_t75e5b",
       kind: "tech",
-      name: "Nachrichtenscan",
-      startTick: 382,
+      name: "Sektorscan",
+      startTick: 185,
     },
     {
-      id: "tech_mrto08zk_5gbngi",
-      kind: "tech",
-      name: "Leichtes Orbitalgeschütz",
-      startTick: 310,
+      id: "recon_mrusc8hy_1ww70g",
+      kind: "recon",
+      name: "Scanverstärker",
+      startTick: 187,
+      count: 10,
     },
     {
-      id: "tech_mrto0xcw_hl2vq3",
-      kind: "tech",
-      name: "Opto-elektrische Störfelder",
-      startTick: 382,
+      id: "eco_mrusi8l3_h9rdqx",
+      kind: "economy",
+      startTick: 126,
+      asteroids: 0,
+      extractors: 7,
+      resource: "met",
     },
     {
-      id: "tech_mrto15ex_6d6s7g",
-      kind: "tech",
-      name: "Zerstörer",
-      startTick: 454,
+      id: "eco_mrusl64z_whhcf7",
+      kind: "economy",
+      startTick: 153,
+      asteroids: 0,
+      extractors: 43,
+      resource: "met",
     },
     {
-      id: "tech_mrtocz1c_gdh987",
+      id: "unit_mrusnvx7_we2owy",
+      kind: "unit",
+      name: "Cleptor",
+      startTick: 221,
+      count: 400,
+    },
+    {
+      id: "eco_mrusq8ur_s83u6e",
+      kind: "economy",
+      startTick: 179,
+      asteroids: 0,
+      extractors: 38,
+      resource: "met",
+    },
+    {
+      id: "tech_mrutjq7q_pche80",
       kind: "tech",
-      name: "Bergungstechnologie",
-      startTick: 382,
+      name: "Abfangjäger",
+      startTick: 257,
+    },
+    {
+      id: "tech_mrutk29a_02cjer",
+      kind: "tech",
+      name: "Protonenantrieb",
+      startTick: 298,
+    },
+    {
+      id: "tech_mrutk71q_zlhl1h",
+      kind: "tech",
+      name: "Protonentorpedos",
+      startTick: 225,
+    },
+    {
+      id: "eco_mrutnkm6_i72vqb",
+      kind: "economy",
+      startTick: 221,
+      asteroids: 0,
+      extractors: 10,
+      resource: "met",
+    },
+    {
+      id: "eco_mruu6r4f_a8cn05",
+      kind: "economy",
+      startTick: 257,
+      asteroids: 20,
+      extractors: 43,
+      resource: "met",
     },
   ],
 };
