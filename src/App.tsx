@@ -622,6 +622,9 @@ export default function App() {
           startCfg={startCfg}
           plan={plan}
           nextAction={nextAction}
+          onApplyStart={({ start_date, start_time, tick_minutes }) => {
+            setStartCfg((prev) => ({ ...prev, start_date, start_time, tick_minutes }));
+          }}
           onReset={resetPlan}
         />
         <div className="grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]">

@@ -1,5 +1,5 @@
 import { JobList } from "@/components/overview/actionplan";
-import { ResetBtn } from "@/components/reset-btn";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { Badge } from "@/components/shadcn/badge";
 import { Separator } from "@/components/shadcn/separator";
 import {
@@ -19,15 +19,22 @@ export type HeaderProps = {
   startCfg: StartConfig;
   plan: PlanResult | null;
   nextAction: TickSnapshot | null;
+  onApplyStart: (next: { start_date: string; start_time: string; tick_minutes: number }) => void;
   onReset: () => void;
 };
 
-export function Header({ now, currentTick, startCfg, plan, nextAction, onReset }: HeaderProps) {
+export function Header({ now, currentTick, startCfg, plan, nextAction, onApplyStart, onReset }: HeaderProps) {
   return (
     <header className="shrink-0 border-b border-border">
       <div className="flex items-stretch gap-0 px-4">
         <div className="flex items-center gap-6 py-3 pr-6">
-          <ResetBtn onReset={onReset} />
+          <SettingsDialog
+            startDate={startCfg.start_date}
+            startTime={startCfg.start_time}
+            tickMinutes={startCfg.tick_minutes}
+            onApplyStart={onApplyStart}
+            onReset={onReset}
+          />
           <Separator orientation="vertical" />
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Uhrzeit</span>

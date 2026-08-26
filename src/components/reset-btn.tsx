@@ -22,8 +22,9 @@ export function ResetBtn({ onReset }: ResetBtnProps) {
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger render={<Button type="button" variant="destructive" size="icon-lg" aria-label="Plan zurücksetzen" />}>
-        <ListRestart />
+      <AlertDialogTrigger render={<Button type="button" variant="destructive" aria-label="Plan zurücksetzen" />}>
+        <ListRestart data-icon="inline-start" />
+        Zurücksetzen
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
