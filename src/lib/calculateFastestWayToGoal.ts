@@ -559,7 +559,7 @@ type PendingEconomy = {
  * Plan-getriebene Simulation:
  * - Jeder Plan-Eintrag hat desired startTick (User-Input)
  * - Tatsächlicher Start: max(desired, earliest feasible) — nie früher als desired
- * - Ressourcenkonflikte: Insertions-Reihenfolge (Array-Index)
+ * - Ressourcenkonflikte: früherer Wunsch-Tick hat Vorrang; gleicher Tick → Plan-Reihenfolge
  * - Unbegrenzt parallele Jobs
  */
 function simulatePlan(
@@ -662,6 +662,11 @@ function simulatePlan(
     }
   }
 
+  const startOrder = plan
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => a.entry.startTick - b.entry.startTick || a.index - b.index)
+    .map(({ entry }) => entry);
+
   const totalExtractors = () => extractorsMet + extractorsKris;
 
   const isReady = (name: string) => {
@@ -698,8 +703,8 @@ function simulatePlan(
     const finishedJobs: NamedJob[] = [];
     let spent: Res = { met: 0, kris: 0 };
 
-    // Insertion order: walk plan array
-    for (const entry of plan) {
+    // Earlier desired startTick first; same tick keeps plan order.
+    for (const entry of startOrder) {
       if (entry.kind === "tech") {
         const pending = pendingTechs.get(entry.name);
         if (!pending || pending.entryId !== entry.id) continue;
@@ -1094,7 +1099,7 @@ function simulatePlan(
 }
 
 /**
- * Berechnet den Zeitplan anhand der Plan-Einträge (desired startTick + Insertion-Order).
+ * Berechnet den Zeitplan anhand der Plan-Einträge (desired startTick als Priorität).
  */
 export function calculateFastestWayToGoal(startCfg: StartConfig): PlanResult {
   const map = byName(techtree);

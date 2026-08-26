@@ -1,3 +1,4 @@
+import { balanced } from "@/gn-data/plan-template/balanced";
 import { fastCleptor } from "@/gn-data/plan-template/fast_cleptor";
 import { fastRaumhafen } from "@/gn-data/plan-template/fast_raumhafen";
 
@@ -34,7 +35,7 @@ export type PlanTemplate = {
   plan: PlanEntry[];
 };
 
-export const planTemplates: PlanTemplate[] = [fastCleptor, fastRaumhafen];
+export const planTemplates: PlanTemplate[] = [balanced, fastCleptor, fastRaumhafen];
 
 export const defaults: {
   start_time: string;
@@ -54,5 +55,5 @@ export const defaults: {
     metall: 10500,
     kristall: 10500,
   },
-  plan: [...fastCleptor.plan],
+  plan: [...balanced.plan],
 };
