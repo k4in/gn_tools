@@ -14,15 +14,20 @@ import {
 import { Button } from "@/components/shadcn/button";
 
 export type ResetBtnProps = {
+  planLabel: string;
+  disabled?: boolean;
   onReset: () => void;
 };
 
-export function ResetBtn({ onReset }: ResetBtnProps) {
+export function ResetBtn({ planLabel, disabled, onReset }: ResetBtnProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger render={<Button type="button" variant="destructive" aria-label="Plan zurücksetzen" />}>
+      <AlertDialogTrigger
+        disabled={disabled}
+        render={<Button type="button" variant="destructive" aria-label="Plan zurücksetzen" />}
+      >
         <ListRestart data-icon="inline-start" />
         Zurücksetzen
       </AlertDialogTrigger>
@@ -30,8 +35,8 @@ export function ResetBtn({ onReset }: ResetBtnProps) {
         <AlertDialogHeader>
           <AlertDialogTitle>Plan zurücksetzen?</AlertDialogTitle>
           <AlertDialogDescription>
-            Der aktuelle Plan und alle Economy-Aufträge werden auf die Standardwerte zurückgesetzt. Diese Aktion kann nicht rückgängig
-            gemacht werden.
+            Der aktuelle Plan und alle Economy-Aufträge werden durch „{planLabel}“ ersetzt. Diese Aktion kann nicht
+            rückgängig gemacht werden.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

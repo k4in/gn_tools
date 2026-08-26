@@ -20,7 +20,7 @@ export type HeaderProps = {
   plan: PlanResult | null;
   nextAction: TickSnapshot | null;
   onApplyStart: (next: { start_date: string; start_time: string; tick_minutes: number }) => void;
-  onReset: () => void;
+  onReset: (templateId: string) => void;
 };
 
 export function Header({ now, currentTick, startCfg, plan, nextAction, onApplyStart, onReset }: HeaderProps) {

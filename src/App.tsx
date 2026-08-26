@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { defaults as defaultConfig } from "@/gn-data/plan";
+import { defaults as defaultConfig, planTemplates } from "@/gn-data/plan";
 import { Header } from "@/components/header";
 import { Overview } from "@/components/overview/overview";
+import { MY_PLAN_VIEW, PlanSwitcher, type PlanViewId } from "@/components/plan-switcher";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import {
   PlanEntryDialog,
@@ -258,6 +259,8 @@ function loadStoredConfig(): StartConfig {
 
 export default function App() {
   const [startCfg, setStartCfg] = useState<StartConfig>(() => loadStoredConfig());
+  const [viewId, setViewId] = useState<PlanViewId>(MY_PLAN_VIEW);
+  const viewingOwnPlan = viewId === MY_PLAN_VIEW;
 
   useEffect(() => {
     try {
@@ -267,27 +270,34 @@ export default function App() {
     }
   }, [startCfg]);
 
+  const viewCfg = useMemo((): StartConfig => {
+    if (viewingOwnPlan) return startCfg;
+    const template = planTemplates.find((item) => item.id === viewId);
+    if (!template) return startCfg;
+    return { ...startCfg, plan: template.plan };
+  }, [startCfg, viewId, viewingOwnPlan]);
+
   const plan = useMemo(() => {
     try {
-      return calculateFastestWayToGoal(startCfg);
+      return calculateFastestWayToGoal(viewCfg);
     } catch (err) {
       console.error(err);
       return null;
     }
-  }, [startCfg]);
+  }, [viewCfg]);
 
-  const unlocked = useMemo(() => getUnlockedTechs(startCfg.plan), [startCfg.plan]);
+  const unlocked = useMemo(() => getUnlockedTechs(viewCfg.plan), [viewCfg.plan]);
   const availableShips = useMemo(
-    () => getAvailableShips(startCfg.plan),
-    [startCfg.plan],
+    () => getAvailableShips(viewCfg.plan),
+    [viewCfg.plan],
   );
   const availableRecon = useMemo(
-    () => getAvailableRecon(startCfg.plan),
-    [startCfg.plan],
+    () => getAvailableRecon(viewCfg.plan),
+    [viewCfg.plan],
   );
 
-  const hasObservatorium = hasTechInPlan(startCfg.plan, "Observatorium");
-  const hasExtraktorTech = hasTechInPlan(startCfg.plan, "Extraktor");
+  const hasObservatorium = hasTechInPlan(viewCfg.plan, "Observatorium");
+  const hasExtraktorTech = hasTechInPlan(viewCfg.plan, "Extraktor");
 
   const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
@@ -316,6 +326,7 @@ export default function App() {
   const [editingEntry, setEditingEntry] = useState<PlanEntry | null>(null);
 
   const openAddTech = (name: string) => {
+    if (!viewingOwnPlan) return;
     const tech = byName().get(name);
     if (!tech) return;
     const defaultTick = getEarliestTechStartTick(startCfg, name);
@@ -326,6 +337,7 @@ export default function App() {
   };
 
   const openAddUnit = (name: string) => {
+    if (!viewingOwnPlan) return;
     const ship = availableShips.find((s) => s.name === name);
     if (!ship) return;
     const defaultTick = getEarliestBuildStartTick(startCfg, "unit", name);
@@ -349,6 +361,7 @@ export default function App() {
   };
 
   const openAddRecon = (name: string) => {
+    if (!viewingOwnPlan) return;
     const item = availableRecon.find((s) => s.name === name);
     if (!item) return;
     const defaultTick = getEarliestBuildStartTick(startCfg, "recon", name);
@@ -376,6 +389,7 @@ export default function App() {
     extractors?: number;
     resource?: "met" | "kris";
   } = {}) => {
+    if (!viewingOwnPlan) return;
     const defaultTick = Math.max(
       hasObservatorium ? getEarliestAsteroidStartTick(startCfg) : 0,
       hasExtraktorTech ? getEarliestExtractorStartTick(startCfg) : 0,
@@ -404,6 +418,7 @@ export default function App() {
   };
 
   const openEditEntry = (id: string) => {
+    if (!viewingOwnPlan) return;
     const entry = startCfg.plan.find((e) => e.id === id);
     if (!entry) return;
     setDialogMode("edit");
@@ -609,8 +624,18 @@ export default function App() {
     setEditingEntry(null);
   };
 
-  const resetPlan = () => {
-    setStartCfg(normalizeConfig(defaultConfig));
+  const resetPlan = (templateId: string) => {
+    const template = planTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    setStartCfg((prev) =>
+      normalizeConfig({
+        ...defaultConfig,
+        start_date: prev.start_date,
+        start_time: prev.start_time,
+        tick_minutes: prev.tick_minutes,
+        plan: template.plan,
+      }),
+    );
   };
 
   return (
@@ -627,18 +652,21 @@ export default function App() {
           }}
           onReset={resetPlan}
         />
-        <div className="grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]">
-          <Sidebar
-            unlocked={unlocked}
-            availableShips={availableShips}
-            availableRecon={availableRecon}
-            hasObservatorium={hasObservatorium}
-            hasExtraktorTech={hasExtraktorTech}
-            onAddTech={openAddTech}
-            onAddUnit={openAddUnit}
-            onAddRecon={openAddRecon}
-            onAddEconomy={openAddEconomy}
-          />
+        <PlanSwitcher viewId={viewId} onViewChange={setViewId} />
+        <div className={viewingOwnPlan ? "grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-1"}>
+          {viewingOwnPlan && (
+            <Sidebar
+              unlocked={unlocked}
+              availableShips={availableShips}
+              availableRecon={availableRecon}
+              hasObservatorium={hasObservatorium}
+              hasExtraktorTech={hasExtraktorTech}
+              onAddTech={openAddTech}
+              onAddUnit={openAddUnit}
+              onAddRecon={openAddRecon}
+              onAddEconomy={openAddEconomy}
+            />
+          )}
           <Overview
             actionTicks={actionTicks}
             logTicks={plan?.ticks ?? []}
@@ -646,9 +674,14 @@ export default function App() {
             maxTick={maxTick}
             currentTick={currentTick}
             hasPlan={!!plan}
-            onEditJob={(planEntryId) => {
-              if (planEntryId) openEditEntry(planEntryId);
-            }}
+            exportJson={viewingOwnPlan ? JSON.stringify(startCfg.plan, null, 2) : undefined}
+            onEditJob={
+              viewingOwnPlan
+                ? (planEntryId) => {
+                    if (planEntryId) openEditEntry(planEntryId);
+                  }
+                : undefined
+            }
           />
         </div>
 
