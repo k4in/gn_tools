@@ -68,7 +68,7 @@ export const balanced: PlanTemplate = {
       id: "tech_mrupmso1_llr8pa",
       kind: "tech",
       name: "Raumfahrt",
-      startTick: 24,
+      startTick: 25,
     },
     {
       id: "tech_mrupnkgx_nhtpwz",
@@ -98,7 +98,7 @@ export const balanced: PlanTemplate = {
       id: "tech_mrupobex_cd2x36",
       kind: "tech",
       name: "Bergbaulaser",
-      startTick: 62,
+      startTick: 63,
     },
     {
       id: "tech_mrupos8j_wwn9cq",
@@ -128,7 +128,7 @@ export const balanced: PlanTemplate = {
       id: "tech_mruqbebf_z8ybhg",
       kind: "tech",
       name: "Waffenfabriken",
-      startTick: 105,
+      startTick: 99,
     },
     {
       id: "tech_mruqdr0j_ychpqb",
@@ -140,7 +140,7 @@ export const balanced: PlanTemplate = {
       id: "tech_mruqmmcs_1igb1b",
       kind: "tech",
       name: "Raumwerften",
-      startTick: 126,
+      startTick: 127,
     },
     {
       id: "tech_mruqs0tx_c64xam",
@@ -175,7 +175,7 @@ export const balanced: PlanTemplate = {
     {
       id: "eco_mruqw5k4_cdhnus",
       kind: "economy",
-      startTick: 118,
+      startTick: 119,
       asteroids: 10,
       extractors: 91,
       resource: "met",
@@ -184,25 +184,25 @@ export const balanced: PlanTemplate = {
       id: "tech_mrusauj2_p5lcu0",
       kind: "tech",
       name: "Marineakademie",
-      startTick: 185,
+      startTick: 186,
     },
     {
       id: "tech_mrusbre6_t75e5b",
       kind: "tech",
       name: "Sektorscan",
-      startTick: 185,
+      startTick: 186,
     },
     {
       id: "recon_mrusc8hy_1ww70g",
       kind: "recon",
       name: "Scanverstärker",
-      startTick: 187,
+      startTick: 188,
       count: 10,
     },
     {
       id: "eco_mrusi8l3_h9rdqx",
       kind: "economy",
-      startTick: 126,
+      startTick: 127,
       asteroids: 0,
       extractors: 7,
       resource: "met",
@@ -210,7 +210,7 @@ export const balanced: PlanTemplate = {
     {
       id: "eco_mrusl64z_whhcf7",
       kind: "economy",
-      startTick: 153,
+      startTick: 154,
       asteroids: 0,
       extractors: 43,
       resource: "met",
@@ -225,7 +225,7 @@ export const balanced: PlanTemplate = {
     {
       id: "eco_mrusq8ur_s83u6e",
       kind: "economy",
-      startTick: 179,
+      startTick: 180,
       asteroids: 0,
       extractors: 38,
       resource: "met",
@@ -234,7 +234,7 @@ export const balanced: PlanTemplate = {
       id: "tech_mrutjq7q_pche80",
       kind: "tech",
       name: "Abfangjäger",
-      startTick: 257,
+      startTick: 258,
     },
     {
       id: "tech_mrutk29a_02cjer",
@@ -251,7 +251,7 @@ export const balanced: PlanTemplate = {
     {
       id: "eco_mrutnkm6_i72vqb",
       kind: "economy",
-      startTick: 221,
+      startTick: 222,
       asteroids: 0,
       extractors: 10,
       resource: "met",
@@ -259,10 +259,16 @@ export const balanced: PlanTemplate = {
     {
       id: "eco_mruu6r4f_a8cn05",
       kind: "economy",
-      startTick: 257,
+      startTick: 258,
       asteroids: 20,
       extractors: 43,
       resource: "met",
+    },
+    {
+      id: "tech_mtdgssn1_dv6u5z",
+      kind: "tech",
+      name: "Fregatte",
+      startTick: 299,
     },
   ] satisfies PlanEntry[],
 };

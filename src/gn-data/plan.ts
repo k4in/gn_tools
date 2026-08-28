@@ -47,7 +47,7 @@ export const defaults: {
   starting_resources: { metall: number; kristall: number };
   plan: PlanEntry[];
 } = {
-  start_time: "20:00",
+  start_time: "19:30",
   start_date: "2026-08-28",
   tick_minutes: 15,
   max_ticks: 5000,
