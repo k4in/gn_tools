@@ -16,7 +16,7 @@ Es gibt in Galaxy-Network 2 Ressourcen, Metall und Kristall.
 
 ## Koloniezentrum und Minen
 
-Die folgenden Werte sind absolut, nicht komulierend. Die Werte gelten immer ab dem nächsten Tick nach Fertigstellung. Hat man z.B. das Koloniezentrum und eine Kristallmine, bekommt man 500 Metall und 1000 Kristall pro Tick.
+Die folgenden Werte sind absolut, nicht komulierend. Minen gelten ab dem nächsten Tick nach Fertigstellung. Das Koloniezentrum ist die Ausnahme und liefert bereits im Fertigstellungs-Tick. Hat man z.B. das Koloniezentrum und eine Kristallmine, bekommt man 500 Metall und 1000 Kristall pro Tick.
 
 - Koloniezentrum: 500 Metall und 500 Kristall
 - Kristallmine: 1000 Kristall

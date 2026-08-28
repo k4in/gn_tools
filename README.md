@@ -82,7 +82,7 @@ Wollen zwei Aufträge im **selben Tick** starten und das Geld reicht nur für ei
 Ungefähr das, was für eine frische Kolonie zählt:
 
 - Startvorrat 10 500 Metall und 10 500 Kristall
-- Minen-Einkommen nach Fertigstellung
+- Minen-Einkommen ab dem Tick nach Fertigstellung (Koloniezentrum bereits im Fertigstellungs-Tick)
 - Asteroiden nach dem Observatorium (10 000 Kristall, 20 Extraktor-Plätze)
 - Extraktoren nach der Extraktor-Forschung (steigende Metallkosten, 50 Rohstoffe pro Tick)
 - die frühen Quest-Belohnungen bis zu den Extraktoren

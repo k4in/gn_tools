@@ -988,10 +988,13 @@ function simulatePlan(
       });
     }
 
-    // Income starts on the finish tick (endTick), not one tick later.
-    // e.g. Koloniezentrum 2 ticks from 17:45 → done at 18:15 and produces at 18:15.
+    // Mines produce from the tick after finish. Koloniezentrum is the exception:
+    // it already yields on the finish tick (21:30 done → 21:30 resources).
     const producing = new Set(
-      [...completed].filter((n) => (completedAt.get(n) ?? 0) <= t),
+      [...completed].filter((n) => {
+        const at = completedAt.get(n) ?? 0;
+        return n === "Koloniezentrum" ? at <= t : at < t;
+      }),
     );
     const mineIncome = incomeFrom(producing);
     const extIncome = totalExtractorIncome(extractorsMet, extractorsKris);
