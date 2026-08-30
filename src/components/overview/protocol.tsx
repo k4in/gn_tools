@@ -5,11 +5,12 @@ export type ProtocolProps = {
   ticks: TickSnapshot[];
   currentTick: number;
   hasPlan: boolean;
+  isActive?: boolean;
 };
 
-export function Protocol({ ticks, currentTick, hasPlan }: ProtocolProps) {
+export function Protocol({ ticks, currentTick, hasPlan, isActive = false }: ProtocolProps) {
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
-  return <TickTable ticks={ticks} currentTick={currentTick} />;
+  return <TickTable ticks={ticks} currentTick={currentTick} isActive={isActive} />;
 }

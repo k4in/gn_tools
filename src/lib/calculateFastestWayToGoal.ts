@@ -584,6 +584,7 @@ function simulatePlan(
   let extractorsMet = 0;
   let extractorsKris = 0;
   let extractorSlots = 0;
+  let scanverstaerker = 0;
 
   const entryActualStart: Record<string, number> = {};
   const entryFinishTicks: Record<string, number> = {};
@@ -893,10 +894,18 @@ function simulatePlan(
     return events;
   };
 
+  const noteFinishedRecon = (jobs: NamedJob[]) => {
+    for (const j of jobs) {
+      if (j.type !== "recon") continue;
+      const m = /^(\d+) Scanverstärker\b/.exec(j.name);
+      if (m) scanverstaerker += Number(m[1]);
+    }
+  };
+
   const claimReadyQuests = (): QuestEvent[] =>
     applyQuestRewards(
       evaluateQuests(
-        { completed, asteroids, extractorsMet, extractorsKris },
+        { completed, asteroids, extractorsMet, extractorsKris, scanverstaerker },
         claimedQuests,
       ),
     );
@@ -987,6 +996,7 @@ function simulatePlan(
         planEntryId: job.planEntryId,
       });
     }
+    noteFinishedRecon(finishedJobs);
 
     // Mines produce from the tick after finish. Koloniezentrum is the exception:
     // it already yields on the finish tick (21:30 done → 21:30 resources).
@@ -1011,6 +1021,7 @@ function simulatePlan(
     const questEventsEarly = claimReadyQuests();
 
     const { startedJobs, finishedJobs: instantFinished, spent } = tryStart(t);
+    noteFinishedRecon(instantFinished);
     const allFinished = [...finishedJobs, ...instantFinished];
 
     // e.g. 1 Asteroid + ≥10 Met-Ext → +10 free Kris-Ext, immediate this tick.

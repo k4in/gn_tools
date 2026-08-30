@@ -7,6 +7,7 @@ export type QuestContext = {
   asteroids: number;
   extractorsMet: number;
   extractorsKris: number;
+  scanverstaerker: number;
 };
 
 export type QuestDef = {
@@ -19,6 +20,10 @@ export type QuestDef = {
 
 function hasAll(completed: ReadonlySet<string>, names: string[]) {
   return names.every((n) => completed.has(n));
+}
+
+function hasAny(completed: ReadonlySet<string>, names: string[]) {
+  return names.some((n) => completed.has(n));
 }
 
 function resLabel(met: number, kris: number): string {
@@ -46,6 +51,11 @@ export const QUESTS: QuestDef[] = [
   ),
   resQuest("extraktor-research", 10000, 10000, (ctx) => ctx.completed.has("Extraktor")),
   resQuest("raumstation", 12000, 5000, (ctx) => ctx.completed.has("Raumstation")),
+  resQuest("sektorscan", 10000, 20000, (ctx) => ctx.completed.has("Sektorscan")),
+  resQuest("einheiten-oder-geschuetzscan", 25000, 20000, (ctx) =>
+    hasAny(ctx.completed, ["Einheitenscan", "Geschützscan"])
+  ),
+  resQuest("first-scanverstaerker", 10000, 25000, (ctx) => ctx.scanverstaerker >= 1),
   {
     id: "asteroid-met-extractors",
     label: "+10 K-Exen",
@@ -66,4 +76,4 @@ export function formatQuestReward(reward: QuestReward): string {
   return resLabel(reward.met, reward.kris) || "—";
 }
 
-export { hasAll };
+export { hasAll, hasAny };

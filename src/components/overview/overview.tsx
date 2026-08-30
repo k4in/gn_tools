@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ExportPlanDialog } from "@/components/export-plan-dialog";
 import { ActionPlan } from "@/components/overview/actionplan";
 import { Protocol } from "@/components/overview/protocol";
@@ -9,6 +10,8 @@ import {
   TabsTrigger,
 } from "@/components/shadcn/tabs";
 import type { Job, TickSnapshot } from "@/lib/calculateFastestWayToGoal";
+
+type OverviewTab = "timeline" | "log";
 
 export type OverviewProps = {
   actionTicks: TickSnapshot[];
@@ -31,9 +34,17 @@ export function Overview({
   exportJson,
   onEditJob,
 }: OverviewProps) {
+  const [tab, setTab] = useState<OverviewTab>("timeline");
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <Tabs defaultValue="timeline" className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          if (value === "timeline" || value === "log") setTab(value);
+        }}
+        className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
+      >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
           <TabsList>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
@@ -52,11 +63,17 @@ export function Overview({
               maxTick={maxTick}
               currentTick={currentTick}
               hasPlan={hasPlan}
+              isActive={tab === "timeline"}
               onEditJob={onEditJob}
             />
           </div>
           <div className="min-h-0 flex-[3] overflow-auto">
-            <ActionPlan ticks={actionTicks} currentTick={currentTick} hasPlan={hasPlan} />
+            <ActionPlan
+              ticks={actionTicks}
+              currentTick={currentTick}
+              hasPlan={hasPlan}
+              isActive={tab === "timeline"}
+            />
           </div>
         </TabsContent>
 
@@ -64,7 +81,12 @@ export function Overview({
           value="log"
           className="min-h-0 flex-1 overflow-auto data-hidden:hidden"
         >
-          <Protocol ticks={logTicks} currentTick={currentTick} hasPlan={hasPlan} />
+          <Protocol
+            ticks={logTicks}
+            currentTick={currentTick}
+            hasPlan={hasPlan}
+            isActive={tab === "log"}
+          />
         </TabsContent>
       </Tabs>
     </section>

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Job } from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
@@ -9,6 +10,7 @@ export type TimelineProps = {
   maxTick: number;
   currentTick: number;
   hasPlan: boolean;
+  isActive?: boolean;
   onEditJob?: (planEntryId: string | undefined) => void;
 };
 
@@ -17,8 +19,29 @@ export function Timeline({
   maxTick,
   currentTick,
   hasPlan,
+  isActive = false,
   onEditJob,
 }: TimelineProps) {
+  const xScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const total = Math.max(maxTick, 1);
+    const tick = Math.min(Math.max(currentTick, 0), total);
+    const id = requestAnimationFrame(() => {
+      const scroller = xScrollRef.current;
+      if (!scroller) return;
+      const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+      if (maxScroll <= 0) return;
+      scroller.scrollLeft = Math.max(
+        0,
+        (tick / total) * scroller.scrollWidth - scroller.clientWidth / 2,
+      );
+    });
+    return () => cancelAnimationFrame(id);
+    // Nur beim Öffnen des Tabs; currentTick stammt aus genau diesem Render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
@@ -107,7 +130,7 @@ export function Timeline({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="overflow-x-auto px-3 pt-3 pb-2">
+        <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
           <div
             className="relative"
             style={{

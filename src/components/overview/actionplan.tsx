@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { useScrollIntoViewWhenActive } from "@/components/overview/use-scroll-when-active";
 import {
   Table,
   TableBody,
@@ -138,10 +139,15 @@ function TruncateCell({
 export function TickTable({
   ticks,
   currentTick,
+  isActive = false,
 }: {
   ticks: TickSnapshot[];
   currentTick: number;
+  isActive?: boolean;
 }) {
+  const currentRowRef = useRef<HTMLTableRowElement>(null);
+  useScrollIntoViewWhenActive(isActive, currentRowRef);
+
   const highlightTick = ticks.reduce<number | null>((best, t) => {
     if (t.tick > currentTick) return best;
     if (best === null || t.tick > best) return t.tick;
@@ -178,7 +184,7 @@ export function TickTable({
         {ticks.map((t) => {
           const isCurrent = highlightTick !== null && t.tick === highlightTick;
           return (
-            <TableRow key={t.tick}>
+            <TableRow key={t.tick} ref={isCurrent ? currentRowRef : undefined}>
               <TableCell className="tabular-nums">{t.tick}</TableCell>
               <TableCell className={cn("tabular-nums", isCurrent && "text-green-500")}>
                 {t.clockLabel}
@@ -231,10 +237,14 @@ export type ActionPlanProps = {
   ticks: TickSnapshot[];
   currentTick: number;
   hasPlan: boolean;
+  isActive?: boolean;
 };
 
 /** Kompakter Auftragsplan: Tick · Uhrzeit · Auftrag */
-export function ActionPlan({ ticks, currentTick, hasPlan }: ActionPlanProps) {
+export function ActionPlan({ ticks, currentTick, hasPlan, isActive = false }: ActionPlanProps) {
+  const currentRowRef = useRef<HTMLTableRowElement>(null);
+  useScrollIntoViewWhenActive(isActive, currentRowRef);
+
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
@@ -255,7 +265,7 @@ export function ActionPlan({ ticks, currentTick, hasPlan }: ActionPlanProps) {
         {ticks.map((t) => {
           const isNext = nextTick !== null && t.tick === nextTick;
           return (
-            <TableRow key={t.tick}>
+            <TableRow key={t.tick} ref={isNext ? currentRowRef : undefined}>
               <TableCell className={cn(isNext && "text-green-500")}>
                 {t.tick}
               </TableCell>
