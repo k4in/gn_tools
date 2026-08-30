@@ -180,9 +180,10 @@ export function Timeline({
                         "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-inset",
                         isBuilding && "bg-amber-500/20 text-amber-300 ring-amber-500/40",
                         isResearch && "bg-fuchsia-500/20 text-fuchsia-300 ring-fuchsia-500/40",
-                        s.type === "unit" && "bg-sky-500/20 text-sky-300 ring-sky-500/40",
-                        s.type === "recon" && "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40",
+                        (s.type === "unit" || s.type === "recon") &&
+                          "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40",
                         s.type === "economy" && "bg-cyan-500/20 text-cyan-300 ring-cyan-500/40",
+                        s.type === "custom" && "bg-silver-500/20 text-silver-500 ring-silver-500/40",
                         clickable && "cursor-pointer hover:brightness-125",
                         !clickable && "cursor-default",
                       )}

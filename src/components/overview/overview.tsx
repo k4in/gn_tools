@@ -9,7 +9,11 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/shadcn/tabs";
-import type { Job, TickSnapshot } from "@/lib/calculateFastestWayToGoal";
+import type {
+  ExtractorSlotShortage,
+  Job,
+  TickSnapshot,
+} from "@/lib/calculateFastestWayToGoal";
 
 type OverviewTab = "timeline" | "log";
 
@@ -22,6 +26,7 @@ export type OverviewProps = {
   hasPlan: boolean;
   exportJson?: string;
   onEditJob?: (planEntryId: string | undefined) => void;
+  slotShortage?: ExtractorSlotShortage | null;
 };
 
 export function Overview({
@@ -33,6 +38,7 @@ export function Overview({
   hasPlan,
   exportJson,
   onEditJob,
+  slotShortage = null,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("timeline");
 
@@ -46,10 +52,29 @@ export function Overview({
         className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <TabsList>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="log">Tick-Protokoll</TabsTrigger>
-          </TabsList>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <TabsList>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="log">Tick-Protokoll</TabsTrigger>
+            </TabsList>
+            {slotShortage && (
+              <p role="alert" className="min-w-0 truncate text-xs text-destructive">
+                Zu wenig Asteroidenplätze: {slotShortage.extractors} Extraktoren, aber nur{" "}
+                {slotShortage.slots} Plätze ({slotShortage.asteroids}{" "}
+                {slotShortage.asteroids === 1 ? "Asteroid" : "Asteroiden"}).{" "}
+                {slotShortage.unslotted}{" "}
+                {slotShortage.unslotted === 1 ? "Extraktor steht" : "Extraktoren stehen"} ohne
+                Platz und {slotShortage.unslotted === 1 ? "liefert" : "liefern"} keine Rohstoffe
+                {slotShortage.asteroidsNeeded > 0
+                  ? ` — es ${
+                      slotShortage.asteroidsNeeded === 1
+                        ? "fehlt 1 Asteroid"
+                        : `fehlen ${slotShortage.asteroidsNeeded} Asteroiden`
+                    }.`
+                  : "."}
+              </p>
+            )}
+          </div>
           {exportJson !== undefined && <ExportPlanDialog json={exportJson} />}
         </div>
 

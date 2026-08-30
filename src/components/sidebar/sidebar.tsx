@@ -1,3 +1,4 @@
+import { Custom } from "@/components/sidebar/custom";
 import { Recon } from "@/components/sidebar/recon";
 import { Resources } from "@/components/sidebar/resources";
 import { Tech } from "@/components/sidebar/tech";
@@ -26,6 +27,7 @@ export type SidebarProps = {
     extractors?: number;
     resource?: "met" | "kris";
   }) => void;
+  onAddCustom: () => void;
 };
 
 export function Sidebar({
@@ -38,16 +40,18 @@ export function Sidebar({
   onAddUnit,
   onAddRecon,
   onAddEconomy,
+  onAddCustom,
 }: SidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border">
       <Tabs defaultValue="tech" className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="border-b border-border px-3 py-2">
-          <TabsList>
+          <TabsList className="w-full">
             <TabsTrigger value="tech">Tech</TabsTrigger>
             <TabsTrigger value="resources">Extraktoren</TabsTrigger>
             <TabsTrigger value="units">Einheiten</TabsTrigger>
             <TabsTrigger value="recon">Aufklärung</TabsTrigger>
+            <TabsTrigger value="custom">Custom</TabsTrigger>
           </TabsList>
         </div>
 
@@ -81,6 +85,13 @@ export function Sidebar({
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
           <Recon items={availableRecon} onAdd={onAddRecon} />
+        </TabsContent>
+
+        <TabsContent
+          value="custom"
+          className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
+        >
+          <Custom onAddCustom={onAddCustom} />
         </TabsContent>
       </Tabs>
     </aside>

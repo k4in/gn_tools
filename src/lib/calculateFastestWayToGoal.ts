@@ -66,7 +66,7 @@ function maxTicksOf(startCfg: StartConfig) {
 
 export type Res = { met: number; kris: number };
 
-export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon";
+export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom";
 
 export type Job = {
   name: string;
@@ -126,10 +126,22 @@ export type PlanResult = {
   asteroids: number;
   extractorsMet: number;
   extractorsKris: number;
+  extractorSlots: number;
+  extractorsMetProducing: number;
+  extractorsKrisProducing: number;
+  unslottedExtractors: number;
   /** Tatsächlicher Start-Tick je Plan-Eintrag-id. */
   entryActualStart: Record<string, number>;
   /** Fertigstellungs-Tick je Plan-Eintrag-id. */
   entryFinishTicks: Record<string, number>;
+};
+
+export type ExtractorSlotShortage = {
+  extractors: number;
+  slots: number;
+  unslotted: number;
+  asteroids: number;
+  asteroidsNeeded: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -372,6 +384,8 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return formatExtractorLabel(entry.resource, entry.count);
     case "asteroids":
       return formatAsteroidLabel(entry.count);
+    case "custom":
+      return entry.label.trim() || "Custom";
   }
 }
 
@@ -417,10 +431,46 @@ export function maxAffordableExtractors(opts: {
   return canBuild;
 }
 
-function totalExtractorIncome(extractorsMet: number, extractorsKris: number): Res {
+function slottedExtractorStats(
+  queue: Array<"met" | "kris">,
+  slots: number,
+): {
+  income: Res;
+  producingMet: number;
+  producingKris: number;
+  unslotted: number;
+} {
+  let producingMet = 0;
+  let producingKris = 0;
+  const cap = Math.max(0, slots);
+  const producingCount = Math.min(queue.length, cap);
+  for (let i = 0; i < producingCount; i++) {
+    if (queue[i] === "met") producingMet += 1;
+    else producingKris += 1;
+  }
   return {
-    met: extractorsMet * EXTRACTOR_INCOME_PER_UNIT,
-    kris: extractorsKris * EXTRACTOR_INCOME_PER_UNIT,
+    income: {
+      met: producingMet * EXTRACTOR_INCOME_PER_UNIT,
+      kris: producingKris * EXTRACTOR_INCOME_PER_UNIT,
+    },
+    producingMet,
+    producingKris,
+    unslotted: Math.max(0, queue.length - cap),
+  };
+}
+
+export function getExtractorSlotShortage(
+  plan: PlanResult,
+): ExtractorSlotShortage | null {
+  if (plan.unslottedExtractors <= 0) return null;
+  const extractors = plan.extractorsMet + plan.extractorsKris;
+  const needed = getRequiredAsteroidAmount(extractors);
+  return {
+    extractors,
+    slots: plan.extractorSlots,
+    unslotted: plan.unslottedExtractors,
+    asteroids: plan.asteroids,
+    asteroidsNeeded: Math.max(0, needed - plan.asteroids),
   };
 }
 
@@ -555,6 +605,14 @@ type PendingEconomy = {
   desiredTick: number;
 };
 
+type PendingCustom = {
+  entryId: string;
+  label: string;
+  cost: Res;
+  desiredTick: number;
+  done: boolean;
+};
+
 /**
  * Plan-getriebene Simulation:
  * - Jeder Plan-Eintrag hat desired startTick (User-Input)
@@ -584,6 +642,7 @@ function simulatePlan(
   let extractorsMet = 0;
   let extractorsKris = 0;
   let extractorSlots = 0;
+  const extractorQueue: Array<"met" | "kris"> = [];
   let scanverstaerker = 0;
 
   const entryActualStart: Record<string, number> = {};
@@ -605,6 +664,7 @@ function simulatePlan(
 
   const pendingUnits: PendingUnit[] = [];
   const pendingEconomy: PendingEconomy[] = [];
+  const pendingCustom: PendingCustom[] = [];
 
   for (const e of plan) {
     if (e.kind === "unit") {
@@ -660,6 +720,17 @@ function simulatePlan(
         remainingExtractors: 0,
         desiredTick: e.startTick,
       });
+    } else if (e.kind === "custom") {
+      pendingCustom.push({
+        entryId: e.id,
+        label: e.label.trim() || "Custom",
+        cost: {
+          met: Math.max(0, e.cost.met),
+          kris: Math.max(0, e.cost.kris),
+        },
+        desiredTick: e.startTick,
+        done: false,
+      });
     }
   }
 
@@ -685,6 +756,7 @@ function simulatePlan(
     ) {
       return false;
     }
+    if (pendingCustom.some((c) => !c.done)) return false;
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
     return true;
@@ -833,10 +905,7 @@ function simulatePlan(
         }
 
         if (pending.remainingExtractors > 0 && completed.has("Extraktor")) {
-          while (
-            pending.remainingExtractors > 0 &&
-            totalExtractors() < extractorSlots
-          ) {
+          while (pending.remainingExtractors > 0) {
             const nextIndex = totalExtractors() + 1;
             const cost = { met: extractorUnitCost(nextIndex), kris: 0 };
             if (!canAfford(res, cost)) break;
@@ -844,6 +913,7 @@ function simulatePlan(
             spent = addRes(spent, cost);
             if (pending.resource === "met") extractorsMet += 1;
             else extractorsKris += 1;
+            extractorQueue.push(pending.resource);
             pending.remainingExtractors -= 1;
             didWork = true;
             const label =
@@ -872,6 +942,39 @@ function simulatePlan(
         ) {
           markEntryFinish(entry.id, tick);
         }
+        continue;
+      }
+
+      if (entry.kind === "custom") {
+        const pending = pendingCustom.find((p) => p.entryId === entry.id);
+        if (!pending || pending.done) continue;
+        if (tick < pending.desiredTick) continue;
+        if (!canAfford(res, pending.cost)) continue;
+
+        res = pay(res, pending.cost);
+        spent = addRes(spent, pending.cost);
+        const job: Job = {
+          name: pending.label,
+          type: "custom",
+          startTick: tick,
+          endTick: tick,
+          cost: pending.cost,
+          planEntryId: entry.id,
+        };
+        steps.push(job);
+        startedJobs.push({
+          name: pending.label,
+          type: "custom",
+          planEntryId: entry.id,
+        });
+        finishedJobs.push({
+          name: pending.label,
+          type: "custom",
+          planEntryId: entry.id,
+        });
+        markEntryStart(entry.id, tick);
+        markEntryFinish(entry.id, tick);
+        pending.done = true;
       }
     }
 
@@ -886,8 +989,10 @@ function simulatePlan(
         res = addRes(res, { met: q.reward.met, kris: q.reward.kris });
       } else if (q.reward.resource === "met") {
         extractorsMet += q.reward.count;
+        for (let i = 0; i < q.reward.count; i++) extractorQueue.push("met");
       } else {
         extractorsKris += q.reward.count;
+        for (let i = 0; i < q.reward.count; i++) extractorQueue.push("kris");
       }
       events.push({ id: q.id, label: q.label, reward: q.reward });
     }
@@ -939,20 +1044,27 @@ function simulatePlan(
     extractorsKris,
   });
 
-  const resultAt = (finishTick: number) => ({
-    goal: techEntries.at(-1)?.name ?? (plan.length ? formatPlanEntryLabel(plan[plan.length - 1]!) : "Plan"),
-    finishTick,
-    steps,
-    ticks,
-    targetSet: techEntries.map((e) => e.name),
-    peakWaitTicks,
-    finalRes: res,
-    asteroids,
-    extractorsMet,
-    extractorsKris,
-    entryActualStart: { ...entryActualStart },
-    entryFinishTicks: { ...entryFinishTicks },
-  });
+  const resultAt = (finishTick: number) => {
+    const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
+    return {
+      goal: techEntries.at(-1)?.name ?? (plan.length ? formatPlanEntryLabel(plan[plan.length - 1]!) : "Plan"),
+      finishTick,
+      steps,
+      ticks,
+      targetSet: techEntries.map((e) => e.name),
+      peakWaitTicks,
+      finalRes: res,
+      asteroids,
+      extractorsMet,
+      extractorsKris,
+      extractorSlots,
+      extractorsMetProducing: slotted.producingMet,
+      extractorsKrisProducing: slotted.producingKris,
+      unslottedExtractors: slotted.unslotted,
+      entryActualStart: { ...entryActualStart },
+      entryFinishTicks: { ...entryFinishTicks },
+    };
+  };
 
   // Empty plan
   if (plan.length === 0) {
@@ -1007,7 +1119,7 @@ function simulatePlan(
       }),
     );
     const mineIncome = incomeFrom(producing);
-    const extIncome = totalExtractorIncome(extractorsMet, extractorsKris);
+    const extIncome = slottedExtractorStats(extractorQueue, extractorSlots).income;
     const income: Res = {
       met: mineIncome.met + extIncome.met,
       kris: mineIncome.kris + extIncome.kris,
@@ -1083,23 +1195,32 @@ function simulatePlan(
         const stuckExt =
           p.remainingExtractors > 0 &&
           (!completed.has("Extraktor") ||
-            totalExtractors() >= extractorSlots ||
             res.met < extractorUnitCost(totalExtractors() + 1));
         return stuckAst || stuckExt;
       });
       const hasPendingEco = pendingEconomy.some(
         (p) => p.remainingAsteroids > 0 || p.remainingExtractors > 0,
       );
+      const hasPendingCustom = pendingCustom.some((p) => !p.done);
+      const stuckCustom = pendingCustom.some((p) => {
+        if (p.done || t < p.desiredTick) return false;
+        return !canAfford(res, p.cost);
+      });
       if (
         (pendingTechs.size > 0 ||
           pendingUnits.some((u) => u.remaining > 0) ||
-          hasPendingEco) &&
-        (stuckTech || stuckEco || pendingUnits.some((u) => u.remaining > 0))
+          hasPendingEco ||
+          hasPendingCustom) &&
+        (stuckTech ||
+          stuckEco ||
+          stuckCustom ||
+          pendingUnits.some((u) => u.remaining > 0))
       ) {
         // If purely waiting for income that will never come
         const anyFutureIncome =
           [...completed].some((n) => INCOME_BY_BUILDING[n]) ||
-          extractorsMet + extractorsKris > 0;
+          slottedExtractorStats(extractorQueue, extractorSlots).unslotted <
+            extractorQueue.length;
         if (!anyFutureIncome) {
           throw new Error(
             `Plan nicht erreichbar: keine Produktion und unzureichende Ressourcen bei Tick ${t}`,
@@ -1205,8 +1326,8 @@ function estimateSteadyIncome(plan: PlanResult): Res {
   );
   const mine = incomeFrom(completed);
   return {
-    met: mine.met + plan.extractorsMet * EXTRACTOR_INCOME_PER_UNIT,
-    kris: mine.kris + plan.extractorsKris * EXTRACTOR_INCOME_PER_UNIT,
+    met: mine.met + plan.extractorsMetProducing * EXTRACTOR_INCOME_PER_UNIT,
+    kris: mine.kris + plan.extractorsKrisProducing * EXTRACTOR_INCOME_PER_UNIT,
   };
 }
 

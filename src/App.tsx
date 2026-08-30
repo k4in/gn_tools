@@ -17,6 +17,7 @@ import {
   getEarliestBuildStartTick,
   getEarliestExtractorStartTick,
   getEarliestTechStartTick,
+  getExtractorSlotShortage,
   getMaxBuildCountAtTick,
   extractorBatchCost,
   getMaxExtractorsAtTick,
@@ -77,6 +78,18 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       );
     case "asteroids":
       return typeof o.count === "number" && o.count > 0;
+    case "custom": {
+      if (typeof o.label !== "string" || !o.label.trim()) return false;
+      const cost = o.cost;
+      if (!cost || typeof cost !== "object") return false;
+      const c = cost as Record<string, unknown>;
+      if (typeof c.met !== "number" || !Number.isFinite(c.met)) return false;
+      if (typeof c.kris !== "number" || !Number.isFinite(c.kris)) return false;
+      c.met = Math.max(0, Math.floor(c.met));
+      c.kris = Math.max(0, Math.floor(c.kris));
+      o.label = o.label.trim();
+      return true;
+    }
     default:
       return false;
   }
@@ -138,6 +151,19 @@ function normalizePlan(raw: unknown): PlanEntry[] {
     if (e.kind === "economy" || e.kind === "asteroids" || e.kind === "extractors") {
       const eco = toEconomyEntry(e);
       if (eco) out.push(eco);
+      continue;
+    }
+    if (e.kind === "custom") {
+      out.push({
+        id: e.id,
+        kind: "custom",
+        startTick: Math.max(0, Math.floor(e.startTick)),
+        label: e.label.trim(),
+        cost: {
+          met: Math.max(0, Math.floor(e.cost.met)),
+          kris: Math.max(0, Math.floor(e.cost.kris)),
+        },
+      });
       continue;
     }
     out.push({
@@ -417,6 +443,20 @@ export default function App() {
     setDialogOpen(true);
   };
 
+  const openAddCustom = () => {
+    if (!viewingOwnPlan) return;
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "custom",
+      defaultTick: Math.max(0, currentTick),
+      defaultLabel: "",
+      defaultMet: 0,
+      defaultKris: 0,
+    });
+    setDialogOpen(true);
+  };
+
   const openEditEntry = (id: string) => {
     if (!viewingOwnPlan) return;
     const entry = startCfg.plan.find((e) => e.id === id);
@@ -511,6 +551,14 @@ export default function App() {
         canExtractors: hasExtraktorTech,
         costKrisPerAsteroid: ASTEROID_COST.kris,
       });
+    } else if (entry.kind === "custom") {
+      setDialogTarget({
+        kind: "custom",
+        defaultTick: entry.startTick,
+        defaultLabel: entry.label,
+        defaultMet: entry.cost.met,
+        defaultKris: entry.cost.kris,
+      });
     }
     setDialogOpen(true);
   };
@@ -521,6 +569,8 @@ export default function App() {
     resource?: "met" | "kris";
     asteroids?: number;
     extractors?: number;
+    label?: string;
+    cost?: { met: number; kris: number };
   }) => {
     if (!dialogTarget) return;
 
@@ -546,6 +596,17 @@ export default function App() {
               asteroids,
               extractors,
               resource: values.resource ?? "met",
+            };
+          }
+          if (e.kind === "custom") {
+            return {
+              ...e,
+              startTick: values.startTick,
+              label: (values.label ?? e.label).trim() || e.label,
+              cost: {
+                met: Math.max(0, values.cost?.met ?? e.cost.met),
+                kris: Math.max(0, values.cost?.kris ?? e.cost.kris),
+              },
             };
           }
           return {
@@ -611,6 +672,23 @@ export default function App() {
         resource: values.resource ?? dialogTarget.resource,
       };
       setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      return;
+    }
+
+    if (dialogTarget.kind === "custom") {
+      const label = (values.label ?? "").trim();
+      if (!label) return;
+      const entry: PlanEntry = {
+        id: newPlanEntryId("custom"),
+        kind: "custom",
+        startTick: values.startTick,
+        label,
+        cost: {
+          met: Math.max(0, values.cost?.met ?? 0),
+          kris: Math.max(0, values.cost?.kris ?? 0),
+        },
+      };
+      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
     }
   };
 
@@ -665,6 +743,7 @@ export default function App() {
               onAddUnit={openAddUnit}
               onAddRecon={openAddRecon}
               onAddEconomy={openAddEconomy}
+              onAddCustom={openAddCustom}
             />
           )}
           <Overview
@@ -674,6 +753,7 @@ export default function App() {
             maxTick={maxTick}
             currentTick={currentTick}
             hasPlan={!!plan}
+            slotShortage={plan ? getExtractorSlotShortage(plan) : null}
             exportJson={viewingOwnPlan ? JSON.stringify(startCfg.plan, null, 2) : undefined}
             onEditJob={
               viewingOwnPlan

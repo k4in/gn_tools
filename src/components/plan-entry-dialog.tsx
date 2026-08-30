@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/shadcn/dialog";
 import { Field, FieldLabel } from "@/components/shadcn/field";
+import { Input } from "@/components/shadcn/input";
 import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group";
 import {
   ASTEROID_COST,
@@ -60,10 +61,19 @@ type EconomyTarget = {
   costKrisPerAsteroid: number;
 };
 
+type CustomTarget = {
+  kind: "custom";
+  defaultTick: number;
+  defaultLabel: string;
+  defaultMet: number;
+  defaultKris: number;
+};
+
 export type PlanEntryDialogTarget =
   | TechTarget
   | CountableTarget
-  | EconomyTarget;
+  | EconomyTarget
+  | CustomTarget;
 
 export type PlanEntryDialogSubmit = {
   startTick: number;
@@ -71,6 +81,8 @@ export type PlanEntryDialogSubmit = {
   resource?: "met" | "kris";
   asteroids?: number;
   extractors?: number;
+  label?: string;
+  cost?: { met: number; kris: number };
 };
 
 export type PlanEntryDialogProps = {
@@ -110,6 +122,9 @@ export function PlanEntryDialog({
   const [asteroidCount, setAsteroidCount] = useState(0);
   const [extractorCount, setExtractorCount] = useState(0);
   const [resource, setResource] = useState<"met" | "kris">("met");
+  const [label, setLabel] = useState("");
+  const [met, setMet] = useState(0);
+  const [kris, setKris] = useState(0);
 
   useEffect(() => {
     if (!open || !target) return;
@@ -133,6 +148,12 @@ export function PlanEntryDialog({
         setResource(entry.resource);
         return;
       }
+      if (entry.kind === "custom") {
+        setLabel(entry.label);
+        setMet(Math.max(0, entry.cost.met));
+        setKris(Math.max(0, entry.cost.kris));
+        return;
+      }
       if ("count" in entry) setCount(entry.count);
       return;
     }
@@ -144,6 +165,10 @@ export function PlanEntryDialog({
       setAsteroidCount(Math.max(0, target.defaultAsteroids));
       setExtractorCount(Math.max(0, target.defaultExtractors));
       setResource(target.resource);
+    } else if (target.kind === "custom") {
+      setLabel(target.defaultLabel);
+      setMet(Math.max(0, target.defaultMet));
+      setKris(Math.max(0, target.defaultKris));
     } else {
       setCount(1);
     }
@@ -213,6 +238,7 @@ export function PlanEntryDialog({
   const title = (() => {
     if (target.kind === "tech") return target.tech.name;
     if (target.kind === "unit" || target.kind === "recon") return target.name;
+    if (target.kind === "custom") return label.trim() || "Custom-Ausgabe";
     return "Asteroiden & Extraktoren";
   })();
 
@@ -228,8 +254,10 @@ export function PlanEntryDialog({
       if (a <= 0 && e <= 0) return false;
       if (a > 0 && !target.canAsteroids) return false;
       if (e > 0 && !target.canExtractors) return false;
-      if (economyCosts && e > economyCosts.maxExtractors) return false;
       return true;
+    }
+    if (target.kind === "custom") {
+      return label.trim().length > 0 && met >= 0 && kris >= 0;
     }
     return false;
   })();
@@ -244,6 +272,12 @@ export function PlanEntryDialog({
         asteroids: Math.max(0, asteroidCount),
         extractors: Math.max(0, extractorCount),
         resource,
+      });
+    } else if (target.kind === "custom") {
+      onSubmit({
+        startTick,
+        label: label.trim(),
+        cost: { met: Math.max(0, met), kris: Math.max(0, kris) },
       });
     } else {
       onSubmit({ startTick, count: Math.max(1, count) });
@@ -334,7 +368,7 @@ export function PlanEntryDialog({
                 economyCosts &&
                 extractorCount > economyCosts.maxExtractors && (
                   <p className="text-amber-500">
-                    Zu viele Extraktoren — begrenzt durch Slots und/oder Metall bei diesem Tick.
+                    Mehr Extraktoren als Slots/Metall bei diesem Tick — ohne Asteroidenplatz liefern sie keine Rohstoffe.
                   </p>
                 )}
               {asteroidCount > 0 && !target.canAsteroids && (
@@ -344,6 +378,19 @@ export function PlanEntryDialog({
                 <p className="text-amber-500">Extraktor-Tech fehlt im Plan.</p>
               )}
             </div>
+          )}
+
+          {target.kind === "custom" && (
+            <Field className="w-full">
+              <FieldLabel htmlFor="plan-custom-label">Label</FieldLabel>
+              <Input
+                id="plan-custom-label"
+                type="text"
+                value={label}
+                placeholder="z.B. Scans, Umzug"
+                onChange={(e) => setLabel(e.target.value)}
+              />
+            </Field>
           )}
 
           <div className="flex flex-wrap items-end gap-3">
@@ -384,6 +431,45 @@ export function PlanEntryDialog({
                   />
                 </InputGroup>
               </Field>
+            )}
+
+            {target.kind === "custom" && (
+              <>
+                <Field className="w-28">
+                  <FieldLabel htmlFor="plan-custom-met">Metall</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-custom-met"
+                      type="number"
+                      min={0}
+                      value={met}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setMet(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field className="w-28">
+                  <FieldLabel htmlFor="plan-custom-kris">Kristall</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-custom-kris"
+                      type="number"
+                      min={0}
+                      value={kris}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setKris(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+              </>
             )}
 
             {target.kind === "economy" && (

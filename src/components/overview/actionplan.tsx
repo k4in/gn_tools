@@ -20,8 +20,8 @@ export type DisplayJob = { name: string; type: JobKind; suffix?: string };
 export function jobTypeClass(type: JobKind) {
   if (type === "building") return "text-amber-500";
   if (type === "research") return "text-fuchsia-500";
-  if (type === "unit") return "text-sky-400";
-  if (type === "recon") return "text-emerald-400";
+  if (type === "unit" || type === "recon") return "text-emerald-400";
+  if (type === "custom") return "text-silver-500";
   return "text-sky-500";
 }
 

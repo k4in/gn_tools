@@ -18,6 +18,14 @@ export type PlanEntry =
       /** Ressource der Extraktoren (irrelevant wenn extractors === 0). */
       resource: "met" | "kris";
     }
+  /** Beliebige Ressourcen-Ausgabe mit Label (instant). */
+  | {
+      id: string;
+      kind: "custom";
+      startTick: number;
+      label: string;
+      cost: { met: number; kris: number };
+    }
   /** @deprecated migrated to economy */
   | {
       id: string;
