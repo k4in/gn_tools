@@ -8,6 +8,11 @@ export type QuestContext = {
   extractorsMet: number;
   extractorsKris: number;
   scanverstaerker: number;
+  tick: number;
+  /** Erster Angriffstick des ersten Roids, sonst null. */
+  firstRoidStartTick: number | null;
+  /** Fertiggestellte Cancri (kumulativ). */
+  cancri: number;
 };
 
 export type QuestDef = {
@@ -62,6 +67,14 @@ export const QUESTS: QuestDef[] = [
     reward: { kind: "extractors", resource: "kris", count: 10 },
     isComplete: (ctx) => ctx.asteroids >= 1 && ctx.extractorsMet >= 10,
   },
+  // 2. Angriffstick des ersten Roids; bei Dauer 1 der Tick danach.
+  resQuest(
+    "first-roid",
+    60000,
+    80000,
+    (ctx) => ctx.firstRoidStartTick !== null && ctx.tick >= ctx.firstRoidStartTick + 1,
+  ),
+  resQuest("cancri-100", 50000, 75000, (ctx) => ctx.cancri >= 100),
 ];
 
 /** Noch nicht beanspruchte Quests, die jetzt erfüllt sind. */

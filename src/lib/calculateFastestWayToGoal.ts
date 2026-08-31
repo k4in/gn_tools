@@ -712,6 +712,8 @@ function simulatePlan(
   let extractorSlots = 0;
   const extractorQueue: Array<"met" | "kris"> = [];
   let scanverstaerker = 0;
+  let firstRoidStartTick: number | null = null;
+  let cancri = 0;
 
   const entryActualStart: Record<string, number> = {};
   const entryFinishTicks: Record<string, number> = {};
@@ -1078,6 +1080,7 @@ function simulatePlan(
             planEntryId: entry.id,
           });
           markEntryStart(entry.id, tick);
+          if (firstRoidStartTick === null) firstRoidStartTick = tick;
         }
 
         const stealMet = Math.floor(pending.remainingMet * ROID_STEAL_RATE);
@@ -1132,10 +1135,27 @@ function simulatePlan(
     }
   };
 
-  const claimReadyQuests = (): QuestEvent[] =>
+  const noteFinishedUnits = (jobs: NamedJob[]) => {
+    for (const j of jobs) {
+      if (j.type !== "unit") continue;
+      const m = /^(\d+)\s+Cancri\s+bauen/.exec(j.name);
+      if (m) cancri += Number(m[1]);
+    }
+  };
+
+  const claimReadyQuests = (tick: number): QuestEvent[] =>
     applyQuestRewards(
       evaluateQuests(
-        { completed, asteroids, extractorsMet, extractorsKris, scanverstaerker },
+        {
+          completed,
+          asteroids,
+          extractorsMet,
+          extractorsKris,
+          scanverstaerker,
+          tick,
+          firstRoidStartTick,
+          cancri,
+        },
         claimedQuests,
       ),
     );
@@ -1236,6 +1256,7 @@ function simulatePlan(
       });
     }
     noteFinishedRecon(finishedJobs);
+    noteFinishedUnits(finishedJobs);
 
     // Mines produce from the tick after finish. Koloniezentrum is the exception:
     // it already yields on the finish tick (21:30 done → 21:30 resources).
@@ -1257,16 +1278,17 @@ function simulatePlan(
 
     // Resource quests fire with income (tech finishes). Economy quests
     // (asteroid + extractors) are re-checked after tryStart same tick.
-    const questEventsEarly = claimReadyQuests();
+    const questEventsEarly = claimReadyQuests(t);
 
     const { startedJobs, finishedJobs: instantFinished, spent, roidLoot } = tryStart(t);
     noteFinishedRecon(instantFinished);
+    noteFinishedUnits(instantFinished);
     const allFinished = [...finishedJobs, ...instantFinished];
 
     // e.g. 1 Asteroid + ≥10 Met-Ext → +10 free Kris-Ext, immediate this tick.
     // Free extractors count toward total for later cost indices, but not for
     // builds already paid this tick (tryStart ran first).
-    const questEventsLate = claimReadyQuests();
+    const questEventsLate = claimReadyQuests(t);
     const questEvents = [...questEventsEarly, ...questEventsLate];
     const questRes: Res = questEvents.reduce(
       (acc, q) =>
