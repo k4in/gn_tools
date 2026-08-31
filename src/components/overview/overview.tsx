@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ExportPlanDialog } from "@/components/export-plan-dialog";
+import { ImportPlanDialog } from "@/components/import-plan-dialog";
+import type { PlanEntry } from "@/gn-data/plan";
 import { ActionPlan } from "@/components/overview/actionplan";
 import { Protocol } from "@/components/overview/protocol";
 import { Timeline } from "@/components/overview/timeline";
@@ -25,6 +27,10 @@ export type OverviewProps = {
   currentTick: number;
   hasPlan: boolean;
   exportJson?: string;
+  onImportPlan?: (plan: PlanEntry[]) => void;
+  parseImportPlan?: (json: string) =>
+    | { ok: true; plan: PlanEntry[] }
+    | { ok: false; error: string };
   onEditJob?: (planEntryId: string | undefined) => void;
   slotShortage?: ExtractorSlotShortage | null;
 };
@@ -37,6 +43,8 @@ export function Overview({
   currentTick,
   hasPlan,
   exportJson,
+  onImportPlan,
+  parseImportPlan,
   onEditJob,
   slotShortage = null,
 }: OverviewProps) {
@@ -75,7 +83,14 @@ export function Overview({
               </p>
             )}
           </div>
-          {exportJson !== undefined && <ExportPlanDialog json={exportJson} />}
+          {exportJson !== undefined && (
+            <div className="flex shrink-0 gap-2">
+              {parseImportPlan && onImportPlan && (
+                <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />
+              )}
+              <ExportPlanDialog json={exportJson} />
+            </div>
+          )}
         </div>
 
         <TabsContent

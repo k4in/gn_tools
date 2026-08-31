@@ -146,8 +146,10 @@ function toEconomyEntry(raw: PlanEntry): Extract<PlanEntry, { kind: "economy" }>
   return null;
 }
 
-function normalizePlan(raw: unknown): PlanEntry[] {
-  if (!Array.isArray(raw)) return [...defaultConfig.plan];
+const MAX_IMPORT_PLAN_ENTRIES = 1000;
+
+function collectPlanEntries(raw: unknown): PlanEntry[] | null {
+  if (!Array.isArray(raw)) return null;
   const out: PlanEntry[] = [];
   for (const item of raw) {
     // migrate legacy string entries
@@ -199,7 +201,45 @@ function normalizePlan(raw: unknown): PlanEntry[] {
         : {}),
     } as PlanEntry);
   }
-  return out.length ? out : [...defaultConfig.plan];
+  return out;
+}
+
+function normalizePlan(raw: unknown): PlanEntry[] {
+  const out = collectPlanEntries(raw);
+  return out && out.length ? out : [...defaultConfig.plan];
+}
+
+type ImportPlanParseResult =
+  | { ok: true; plan: PlanEntry[] }
+  | { ok: false; error: string };
+
+function parseImportedPlan(text: string): ImportPlanParseResult {
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: false, error: "Kein JSON eingefügt." };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { ok: false, error: "Ungültiges JSON." };
+  }
+  let raw: unknown = parsed;
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && "plan" in parsed) {
+    raw = (parsed as { plan: unknown }).plan;
+  }
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: "JSON muss ein Plan-Array sein." };
+  }
+  if (raw.length > MAX_IMPORT_PLAN_ENTRIES) {
+    return {
+      ok: false,
+      error: `Maximal ${MAX_IMPORT_PLAN_ENTRIES} Einträge.`,
+    };
+  }
+  const plan = collectPlanEntries(raw);
+  if (!plan || plan.length === 0) {
+    return { ok: false, error: "Keine gültigen Plan-Einträge gefunden." };
+  }
+  return { ok: true, plan };
 }
 
 function normalizeConfig(raw: unknown): StartConfig {
@@ -847,6 +887,12 @@ export default function App() {
             hasPlan={!!plan}
             slotShortage={plan ? getExtractorSlotShortage(plan) : null}
             exportJson={viewingOwnPlan ? JSON.stringify(startCfg.plan, null, 2) : undefined}
+            parseImportPlan={viewingOwnPlan ? parseImportedPlan : undefined}
+            onImportPlan={
+              viewingOwnPlan
+                ? (plan) => setStartCfg((prev) => ({ ...prev, plan }))
+                : undefined
+            }
             onEditJob={
               viewingOwnPlan
                 ? (planEntryId) => {
