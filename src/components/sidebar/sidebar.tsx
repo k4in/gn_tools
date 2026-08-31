@@ -27,6 +27,7 @@ export type SidebarProps = {
     extractors?: number;
     resource?: "met" | "kris";
   }) => void;
+  onAddRoid: () => void;
   onAddCustom: () => void;
 };
 
@@ -40,6 +41,7 @@ export function Sidebar({
   onAddUnit,
   onAddRecon,
   onAddEconomy,
+  onAddRoid,
   onAddCustom,
 }: SidebarProps) {
   return (
@@ -70,6 +72,7 @@ export function Sidebar({
             hasObservatorium={hasObservatorium}
             hasExtraktorTech={hasExtraktorTech}
             onAddEconomy={onAddEconomy}
+            onAddRoid={onAddRoid}
           />
         </TabsContent>
 

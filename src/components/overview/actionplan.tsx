@@ -10,6 +10,7 @@ import {
 } from "@/components/shadcn/table";
 import {
   formatRes,
+  formatRoidLootLabel,
   type JobKind,
   type TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
@@ -22,6 +23,7 @@ export function jobTypeClass(type: JobKind) {
   if (type === "research") return "text-fuchsia-500";
   if (type === "unit" || type === "recon") return "text-emerald-400";
   if (type === "custom") return "text-silver-500";
+  if (type === "roid") return "text-blue-400";
   return "text-sky-500";
 }
 
@@ -214,15 +216,32 @@ export function TickTable({
                 {t.started.length ? <JobList items={t.started} /> : null}
               </TruncateCell>
               <TruncateCell>
-                {t.quests.length ? (
-                  <span className="text-green-500">
-                    {t.quests.map((q, i) => (
-                      <span key={q.id}>
-                        {i > 0 && <span className="text-muted-foreground">, </span>}
-                        {q.label}
+                {t.quests.length || t.roidLoot.length ? (
+                  <>
+                    {t.quests.length ? (
+                      <span className="text-green-500">
+                        {t.quests.map((q, i) => (
+                          <span key={q.id}>
+                            {i > 0 && <span className="text-muted-foreground">, </span>}
+                            {q.label}
+                          </span>
+                        ))}
                       </span>
-                    ))}
-                  </span>
+                    ) : null}
+                    {t.quests.length > 0 && t.roidLoot.length > 0 && (
+                      <span className="text-muted-foreground">, </span>
+                    )}
+                    {t.roidLoot.map((loot, i) => {
+                      const label = formatRoidLootLabel(loot);
+                      if (!label) return null;
+                      return (
+                        <span key={`${loot.planEntryId}-${i}`} className="text-blue-400">
+                          {i > 0 && <span className="text-muted-foreground">, </span>}
+                          {label}
+                        </span>
+                      );
+                    })}
+                  </>
                 ) : null}
               </TruncateCell>
             </TableRow>

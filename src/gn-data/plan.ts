@@ -26,6 +26,18 @@ export type PlanEntry =
       label: string;
       cost: { met: number; kris: number };
     }
+  /** Extraktoren erbeuten (Roid): 10% der Ziel-Exen pro Tick, kostenlos. */
+  | {
+      id: string;
+      kind: "roid";
+      startTick: number;
+      /** Opfer-Bestand Metall-Exen zu Angriffsbeginn. */
+      targetMet: number;
+      /** Opfer-Bestand Kristall-Exen zu Angriffsbeginn. */
+      targetKris: number;
+      /** Anzahl Angriffs-Ticks (1–10). */
+      duration: number;
+    }
   /** @deprecated migrated to economy */
   | {
       id: string;

@@ -90,6 +90,15 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       o.label = o.label.trim();
       return true;
     }
+    case "roid": {
+      if (typeof o.targetMet !== "number" || !Number.isFinite(o.targetMet)) return false;
+      if (typeof o.targetKris !== "number" || !Number.isFinite(o.targetKris)) return false;
+      if (typeof o.duration !== "number" || !Number.isFinite(o.duration)) return false;
+      o.targetMet = Math.max(0, Math.floor(o.targetMet));
+      o.targetKris = Math.max(0, Math.floor(o.targetKris));
+      o.duration = Math.min(10, Math.max(1, Math.floor(o.duration)));
+      return o.targetMet > 0 || o.targetKris > 0;
+    }
     default:
       return false;
   }
@@ -163,6 +172,17 @@ function normalizePlan(raw: unknown): PlanEntry[] {
           met: Math.max(0, Math.floor(e.cost.met)),
           kris: Math.max(0, Math.floor(e.cost.kris)),
         },
+      });
+      continue;
+    }
+    if (e.kind === "roid") {
+      out.push({
+        id: e.id,
+        kind: "roid",
+        startTick: Math.max(0, Math.floor(e.startTick)),
+        targetMet: Math.max(0, Math.floor(e.targetMet)),
+        targetKris: Math.max(0, Math.floor(e.targetKris)),
+        duration: Math.min(10, Math.max(1, Math.floor(e.duration))),
       });
       continue;
     }
@@ -457,6 +477,34 @@ export default function App() {
     setDialogOpen(true);
   };
 
+  const occupiedRoids = (exceptId?: string) =>
+    startCfg.plan
+      .filter(
+        (e): e is Extract<PlanEntry, { kind: "roid" }> =>
+          e.kind === "roid" && e.id !== exceptId,
+      )
+      .map((e) => ({
+        startTick: e.startTick,
+        duration: e.duration,
+        targetMet: e.targetMet,
+        targetKris: e.targetKris,
+      }));
+
+  const openAddRoid = () => {
+    if (!viewingOwnPlan) return;
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "roid",
+      defaultTick: Math.max(0, currentTick),
+      defaultTargetMet: 0,
+      defaultTargetKris: 0,
+      defaultDuration: 1,
+      occupiedRoids: occupiedRoids(),
+    });
+    setDialogOpen(true);
+  };
+
   const openEditEntry = (id: string) => {
     if (!viewingOwnPlan) return;
     const entry = startCfg.plan.find((e) => e.id === id);
@@ -559,6 +607,15 @@ export default function App() {
         defaultMet: entry.cost.met,
         defaultKris: entry.cost.kris,
       });
+    } else if (entry.kind === "roid") {
+      setDialogTarget({
+        kind: "roid",
+        defaultTick: entry.startTick,
+        defaultTargetMet: entry.targetMet,
+        defaultTargetKris: entry.targetKris,
+        defaultDuration: entry.duration,
+        occupiedRoids: occupiedRoids(entry.id),
+      });
     }
     setDialogOpen(true);
   };
@@ -571,6 +628,9 @@ export default function App() {
     extractors?: number;
     label?: string;
     cost?: { met: number; kris: number };
+    targetMet?: number;
+    targetKris?: number;
+    duration?: number;
   }) => {
     if (!dialogTarget) return;
 
@@ -607,6 +667,15 @@ export default function App() {
                 met: Math.max(0, values.cost?.met ?? e.cost.met),
                 kris: Math.max(0, values.cost?.kris ?? e.cost.kris),
               },
+            };
+          }
+          if (e.kind === "roid") {
+            return {
+              ...e,
+              startTick: values.startTick,
+              targetMet: Math.max(0, values.targetMet ?? e.targetMet),
+              targetKris: Math.max(0, values.targetKris ?? e.targetKris),
+              duration: Math.min(10, Math.max(1, values.duration ?? e.duration)),
             };
           }
           return {
@@ -689,6 +758,23 @@ export default function App() {
         },
       };
       setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      return;
+    }
+
+    if (dialogTarget.kind === "roid") {
+      const targetMet = Math.max(0, values.targetMet ?? 0);
+      const targetKris = Math.max(0, values.targetKris ?? 0);
+      const duration = Math.min(10, Math.max(1, values.duration ?? 1));
+      if (targetMet <= 0 && targetKris <= 0) return;
+      const entry: PlanEntry = {
+        id: newPlanEntryId("roid"),
+        kind: "roid",
+        startTick: values.startTick,
+        targetMet,
+        targetKris,
+        duration,
+      };
+      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
     }
   };
 
@@ -743,6 +829,7 @@ export default function App() {
               onAddUnit={openAddUnit}
               onAddRecon={openAddRecon}
               onAddEconomy={openAddEconomy}
+              onAddRoid={openAddRoid}
               onAddCustom={openAddCustom}
             />
           )}

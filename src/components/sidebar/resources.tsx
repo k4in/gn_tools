@@ -14,12 +14,14 @@ export type ResourcesProps = {
     extractors?: number;
     resource?: "met" | "kris";
   }) => void;
+  onAddRoid: () => void;
 };
 
 export function Resources({
   hasObservatorium,
   hasExtraktorTech,
   onAddEconomy,
+  onAddRoid,
 }: ResourcesProps) {
   if (!hasExtraktorTech && !hasObservatorium) {
     return (
@@ -51,9 +53,29 @@ export function Resources({
           }}
         >
           <CardHeader>
-            <CardTitle>Asteroiden & Extraktoren</CardTitle>
+            <CardTitle>Asteroiden scannen & Extraktoren bauen</CardTitle>
             <CardDescription>
               Asteroiden scannen und/oder Extraktoren bauen — einzeln oder kombiniert.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <Card
+          size="sm"
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => onAddRoid()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onAddRoid();
+            }
+          }}
+        >
+          <CardHeader>
+            <CardTitle>Roid</CardTitle>
+            <CardDescription>
+              Extraktoren erbeuten — 10% der Ziel-Exen pro Tick, kostenlos.
             </CardDescription>
           </CardHeader>
         </Card>

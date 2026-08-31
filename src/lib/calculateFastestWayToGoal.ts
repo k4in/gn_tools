@@ -66,7 +66,7 @@ function maxTicksOf(startCfg: StartConfig) {
 
 export type Res = { met: number; kris: number };
 
-export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom";
+export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid";
 
 export type Job = {
   name: string;
@@ -94,6 +94,12 @@ export type QuestEvent = {
   reward: QuestReward;
 };
 
+export type RoidLootEvent = {
+  planEntryId: string;
+  met: number;
+  kris: number;
+};
+
 export type TickSnapshot = {
   tick: number;
   clockLabel: string;
@@ -106,6 +112,8 @@ export type TickSnapshot = {
   finished: NamedJob[];
   /** Quests, die in diesem Tick ausgeschüttet wurden. */
   quests: QuestEvent[];
+  /** Roid-Beute in diesem Tick (kostenlose Exen). */
+  roidLoot: RoidLootEvent[];
   asteroids: number;
   extractorsMet: number;
   extractorsKris: number;
@@ -386,7 +394,56 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return formatAsteroidLabel(entry.count);
     case "custom":
       return entry.label.trim() || "Custom";
+    case "roid":
+      return formatRoidPlanLabel(entry.targetMet, entry.targetKris);
   }
+}
+
+export const ROID_STEAL_RATE = 0.1;
+export const ROID_DURATION_MIN = 1;
+export const ROID_DURATION_MAX = 10;
+
+export function clampRoidDuration(n: number): number {
+  if (!Number.isFinite(n)) return ROID_DURATION_MIN;
+  return Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, Math.floor(n)));
+}
+
+export function formatRoidPlanLabel(targetMet: number, targetKris: number): string {
+  return `Roid ${targetMet}/${targetKris}`;
+}
+
+export function formatRoidLootLabel(loot: { met: number; kris: number }): string {
+  const parts: string[] = [];
+  if (loot.met > 0) parts.push(`+${loot.met} M-Exen`);
+  if (loot.kris > 0) parts.push(`+${loot.kris} K-Exen`);
+  return parts.join(", ");
+}
+
+export function roidEndTick(startTick: number, duration: number): number {
+  return startTick + clampRoidDuration(duration);
+}
+
+export function roidsOverlap(
+  aStart: number,
+  aDuration: number,
+  bStart: number,
+  bDuration: number,
+): boolean {
+  return aStart < roidEndTick(bStart, bDuration) && bStart < roidEndTick(aStart, aDuration);
+}
+
+export function findOverlappingRoid(
+  plan: PlanEntry[],
+  startTick: number,
+  duration: number,
+  exceptId?: string,
+): Extract<PlanEntry, { kind: "roid" }> | undefined {
+  return plan.find(
+    (e): e is Extract<PlanEntry, { kind: "roid" }> =>
+      e.kind === "roid" &&
+      e.id !== exceptId &&
+      roidsOverlap(startTick, duration, e.startTick, e.duration),
+  );
 }
 
 /**
@@ -613,6 +670,17 @@ type PendingCustom = {
   done: boolean;
 };
 
+type PendingRoid = {
+  entryId: string;
+  targetMet: number;
+  targetKris: number;
+  remainingMet: number;
+  remainingKris: number;
+  desiredTick: number;
+  duration: number;
+  ticksDone: number;
+};
+
 /**
  * Plan-getriebene Simulation:
  * - Jeder Plan-Eintrag hat desired startTick (User-Input)
@@ -665,6 +733,7 @@ function simulatePlan(
   const pendingUnits: PendingUnit[] = [];
   const pendingEconomy: PendingEconomy[] = [];
   const pendingCustom: PendingCustom[] = [];
+  const pendingRoids: PendingRoid[] = [];
 
   for (const e of plan) {
     if (e.kind === "unit") {
@@ -731,6 +800,19 @@ function simulatePlan(
         desiredTick: e.startTick,
         done: false,
       });
+    } else if (e.kind === "roid") {
+      const targetMet = Math.max(0, Math.floor(e.targetMet));
+      const targetKris = Math.max(0, Math.floor(e.targetKris));
+      pendingRoids.push({
+        entryId: e.id,
+        targetMet,
+        targetKris,
+        remainingMet: targetMet,
+        remainingKris: targetKris,
+        desiredTick: e.startTick,
+        duration: clampRoidDuration(e.duration),
+        ticksDone: 0,
+      });
     }
   }
 
@@ -757,6 +839,7 @@ function simulatePlan(
       return false;
     }
     if (pendingCustom.some((c) => !c.done)) return false;
+    if (pendingRoids.some((r) => r.ticksDone < r.duration)) return false;
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
     return true;
@@ -774,6 +857,7 @@ function simulatePlan(
   const tryStart = (tick: number) => {
     const startedJobs: NamedJob[] = [];
     const finishedJobs: NamedJob[] = [];
+    const roidLoot: RoidLootEvent[] = [];
     let spent: Res = { met: 0, kris: 0 };
 
     // Earlier desired startTick first; same tick keeps plan order.
@@ -975,10 +1059,51 @@ function simulatePlan(
         markEntryStart(entry.id, tick);
         markEntryFinish(entry.id, tick);
         pending.done = true;
+        continue;
+      }
+
+      if (entry.kind === "roid") {
+        const pending = pendingRoids.find((p) => p.entryId === entry.id);
+        if (!pending || pending.ticksDone >= pending.duration) continue;
+        if (tick < pending.desiredTick) continue;
+        if (tick !== pending.desiredTick + pending.ticksDone) continue;
+
+        if (pending.ticksDone === 0) {
+          steps.push({
+            name: formatRoidPlanLabel(pending.targetMet, pending.targetKris),
+            type: "roid",
+            startTick: pending.desiredTick,
+            endTick: pending.desiredTick + pending.duration,
+            cost: { met: 0, kris: 0 },
+            planEntryId: entry.id,
+          });
+          markEntryStart(entry.id, tick);
+        }
+
+        const stealMet = Math.floor(pending.remainingMet * ROID_STEAL_RATE);
+        const stealKris = Math.floor(pending.remainingKris * ROID_STEAL_RATE);
+        pending.remainingMet -= stealMet;
+        pending.remainingKris -= stealKris;
+        if (stealMet > 0) {
+          extractorsMet += stealMet;
+          for (let i = 0; i < stealMet; i++) extractorQueue.push("met");
+        }
+        if (stealKris > 0) {
+          extractorsKris += stealKris;
+          for (let i = 0; i < stealKris; i++) extractorQueue.push("kris");
+        }
+        if (stealMet > 0 || stealKris > 0) {
+          roidLoot.push({ planEntryId: entry.id, met: stealMet, kris: stealKris });
+        }
+
+        pending.ticksDone += 1;
+        if (pending.ticksDone >= pending.duration) {
+          markEntryFinish(entry.id, tick);
+        }
       }
     }
 
-    return { startedJobs, finishedJobs, spent };
+    return { startedJobs, finishedJobs, spent, roidLoot };
   };
 
   const applyQuestRewards = (quests: QuestDef[]): QuestEvent[] => {
@@ -1021,6 +1146,7 @@ function simulatePlan(
     finished: NamedJob[],
     delta: Res,
     quests: QuestEvent[] = [],
+    roidLoot: RoidLootEvent[] = [],
   ): TickSnapshot => ({
     tick,
     clockLabel: clockLabel(startCfg, tick),
@@ -1039,6 +1165,7 @@ function simulatePlan(
     started,
     finished,
     quests,
+    roidLoot,
     asteroids,
     extractorsMet,
     extractorsKris,
@@ -1076,9 +1203,9 @@ function simulatePlan(
 
   // t = 0
   {
-    const { startedJobs, finishedJobs, spent } = tryStart(0);
+    const { startedJobs, finishedJobs, spent, roidLoot } = tryStart(0);
     ticks.push(
-      snapshot(0, startedJobs, finishedJobs, { met: -spent.met, kris: -spent.kris }),
+      snapshot(0, startedJobs, finishedJobs, { met: -spent.met, kris: -spent.kris }, [], roidLoot),
     );
     if (allDone()) return resultAt(0);
   }
@@ -1132,7 +1259,7 @@ function simulatePlan(
     // (asteroid + extractors) are re-checked after tryStart same tick.
     const questEventsEarly = claimReadyQuests();
 
-    const { startedJobs, finishedJobs: instantFinished, spent } = tryStart(t);
+    const { startedJobs, finishedJobs: instantFinished, spent, roidLoot } = tryStart(t);
     noteFinishedRecon(instantFinished);
     const allFinished = [...finishedJobs, ...instantFinished];
 
@@ -1150,7 +1277,10 @@ function simulatePlan(
     );
 
     const waiting =
-      !allDone() && startedJobs.length === 0 && active.length === 0;
+      !allDone() &&
+      startedJobs.length === 0 &&
+      active.length === 0 &&
+      roidLoot.length === 0;
 
     if (waiting) {
       waitStreak += 1;
@@ -1163,7 +1293,7 @@ function simulatePlan(
       met: income.met + questRes.met - spent.met,
       kris: income.kris + questRes.kris - spent.kris,
     };
-    ticks.push(snapshot(t, startedJobs, allFinished, delta, questEvents));
+    ticks.push(snapshot(t, startedJobs, allFinished, delta, questEvents, roidLoot));
 
     if (allDone()) {
       const finishTick = Math.max(

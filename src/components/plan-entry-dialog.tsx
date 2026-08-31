@@ -12,17 +12,33 @@ import { Field, FieldLabel } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
 import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group";
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/shadcn/combobox";
+import {
   ASTEROID_COST,
   ASTEROID_SLOT_CAPACITY,
   extractorBatchCost,
   extractorUnitCost,
   formatRes,
+  formatRoidPlanLabel,
   maxAffordableExtractors,
+  ROID_DURATION_MAX,
+  ROID_DURATION_MIN,
+  roidsOverlap,
   type PlanEntry,
 } from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 import type { Ship } from "@/gn-data/ships";
 import type { Utility } from "@/gn-data/utility";
+
+const ROID_DURATION_ITEMS = Array.from(
+  { length: ROID_DURATION_MAX - ROID_DURATION_MIN + 1 },
+  (_, i) => String(ROID_DURATION_MIN + i),
+);
 
 export type PlanEntryDialogMode = "add" | "edit";
 
@@ -69,11 +85,28 @@ type CustomTarget = {
   defaultKris: number;
 };
 
+export type OccupiedRoid = {
+  startTick: number;
+  duration: number;
+  targetMet: number;
+  targetKris: number;
+};
+
+type RoidTarget = {
+  kind: "roid";
+  defaultTick: number;
+  defaultTargetMet: number;
+  defaultTargetKris: number;
+  defaultDuration: number;
+  occupiedRoids: OccupiedRoid[];
+};
+
 export type PlanEntryDialogTarget =
   | TechTarget
   | CountableTarget
   | EconomyTarget
-  | CustomTarget;
+  | CustomTarget
+  | RoidTarget;
 
 export type PlanEntryDialogSubmit = {
   startTick: number;
@@ -83,6 +116,9 @@ export type PlanEntryDialogSubmit = {
   extractors?: number;
   label?: string;
   cost?: { met: number; kris: number };
+  targetMet?: number;
+  targetKris?: number;
+  duration?: number;
 };
 
 export type PlanEntryDialogProps = {
@@ -125,6 +161,9 @@ export function PlanEntryDialog({
   const [label, setLabel] = useState("");
   const [met, setMet] = useState(0);
   const [kris, setKris] = useState(0);
+  const [targetMet, setTargetMet] = useState(0);
+  const [targetKris, setTargetKris] = useState(0);
+  const [duration, setDuration] = useState(ROID_DURATION_MIN);
 
   useEffect(() => {
     if (!open || !target) return;
@@ -154,6 +193,14 @@ export function PlanEntryDialog({
         setKris(Math.max(0, entry.cost.kris));
         return;
       }
+      if (entry.kind === "roid") {
+        setTargetMet(Math.max(0, entry.targetMet));
+        setTargetKris(Math.max(0, entry.targetKris));
+        setDuration(
+          Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, entry.duration)),
+        );
+        return;
+      }
       if ("count" in entry) setCount(entry.count);
       return;
     }
@@ -169,6 +216,15 @@ export function PlanEntryDialog({
       setLabel(target.defaultLabel);
       setMet(Math.max(0, target.defaultMet));
       setKris(Math.max(0, target.defaultKris));
+    } else if (target.kind === "roid") {
+      setTargetMet(Math.max(0, target.defaultTargetMet));
+      setTargetKris(Math.max(0, target.defaultTargetKris));
+      setDuration(
+        Math.min(
+          ROID_DURATION_MAX,
+          Math.max(ROID_DURATION_MIN, target.defaultDuration),
+        ),
+      );
     } else {
       setCount(1);
     }
@@ -239,6 +295,11 @@ export function PlanEntryDialog({
     if (target.kind === "tech") return target.tech.name;
     if (target.kind === "unit" || target.kind === "recon") return target.name;
     if (target.kind === "custom") return label.trim() || "Custom-Ausgabe";
+    if (target.kind === "roid") {
+      return targetMet > 0 || targetKris > 0
+        ? formatRoidPlanLabel(targetMet, targetKris)
+        : "Roid";
+    }
     return "Asteroiden & Extraktoren";
   })();
 
@@ -259,8 +320,23 @@ export function PlanEntryDialog({
     if (target.kind === "custom") {
       return label.trim().length > 0 && met >= 0 && kris >= 0;
     }
+    if (target.kind === "roid") {
+      if (targetMet <= 0 && targetKris <= 0) return false;
+      if (duration < ROID_DURATION_MIN || duration > ROID_DURATION_MAX) return false;
+      const overlaps = target.occupiedRoids.some((r) =>
+        roidsOverlap(startTick, duration, r.startTick, r.duration),
+      );
+      return !overlaps;
+    }
     return false;
   })();
+
+  const overlappingRoid =
+    target.kind === "roid"
+      ? target.occupiedRoids.find((r) =>
+          roidsOverlap(startTick, duration, r.startTick, r.duration),
+        ) ?? null
+      : null;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -278,6 +354,13 @@ export function PlanEntryDialog({
         startTick,
         label: label.trim(),
         cost: { met: Math.max(0, met), kris: Math.max(0, kris) },
+      });
+    } else if (target.kind === "roid") {
+      onSubmit({
+        startTick,
+        targetMet: Math.max(0, targetMet),
+        targetKris: Math.max(0, targetKris),
+        duration,
       });
     } else {
       onSubmit({ startTick, count: Math.max(1, count) });
@@ -393,6 +476,25 @@ export function PlanEntryDialog({
             </Field>
           )}
 
+          {target.kind === "roid" && (
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+              <p>
+                Pro Tick 10% der restlichen Ziel-Exen (immer abgerundet), kostenlos.
+                Ertrag ab dem nächsten Tick, Asteroidenplätze werden gebraucht.
+              </p>
+              {overlappingRoid && (
+                <p className="text-amber-500">
+                  Überlappt mit{" "}
+                  {formatRoidPlanLabel(
+                    overlappingRoid.targetMet,
+                    overlappingRoid.targetKris,
+                  )}
+                  .
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap items-end gap-3">
             <Field className="w-28">
               <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
@@ -468,6 +570,70 @@ export function PlanEntryDialog({
                       className="tabular-nums"
                     />
                   </InputGroup>
+                </Field>
+              </>
+            )}
+
+            {target.kind === "roid" && (
+              <>
+                <Field className="w-28">
+                  <FieldLabel htmlFor="plan-roid-met">Target M-Exen</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-roid-met"
+                      type="number"
+                      min={0}
+                      value={targetMet}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setTargetMet(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field className="w-28">
+                  <FieldLabel htmlFor="plan-roid-kris">Target K-Exen</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-roid-kris"
+                      type="number"
+                      min={0}
+                      value={targetKris}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setTargetKris(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field className="w-32">
+                  <FieldLabel>Angriffslänge</FieldLabel>
+                  <Combobox
+                    items={ROID_DURATION_ITEMS}
+                    value={String(duration)}
+                    onValueChange={(value) => {
+                      if (value == null) return;
+                      const n = Number(value);
+                      if (n >= ROID_DURATION_MIN && n <= ROID_DURATION_MAX) {
+                        setDuration(n);
+                      }
+                    }}
+                  >
+                    <ComboboxInput showTrigger className="w-32" />
+                    <ComboboxContent>
+                      <ComboboxList>
+                        {ROID_DURATION_ITEMS.map((item) => (
+                          <ComboboxItem key={item} value={item}>
+                            {item} {item === "1" ? "Tick" : "Ticks"}
+                          </ComboboxItem>
+                        ))}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                 </Field>
               </>
             )}
