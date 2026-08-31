@@ -91,13 +91,18 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       return true;
     }
     case "roid": {
-      if (typeof o.targetMet !== "number" || !Number.isFinite(o.targetMet)) return false;
-      if (typeof o.targetKris !== "number" || !Number.isFinite(o.targetKris)) return false;
-      if (typeof o.duration !== "number" || !Number.isFinite(o.duration)) return false;
-      o.targetMet = Math.max(0, Math.floor(o.targetMet));
-      o.targetKris = Math.max(0, Math.floor(o.targetKris));
-      o.duration = Math.min(10, Math.max(1, Math.floor(o.duration)));
-      return o.targetMet > 0 || o.targetKris > 0;
+      const targetMet = o.targetMet;
+      const targetKris = o.targetKris;
+      const duration = o.duration;
+      if (typeof targetMet !== "number" || !Number.isFinite(targetMet)) return false;
+      if (typeof targetKris !== "number" || !Number.isFinite(targetKris)) return false;
+      if (typeof duration !== "number" || !Number.isFinite(duration)) return false;
+      const met = Math.max(0, Math.floor(targetMet));
+      const kris = Math.max(0, Math.floor(targetKris));
+      o.targetMet = met;
+      o.targetKris = kris;
+      o.duration = Math.min(10, Math.max(1, Math.floor(duration)));
+      return met > 0 || kris > 0;
     }
     default:
       return false;
