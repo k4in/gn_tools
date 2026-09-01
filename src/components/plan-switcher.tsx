@@ -30,22 +30,24 @@ export function PlanSwitcher({ viewId, onViewChange }: PlanSwitcherProps) {
           </Badge>
         );
       })}
-      <span className="pl-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-        Templates:
-      </span>
-      {planTemplates.map((template) => {
-        const active = !isPlanSlotId(viewId) && viewId === template.id;
-        return (
-          <Badge
-            key={template.id}
-            variant={active ? "default" : "outline"}
-            render={<button type="button" aria-pressed={active} />}
-            onClick={() => onViewChange(template.id)}
-          >
-            {template.label}
-          </Badge>
-        );
-      })}
+      <div className="ml-auto flex items-center gap-2">
+        <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Templates:
+        </span>
+        {planTemplates.map((template) => {
+          const active = !isPlanSlotId(viewId) && viewId === template.id;
+          return (
+            <Badge
+              key={template.id}
+              variant={active ? "default" : "outline"}
+              render={<button type="button" aria-pressed={active} />}
+              onClick={() => onViewChange(template.id)}
+            >
+              {template.label}
+            </Badge>
+          );
+        })}
+      </div>
     </div>
   );
 }

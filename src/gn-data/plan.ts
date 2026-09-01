@@ -1,6 +1,4 @@
 import { balanced } from "@/gn-data/plan-template/balanced";
-import { fastCleptor } from "@/gn-data/plan-template/fast_cleptor";
-import { fastRaumhafen } from "@/gn-data/plan-template/fast_raumhafen";
 
 export type PlanEntry =
   | { id: string; kind: "tech"; name: string; startTick: number }
@@ -70,7 +68,7 @@ export function clonePlanEntries(plan: PlanEntry[]): PlanEntry[] {
   return structuredClone(plan);
 }
 
-export const planTemplates: PlanTemplate[] = [balanced, fastCleptor, fastRaumhafen];
+export const planTemplates: PlanTemplate[] = [balanced];
 
 export const defaults: {
   start_time: string;
