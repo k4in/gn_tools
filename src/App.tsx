@@ -1047,6 +1047,7 @@ export default function App() {
             hasPlan={!!plan}
             slotShortage={plan ? getExtractorSlotShortage(plan) : null}
             exportJson={viewingOwnPlan ? JSON.stringify(startCfg.plan, null, 2) : undefined}
+            exportPlanSlot={viewingOwnPlan ? activeSlot : undefined}
             parseImportPlan={viewingOwnPlan ? parseImportedPlan : undefined}
             onImportPlan={
               viewingOwnPlan

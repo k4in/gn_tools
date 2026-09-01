@@ -28,6 +28,7 @@ export type OverviewProps = {
   currentTick: number;
   hasPlan: boolean;
   exportJson?: string;
+  exportPlanSlot?: number;
   onImportPlan?: (plan: PlanEntry[]) => void;
   parseImportPlan?: (json: string) =>
     | { ok: true; plan: PlanEntry[] }
@@ -46,6 +47,7 @@ export function Overview({
   currentTick,
   hasPlan,
   exportJson,
+  exportPlanSlot,
   onImportPlan,
   parseImportPlan,
   onEditJob,
@@ -93,7 +95,7 @@ export function Overview({
               {parseImportPlan && onImportPlan && (
                 <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />
               )}
-              <ExportPlanDialog json={exportJson} />
+              <ExportPlanDialog json={exportJson} planSlot={exportPlanSlot ?? 1} />
               {resetSources && onResetPlan && (
                 <ResetPlanDialog sources={resetSources} onReset={onResetPlan} />
               )}

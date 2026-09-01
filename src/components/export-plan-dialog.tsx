@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy, FileJson } from "lucide-react";
+import { Check, Copy, Download, FileJson } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import {
   Dialog,
@@ -15,9 +15,17 @@ import { Textarea } from "@/components/shadcn/textarea";
 
 export type ExportPlanDialogProps = {
   json: string;
+  planSlot: number;
 };
 
-export function ExportPlanDialog({ json }: ExportPlanDialogProps) {
+function planFileName(planSlot: number, now = new Date()) {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `plan${planSlot}_${y}${m}${d}.json`;
+}
+
+export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
   const [copied, setCopied] = useState(false);
 
   const copyJson = async () => {
@@ -28,6 +36,16 @@ export function ExportPlanDialog({ json }: ExportPlanDialogProps) {
     } catch (err) {
       console.error("Konnte Plan-JSON nicht kopieren", err);
     }
+  };
+
+  const saveJsonFile = () => {
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = planFileName(planSlot);
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -53,6 +71,10 @@ export function ExportPlanDialog({ json }: ExportPlanDialogProps) {
         />
         <DialogFooter>
           <DialogClose render={<Button type="button" variant="outline" />}>Schließen</DialogClose>
+          <Button type="button" variant="outline" onClick={saveJsonFile}>
+            <Download data-icon="inline-start" />
+            Als Datei speichern
+          </Button>
           <Button type="button" onClick={copyJson}>
             {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
             {copied ? "Kopiert" : "Kopieren"}
