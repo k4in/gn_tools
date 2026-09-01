@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { defaults as defaultConfig, planTemplates } from "@/gn-data/plan";
+import {
+  clonePlanEntries,
+  defaults as defaultConfig,
+  isPlanSlotId,
+  PLAN_SLOT_IDS,
+  planSlotLabel,
+  planTemplates,
+  type PlanSlotId,
+} from "@/gn-data/plan";
 import { Header } from "@/components/header";
 import { Overview } from "@/components/overview/overview";
-import { MY_PLAN_VIEW, PlanSwitcher, type PlanViewId } from "@/components/plan-switcher";
+import { PlanSwitcher, type PlanViewId } from "@/components/plan-switcher";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import {
   PlanEntryDialog,
@@ -59,6 +67,22 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
         typeof o.asteroids === "number" && Number.isFinite(o.asteroids)
           ? Math.max(0, Math.floor(o.asteroids))
           : 0;
+      o.asteroids = asteroids;
+      const hasNew =
+        typeof o.extractorsMet === "number" || typeof o.extractorsKris === "number";
+      if (hasNew) {
+        const extractorsMet =
+          typeof o.extractorsMet === "number" && Number.isFinite(o.extractorsMet)
+            ? Math.max(0, Math.floor(o.extractorsMet))
+            : 0;
+        const extractorsKris =
+          typeof o.extractorsKris === "number" && Number.isFinite(o.extractorsKris)
+            ? Math.max(0, Math.floor(o.extractorsKris))
+            : 0;
+        o.extractorsMet = extractorsMet;
+        o.extractorsKris = extractorsKris;
+        return asteroids > 0 || extractorsMet > 0 || extractorsKris > 0;
+      }
       const extractors =
         typeof o.extractors === "number" && Number.isFinite(o.extractors)
           ? Math.max(0, Math.floor(o.extractors))
@@ -112,15 +136,33 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
 function toEconomyEntry(raw: PlanEntry): Extract<PlanEntry, { kind: "economy" }> | null {
   if (raw.kind === "economy") {
     const asteroids = Math.max(0, Math.floor(raw.asteroids));
-    const extractors = Math.max(0, Math.floor(raw.extractors));
-    if (asteroids <= 0 && extractors <= 0) return null;
+    const legacy = raw as {
+      extractors?: number;
+      resource?: "met" | "kris";
+      extractorsMet?: number;
+      extractorsKris?: number;
+    };
+    let extractorsMet = 0;
+    let extractorsKris = 0;
+    if (
+      typeof legacy.extractorsMet === "number" ||
+      typeof legacy.extractorsKris === "number"
+    ) {
+      extractorsMet = Math.max(0, Math.floor(legacy.extractorsMet ?? 0));
+      extractorsKris = Math.max(0, Math.floor(legacy.extractorsKris ?? 0));
+    } else {
+      const extractors = Math.max(0, Math.floor(legacy.extractors ?? 0));
+      if (legacy.resource === "kris") extractorsKris = extractors;
+      else extractorsMet = extractors;
+    }
+    if (asteroids <= 0 && extractorsMet <= 0 && extractorsKris <= 0) return null;
     return {
       id: raw.id,
       kind: "economy",
       startTick: Math.max(0, Math.floor(raw.startTick)),
       asteroids,
-      extractors,
-      resource: extractors > 0 ? raw.resource : "met",
+      extractorsMet,
+      extractorsKris,
     };
   }
   if (raw.kind === "asteroids") {
@@ -129,18 +171,19 @@ function toEconomyEntry(raw: PlanEntry): Extract<PlanEntry, { kind: "economy" }>
       kind: "economy",
       startTick: Math.max(0, Math.floor(raw.startTick)),
       asteroids: Math.max(1, Math.floor(raw.count)),
-      extractors: 0,
-      resource: "met",
+      extractorsMet: 0,
+      extractorsKris: 0,
     };
   }
   if (raw.kind === "extractors") {
+    const count = Math.max(1, Math.floor(raw.count));
     return {
       id: raw.id,
       kind: "economy",
       startTick: Math.max(0, Math.floor(raw.startTick)),
       asteroids: 0,
-      extractors: Math.max(1, Math.floor(raw.count)),
-      resource: raw.resource,
+      extractorsMet: raw.resource === "met" ? count : 0,
+      extractorsKris: raw.resource === "kris" ? count : 0,
     };
   }
   return null;
@@ -298,18 +341,19 @@ function normalizeConfig(raw: unknown): StartConfig {
           id,
           kind: "economy",
           asteroids: count,
-          extractors: 0,
-          resource: "met",
+          extractorsMet: 0,
+          extractorsKris: 0,
           startTick: atTick,
         });
       } else if (o.kind === "extractors") {
+        const isKris = o.resource === "kris";
         plan.push({
           id,
           kind: "economy",
           asteroids: 0,
-          extractors: count,
+          extractorsMet: isKris ? 0 : count,
+          extractorsKris: isKris ? count : 0,
           startTick: atTick,
-          resource: o.resource === "kris" ? "kris" : "met",
         });
       }
     }
@@ -334,32 +378,125 @@ function normalizeConfig(raw: unknown): StartConfig {
   };
 }
 
-function loadStoredConfig(): StartConfig {
+const STORAGE_VERSION = 2 as const;
+
+type PersistedAppState = {
+  version: typeof STORAGE_VERSION;
+  start_time: string;
+  start_date: string;
+  tick_minutes: number;
+  max_ticks: number;
+  starting_resources: { metall: number; kristall: number };
+  activePlanId: PlanSlotId;
+  plans: Record<PlanSlotId, PlanEntry[]>;
+};
+
+function sharedFromConfig(
+  cfg: Pick<
+    StartConfig,
+    "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "starting_resources"
+  >,
+) {
+  return {
+    start_time: cfg.start_time,
+    start_date: cfg.start_date,
+    tick_minutes: cfg.tick_minutes,
+    max_ticks: cfg.max_ticks,
+    starting_resources: {
+      metall: cfg.starting_resources.metall,
+      kristall: cfg.starting_resources.kristall,
+    },
+  };
+}
+
+function defaultSlotPlan(): PlanEntry[] {
+  return clonePlanEntries(normalizePlan(defaultConfig.plan));
+}
+
+function configFromState(state: PersistedAppState, planId: PlanSlotId): StartConfig {
+  return {
+    ...sharedFromConfig(state),
+    plan: state.plans[planId],
+  };
+}
+
+function createDefaultState(plan1?: PlanEntry[], shared?: StartConfig): PersistedAppState {
+  const cfg = shared ?? normalizeConfig(defaultConfig);
+  return {
+    version: STORAGE_VERSION,
+    ...sharedFromConfig(cfg),
+    activePlanId: 1,
+    plans: {
+      1: clonePlanEntries(plan1 ?? cfg.plan),
+      2: defaultSlotPlan(),
+      3: defaultSlotPlan(),
+    },
+  };
+}
+
+function loadStoredState(): PersistedAppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const initial = normalizeConfig(defaultConfig);
+      const initial = createDefaultState();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
       return initial;
     }
-    return normalizeConfig(JSON.parse(raw));
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && (parsed as { version?: unknown }).version === STORAGE_VERSION) {
+      const obj = parsed as Partial<PersistedAppState> & {
+        plans?: Partial<Record<PlanSlotId, unknown>>;
+      };
+      const cfg = normalizeConfig({
+        ...obj,
+        plan: obj.plans?.[1] ?? defaultConfig.plan,
+      });
+      return {
+        version: STORAGE_VERSION,
+        ...sharedFromConfig(cfg),
+        activePlanId: isPlanSlotId(obj.activePlanId) ? obj.activePlanId : 1,
+        plans: {
+          1: normalizePlan(obj.plans?.[1]),
+          2: normalizePlan(obj.plans?.[2]),
+          3: normalizePlan(obj.plans?.[3]),
+        },
+      };
+    }
+    const cfg = normalizeConfig(parsed);
+    return createDefaultState(cfg.plan, cfg);
   } catch {
-    return normalizeConfig(defaultConfig);
+    return createDefaultState();
   }
 }
 
 export default function App() {
-  const [startCfg, setStartCfg] = useState<StartConfig>(() => loadStoredConfig());
-  const [viewId, setViewId] = useState<PlanViewId>(MY_PLAN_VIEW);
-  const viewingOwnPlan = viewId === MY_PLAN_VIEW;
+  const [appState, setAppState] = useState<PersistedAppState>(() => loadStoredState());
+  const [viewId, setViewId] = useState<PlanViewId>(appState.activePlanId);
+  const viewingOwnPlan = isPlanSlotId(viewId);
+  const activeSlot: PlanSlotId = viewingOwnPlan ? viewId : appState.activePlanId;
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(startCfg));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
     } catch (err) {
       console.error("Konnte Plan nicht speichern", err);
     }
-  }, [startCfg]);
+  }, [appState]);
+
+  const startCfg = useMemo(
+    () => configFromState(appState, activeSlot),
+    [appState, activeSlot],
+  );
+
+  const updateCurrentPlan = (updater: (plan: PlanEntry[]) => PlanEntry[]) => {
+    setAppState((prev) => {
+      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
+      return {
+        ...prev,
+        plans: { ...prev.plans, [slot]: updater(prev.plans[slot]) },
+      };
+    });
+  };
 
   const viewCfg = useMemo((): StartConfig => {
     if (viewingOwnPlan) return startCfg;
@@ -403,10 +540,12 @@ export default function App() {
   }, []);
 
   const currentTick = computeCurrentTick(startCfg, now);
-  const nextAction = useMemo(
-    () => actionTicks.find((t) => t.tick >= currentTick) ?? null,
-    [actionTicks, currentTick],
-  );
+  const nextAction = useMemo(() => {
+    const ticks = actionTicks.filter((t) =>
+      t.started.some((job) => job.type !== "custom"),
+    );
+    return ticks.find((t) => t.tick >= currentTick) ?? null;
+  }, [actionTicks, currentTick]);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -477,8 +616,8 @@ export default function App() {
 
   const openAddEconomy = (preset: {
     asteroids?: number;
-    extractors?: number;
-    resource?: "met" | "kris";
+    extractorsMet?: number;
+    extractorsKris?: number;
   } = {}) => {
     if (!viewingOwnPlan) return;
     const defaultTick = Math.max(
@@ -487,17 +626,17 @@ export default function App() {
     );
     const info = getMaxExtractorsAtTick(startCfg, defaultTick);
     const wantAst = preset.asteroids ?? (hasObservatorium ? 1 : 0);
-    const wantExt =
-      preset.extractors ??
-      (hasExtraktorTech ? Math.max(1, info.max) : 0);
+    const defaultMax = hasExtraktorTech ? Math.max(1, info.max) : 0;
+    const wantMet = preset.extractorsMet ?? defaultMax;
+    const wantKris = preset.extractorsKris ?? 0;
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
       kind: "economy",
       defaultTick,
       defaultAsteroids: wantAst,
-      defaultExtractors: wantExt,
-      resource: preset.resource ?? "met",
+      defaultExtractorsMet: wantMet,
+      defaultExtractorsKris: wantKris,
       freeSlots: info.freeSlots,
       asteroidsOwned: info.asteroids,
       alreadyBuilt: info.alreadyBuilt,
@@ -610,23 +749,31 @@ export default function App() {
     ) {
       const eco =
         entry.kind === "economy"
-          ? entry
+          ? {
+              asteroids: entry.asteroids,
+              extractorsMet: entry.extractorsMet,
+              extractorsKris: entry.extractorsKris,
+              startTick: entry.startTick,
+            }
           : entry.kind === "asteroids"
             ? {
                 asteroids: entry.count,
-                extractors: 0,
-                resource: "met" as const,
+                extractorsMet: 0,
+                extractorsKris: 0,
                 startTick: entry.startTick,
               }
             : {
                 asteroids: 0,
-                extractors: entry.count,
-                resource: entry.resource,
+                extractorsMet: entry.resource === "met" ? entry.count : 0,
+                extractorsKris: entry.resource === "kris" ? entry.count : 0,
                 startTick: entry.startTick,
               };
       const info = getMaxExtractorsAtTick(startCfg, eco.startTick);
       const asteroidsOwned = Math.max(0, info.asteroids - eco.asteroids);
-      const alreadyBuilt = Math.max(0, info.alreadyBuilt - eco.extractors);
+      const alreadyBuilt = Math.max(
+        0,
+        info.alreadyBuilt - eco.extractorsMet - eco.extractorsKris,
+      );
       const freeSlots = Math.max(
         0,
         asteroidsOwned * 20 - alreadyBuilt,
@@ -635,8 +782,8 @@ export default function App() {
         kind: "economy",
         defaultTick: eco.startTick,
         defaultAsteroids: eco.asteroids,
-        defaultExtractors: eco.extractors,
-        resource: eco.resource,
+        defaultExtractorsMet: eco.extractorsMet,
+        defaultExtractorsKris: eco.extractorsKris,
         freeSlots,
         asteroidsOwned,
         alreadyBuilt,
@@ -668,9 +815,9 @@ export default function App() {
   const handleDialogSubmit = (values: {
     startTick: number;
     count?: number;
-    resource?: "met" | "kris";
     asteroids?: number;
-    extractors?: number;
+    extractorsMet?: number;
+    extractorsKris?: number;
     label?: string;
     cost?: { met: number; kris: number };
     targetMet?: number;
@@ -680,9 +827,8 @@ export default function App() {
     if (!dialogTarget) return;
 
     if (dialogMode === "edit" && editingEntry) {
-      setStartCfg((prev) => ({
-        ...prev,
-        plan: prev.plan.map((e) => {
+      updateCurrentPlan((plan) =>
+        plan.map((e) => {
           if (e.id !== editingEntry.id) return e;
           if (e.kind === "tech") {
             return { ...e, startTick: values.startTick };
@@ -693,14 +839,15 @@ export default function App() {
             e.kind === "extractors"
           ) {
             const asteroids = Math.max(0, values.asteroids ?? 0);
-            const extractors = Math.max(0, values.extractors ?? 0);
+            const extractorsMet = Math.max(0, values.extractorsMet ?? 0);
+            const extractorsKris = Math.max(0, values.extractorsKris ?? 0);
             return {
               id: e.id,
               kind: "economy" as const,
               startTick: values.startTick,
               asteroids,
-              extractors,
-              resource: values.resource ?? "met",
+              extractorsMet,
+              extractorsKris,
             };
           }
           if (e.kind === "custom") {
@@ -729,22 +876,22 @@ export default function App() {
             count: values.count ?? ("count" in e ? e.count : 1),
           } as PlanEntry;
         }),
-      }));
+      );
       return;
     }
 
     // add
     if (dialogTarget.kind === "tech") {
       const name = dialogTarget.tech.name;
-      setStartCfg((prev) => {
-        if (prev.plan.some((e) => e.kind === "tech" && e.name === name)) return prev;
+      updateCurrentPlan((plan) => {
+        if (plan.some((e) => e.kind === "tech" && e.name === name)) return plan;
         const entry: PlanEntry = {
           id: newPlanEntryId("tech"),
           kind: "tech",
           name,
           startTick: values.startTick,
         };
-        return { ...prev, plan: [...prev.plan, entry] };
+        return [...plan, entry];
       });
       return;
     }
@@ -757,7 +904,7 @@ export default function App() {
         startTick: values.startTick,
         count: Math.max(1, values.count ?? 1),
       };
-      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      updateCurrentPlan((plan) => [...plan, entry]);
       return;
     }
 
@@ -769,23 +916,24 @@ export default function App() {
         startTick: values.startTick,
         count: Math.max(1, values.count ?? 1),
       };
-      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      updateCurrentPlan((plan) => [...plan, entry]);
       return;
     }
 
     if (dialogTarget.kind === "economy") {
       const asteroids = Math.max(0, values.asteroids ?? 0);
-      const extractors = Math.max(0, values.extractors ?? 0);
-      if (asteroids <= 0 && extractors <= 0) return;
+      const extractorsMet = Math.max(0, values.extractorsMet ?? 0);
+      const extractorsKris = Math.max(0, values.extractorsKris ?? 0);
+      if (asteroids <= 0 && extractorsMet <= 0 && extractorsKris <= 0) return;
       const entry: PlanEntry = {
         id: newPlanEntryId("eco"),
         kind: "economy",
         startTick: values.startTick,
         asteroids,
-        extractors,
-        resource: values.resource ?? dialogTarget.resource,
+        extractorsMet,
+        extractorsKris,
       };
-      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      updateCurrentPlan((plan) => [...plan, entry]);
       return;
     }
 
@@ -802,7 +950,7 @@ export default function App() {
           kris: Math.max(0, values.cost?.kris ?? 0),
         },
       };
-      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      updateCurrentPlan((plan) => [...plan, entry]);
       return;
     }
 
@@ -819,32 +967,37 @@ export default function App() {
         targetKris,
         duration,
       };
-      setStartCfg((prev) => ({ ...prev, plan: [...prev.plan, entry] }));
+      updateCurrentPlan((plan) => [...plan, entry]);
     }
   };
 
   const handleDialogRemove = () => {
     if (!editingEntry) return;
-    setStartCfg((prev) => ({
-      ...prev,
-      plan: removePlanEntryCascade(prev.plan, editingEntry.id),
-    }));
+    updateCurrentPlan((plan) => removePlanEntryCascade(plan, editingEntry.id));
     setDialogOpen(false);
     setEditingEntry(null);
   };
 
-  const resetPlan = (templateId: string) => {
-    const template = planTemplates.find((item) => item.id === templateId);
-    if (!template) return;
-    setStartCfg((prev) =>
-      normalizeConfig({
-        ...defaultConfig,
-        start_date: prev.start_date,
-        start_time: prev.start_time,
-        tick_minutes: prev.tick_minutes,
-        plan: template.plan,
-      }),
-    );
+  const resetPlan = (sourceId: string) => {
+    setAppState((prev) => {
+      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
+      let next: PlanEntry[] | null = null;
+      if (sourceId.startsWith("template:")) {
+        const templateId = sourceId.slice("template:".length);
+        const template = planTemplates.find((item) => item.id === templateId);
+        if (!template) return prev;
+        next = clonePlanEntries(normalizePlan(template.plan));
+      } else if (sourceId.startsWith("plan:")) {
+        const id = Number(sourceId.slice("plan:".length));
+        if (!isPlanSlotId(id) || id === slot) return prev;
+        next = clonePlanEntries(prev.plans[id]);
+      }
+      if (!next) return prev;
+      return {
+        ...prev,
+        plans: { ...prev.plans, [slot]: next },
+      };
+    });
   };
 
   return (
@@ -853,15 +1006,22 @@ export default function App() {
         <Header
           now={now}
           currentTick={currentTick}
-          startCfg={startCfg}
+          startCfg={viewCfg}
           plan={plan}
           nextAction={nextAction}
           onApplyStart={({ start_date, start_time, tick_minutes }) => {
-            setStartCfg((prev) => ({ ...prev, start_date, start_time, tick_minutes }));
+            setAppState((prev) => ({ ...prev, start_date, start_time, tick_minutes }));
           }}
-          onReset={resetPlan}
         />
-        <PlanSwitcher viewId={viewId} onViewChange={setViewId} />
+        <PlanSwitcher
+          viewId={viewId}
+          onViewChange={(id) => {
+            setViewId(id);
+            if (isPlanSlotId(id)) {
+              setAppState((prev) => ({ ...prev, activePlanId: id }));
+            }
+          }}
+        />
         <div className={viewingOwnPlan ? "grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-1"}>
           {viewingOwnPlan && (
             <Sidebar
@@ -890,9 +1050,24 @@ export default function App() {
             parseImportPlan={viewingOwnPlan ? parseImportedPlan : undefined}
             onImportPlan={
               viewingOwnPlan
-                ? (plan) => setStartCfg((prev) => ({ ...prev, plan }))
+                ? (imported) => updateCurrentPlan(() => imported)
                 : undefined
             }
+            resetSources={
+              viewingOwnPlan
+                ? [
+                    ...planTemplates.map((template) => ({
+                      id: `template:${template.id}`,
+                      label: template.label,
+                    })),
+                    ...PLAN_SLOT_IDS.filter((id) => id !== activeSlot).map((id) => ({
+                      id: `plan:${id}`,
+                      label: planSlotLabel(id),
+                    })),
+                  ]
+                : undefined
+            }
+            onResetPlan={viewingOwnPlan ? resetPlan : undefined}
             onEditJob={
               viewingOwnPlan
                 ? (planEntryId) => {
@@ -948,17 +1123,14 @@ export default function App() {
             const snap = getResourcesAtTick(startCfg, tick);
             let bonusAst = 0;
             let bonusExt = 0;
-            let bonusResource: "met" | "kris" = "met";
             if (dialogMode === "edit" && editingEntry) {
               if (editingEntry.kind === "economy") {
                 bonusAst = editingEntry.asteroids;
-                bonusExt = editingEntry.extractors;
-                bonusResource = editingEntry.resource;
+                bonusExt = editingEntry.extractorsMet + editingEntry.extractorsKris;
               } else if (editingEntry.kind === "asteroids") {
                 bonusAst = editingEntry.count;
               } else if (editingEntry.kind === "extractors") {
                 bonusExt = editingEntry.count;
-                bonusResource = editingEntry.resource;
               }
             }
             const asteroids = Math.max(0, info.asteroids - bonusAst);
@@ -967,10 +1139,7 @@ export default function App() {
             // Refund costs of the entry being edited so max reflects free budget.
             const refundKris = bonusAst * ASTEROID_COST.kris;
             const refundMet =
-              bonusExt > 0
-                ? extractorBatchCost(alreadyBuilt, bonusExt)
-                : 0;
-            void bonusResource;
+              bonusExt > 0 ? extractorBatchCost(alreadyBuilt, bonusExt) : 0;
             return {
               freeSlots,
               asteroids,

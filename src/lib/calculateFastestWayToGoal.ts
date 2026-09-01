@@ -82,6 +82,7 @@ export type NamedJob = {
   name: string;
   type: JobKind;
   planEntryId?: string;
+  cost?: Res;
 };
 
 export type ActiveJob = NamedJob & {
@@ -117,6 +118,8 @@ export type TickSnapshot = {
   asteroids: number;
   extractorsMet: number;
   extractorsKris: number;
+  extractorsMetProducing: number;
+  extractorsKrisProducing: number;
 };
 
 export type PlanResult = {
@@ -383,8 +386,11 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
     case "economy": {
       const parts: string[] = [];
       if (entry.asteroids > 0) parts.push(formatAsteroidLabel(entry.asteroids));
-      if (entry.extractors > 0) {
-        parts.push(formatExtractorLabel(entry.resource, entry.extractors));
+      if (entry.extractorsMet > 0) {
+        parts.push(formatExtractorLabel("met", entry.extractorsMet));
+      }
+      if (entry.extractorsKris > 0) {
+        parts.push(formatExtractorLabel("kris", entry.extractorsKris));
       }
       return parts.join(" + ") || "Economy";
     }
@@ -617,7 +623,9 @@ export function removePlanEntryCascade(plan: PlanEntry[], id: string): PlanEntry
           changed = true;
         }
       } else if (entry.kind === "economy") {
-        const needsExt = entry.extractors > 0 && removedTechNames.has("Extraktor");
+        const needsExt =
+          (entry.extractorsMet > 0 || entry.extractorsKris > 0) &&
+          removedTechNames.has("Extraktor");
         const needsAst = entry.asteroids > 0 && removedTechNames.has("Observatorium");
         if (needsExt || needsAst) {
           toRemove.add(entry.id);
@@ -656,9 +664,9 @@ type PendingUnit = {
 
 type PendingEconomy = {
   entryId: string;
-  resource: "met" | "kris";
   remainingAsteroids: number;
-  remainingExtractors: number;
+  remainingExtractorsMet: number;
+  remainingExtractorsKris: number;
   desiredTick: number;
 };
 
@@ -764,31 +772,32 @@ function simulatePlan(
       });
     } else if (e.kind === "economy") {
       const asteroids = Math.max(0, e.asteroids);
-      const extractors = Math.max(0, e.extractors);
-      if (asteroids <= 0 && extractors <= 0) continue;
+      const extractorsMet = Math.max(0, e.extractorsMet);
+      const extractorsKris = Math.max(0, e.extractorsKris);
+      if (asteroids <= 0 && extractorsMet <= 0 && extractorsKris <= 0) continue;
       pendingEconomy.push({
         entryId: e.id,
-        resource: e.resource,
         remainingAsteroids: asteroids,
-        remainingExtractors: extractors,
+        remainingExtractorsMet: extractorsMet,
+        remainingExtractorsKris: extractorsKris,
         desiredTick: e.startTick,
       });
     } else if (e.kind === "extractors") {
       // legacy
       pendingEconomy.push({
         entryId: e.id,
-        resource: e.resource,
         remainingAsteroids: 0,
-        remainingExtractors: Math.max(1, e.count),
+        remainingExtractorsMet: e.resource === "met" ? Math.max(1, e.count) : 0,
+        remainingExtractorsKris: e.resource === "kris" ? Math.max(1, e.count) : 0,
         desiredTick: e.startTick,
       });
     } else if (e.kind === "asteroids") {
       // legacy
       pendingEconomy.push({
         entryId: e.id,
-        resource: "met",
         remainingAsteroids: Math.max(1, e.count),
-        remainingExtractors: 0,
+        remainingExtractorsMet: 0,
+        remainingExtractorsKris: 0,
         desiredTick: e.startTick,
       });
     } else if (e.kind === "custom") {
@@ -835,7 +844,10 @@ function simulatePlan(
     if (pendingUnits.some((u) => u.remaining > 0)) return false;
     if (
       pendingEconomy.some(
-        (u) => u.remainingAsteroids > 0 || u.remainingExtractors > 0,
+        (u) =>
+          u.remainingAsteroids > 0 ||
+          u.remainingExtractorsMet > 0 ||
+          u.remainingExtractorsKris > 0,
       )
     ) {
       return false;
@@ -954,7 +966,11 @@ function simulatePlan(
       ) {
         const pending = pendingEconomy.find((p) => p.entryId === entry.id);
         if (!pending) continue;
-        if (pending.remainingAsteroids <= 0 && pending.remainingExtractors <= 0) {
+        if (
+          pending.remainingAsteroids <= 0 &&
+          pending.remainingExtractorsMet <= 0 &&
+          pending.remainingExtractorsKris <= 0
+        ) {
           continue;
         }
         if (tick < pending.desiredTick) continue;
@@ -990,20 +1006,23 @@ function simulatePlan(
           }
         }
 
-        if (pending.remainingExtractors > 0 && completed.has("Extraktor")) {
-          while (pending.remainingExtractors > 0) {
+        const buildExtractors = (resource: "met" | "kris") => {
+          if (!completed.has("Extraktor")) return;
+          const remainingKey =
+            resource === "met" ? "remainingExtractorsMet" : "remainingExtractorsKris";
+          while (pending[remainingKey] > 0) {
             const nextIndex = totalExtractors() + 1;
             const cost = { met: extractorUnitCost(nextIndex), kris: 0 };
             if (!canAfford(res, cost)) break;
             res = pay(res, cost);
             spent = addRes(spent, cost);
-            if (pending.resource === "met") extractorsMet += 1;
+            if (resource === "met") extractorsMet += 1;
             else extractorsKris += 1;
-            extractorQueue.push(pending.resource);
-            pending.remainingExtractors -= 1;
+            extractorQueue.push(resource);
+            pending[remainingKey] -= 1;
             didWork = true;
             const label =
-              pending.resource === "met"
+              resource === "met"
                 ? `Extraktor (Metall) #${extractorsMet}`
                 : `Extraktor (Kristall) #${extractorsKris}`;
             const job: Job = {
@@ -1019,12 +1038,15 @@ function simulatePlan(
             finishedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
             markEntryStart(entry.id, tick);
           }
-        }
+        };
+        buildExtractors("met");
+        buildExtractors("kris");
 
         if (
           didWork &&
           pending.remainingAsteroids <= 0 &&
-          pending.remainingExtractors <= 0
+          pending.remainingExtractorsMet <= 0 &&
+          pending.remainingExtractorsKris <= 0
         ) {
           markEntryFinish(entry.id, tick);
         }
@@ -1052,11 +1074,13 @@ function simulatePlan(
           name: pending.label,
           type: "custom",
           planEntryId: entry.id,
+          cost: pending.cost,
         });
         finishedJobs.push({
           name: pending.label,
           type: "custom",
           planEntryId: entry.id,
+          cost: pending.cost,
         });
         markEntryStart(entry.id, tick);
         markEntryFinish(entry.id, tick);
@@ -1167,7 +1191,9 @@ function simulatePlan(
     delta: Res,
     quests: QuestEvent[] = [],
     roidLoot: RoidLootEvent[] = [],
-  ): TickSnapshot => ({
+  ): TickSnapshot => {
+    const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
+    return {
     tick,
     clockLabel: clockLabel(startCfg, tick),
     met: res.met,
@@ -1189,7 +1215,10 @@ function simulatePlan(
     asteroids,
     extractorsMet,
     extractorsKris,
-  });
+    extractorsMetProducing: slotted.producingMet,
+    extractorsKrisProducing: slotted.producingKris,
+  };
+  };
 
   const resultAt = (finishTick: number) => {
     const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
@@ -1345,13 +1374,16 @@ function simulatePlan(
           p.remainingAsteroids > 0 &&
           (!completed.has("Observatorium") || res.kris < ASTEROID_COST_KRIS);
         const stuckExt =
-          p.remainingExtractors > 0 &&
+          (p.remainingExtractorsMet > 0 || p.remainingExtractorsKris > 0) &&
           (!completed.has("Extraktor") ||
             res.met < extractorUnitCost(totalExtractors() + 1));
         return stuckAst || stuckExt;
       });
       const hasPendingEco = pendingEconomy.some(
-        (p) => p.remainingAsteroids > 0 || p.remainingExtractors > 0,
+        (p) =>
+          p.remainingAsteroids > 0 ||
+          p.remainingExtractorsMet > 0 ||
+          p.remainingExtractorsKris > 0,
       );
       const hasPendingCustom = pendingCustom.some((p) => !p.done);
       const stuckCustom = pendingCustom.some((p) => {

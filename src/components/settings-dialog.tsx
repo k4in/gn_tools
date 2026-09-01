@@ -1,14 +1,5 @@
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
-import { ResetBtn } from "@/components/reset-btn";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/shadcn/combobox";
 import { Button } from "@/components/shadcn/button";
 import {
   Dialog,
@@ -24,12 +15,10 @@ import {
   FieldGroup,
   FieldLabel,
   FieldLegend,
-  FieldSeparator,
   FieldSet,
 } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group";
-import { planTemplates, type PlanTemplate } from "@/gn-data/plan";
 
 export type AppliedSettings = {
   start_date: string;
@@ -42,7 +31,6 @@ export type SettingsDialogProps = {
   startTime: string;
   tickMinutes: number;
   onApplyStart: (next: AppliedSettings) => void;
-  onReset: (templateId: string) => void;
 };
 
 function normalizeTime(value: string): string | null {
@@ -72,13 +60,11 @@ export function SettingsDialog({
   startTime,
   tickMinutes: savedTickMinutes,
   onApplyStart,
-  onReset,
 }: SettingsDialogProps) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(startDate);
   const [time, setTime] = useState(normalizeTime(startTime) ?? startTime);
   const [tickMinutes, setTickMinutes] = useState(String(savedTickMinutes));
-  const [resetTemplate, setResetTemplate] = useState<PlanTemplate | null>(planTemplates[0] ?? null);
 
   useEffect(() => {
     if (!open) return;
@@ -163,43 +149,6 @@ export function SettingsDialog({
               >
                 Übernehmen
               </Button>
-            </Field>
-          </FieldSet>
-          <FieldSeparator />
-          <FieldSet>
-            <FieldLegend>Plan zurücksetzen</FieldLegend>
-            <FieldDescription>Resette mit dem folgenden Default-Plan.</FieldDescription>
-            <Field>
-              <FieldLabel>Default-Plan</FieldLabel>
-              <Combobox
-                items={planTemplates}
-                value={resetTemplate}
-                onValueChange={setResetTemplate}
-                itemToStringValue={(template) => template.label}
-              >
-                <ComboboxInput placeholder="Default-Plan wählen" />
-                <ComboboxContent>
-                  <ComboboxEmpty>Kein Plan gefunden.</ComboboxEmpty>
-                  <ComboboxList>
-                    {(template) => (
-                      <ComboboxItem key={template.id} value={template}>
-                        {template.label}
-                      </ComboboxItem>
-                    )}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
-            </Field>
-            <Field>
-              <ResetBtn
-                planLabel={resetTemplate?.label ?? ""}
-                disabled={!resetTemplate}
-                onReset={() => {
-                  if (!resetTemplate) return;
-                  onReset(resetTemplate.id);
-                  setOpen(false);
-                }}
-              />
             </Field>
           </FieldSet>
         </FieldGroup>

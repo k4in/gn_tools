@@ -24,8 +24,8 @@ export type SidebarProps = {
   onAddRecon: (name: string) => void;
   onAddEconomy: (preset?: {
     asteroids?: number;
-    extractors?: number;
-    resource?: "met" | "kris";
+    extractorsMet?: number;
+    extractorsKris?: number;
   }) => void;
   onAddRoid: () => void;
   onAddCustom: () => void;

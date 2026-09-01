@@ -12,11 +12,24 @@ import {
   formatRes,
   formatRoidLootLabel,
   type JobKind,
+  type NamedJob,
   type TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
-export type DisplayJob = { name: string; type: JobKind; suffix?: string };
+export type DisplayJob = {
+  name: string;
+  type: JobKind;
+  suffix?: string;
+  cost?: { met: number; kris: number };
+};
+
+function formatCustomCost(cost: { met: number; kris: number }) {
+  const parts: string[] = [];
+  if (cost.met > 0) parts.push(`−${formatRes(cost.met)} M`);
+  if (cost.kris > 0) parts.push(`−${formatRes(cost.kris)} K`);
+  return parts.join(" · ");
+}
 
 export function jobTypeClass(type: JobKind) {
   if (type === "building") return "text-amber-500";
@@ -93,21 +106,75 @@ export function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
   return [...out, ...rest];
 }
 
+function withoutCustom(items: DisplayJob[]) {
+  return items.filter((item) => item.type !== "custom");
+}
+
+function onlyCustom(items: DisplayJob[]) {
+  return items.filter((item) => item.type === "custom");
+}
+
+export function ExtraEvents({
+  customs,
+  tick,
+}: {
+  customs: NamedJob[];
+  tick: TickSnapshot;
+}) {
+  const hasQuests = tick.quests.length > 0;
+  const hasRoids = tick.roidLoot.length > 0;
+  const hasCustom = customs.length > 0;
+  if (!hasQuests && !hasRoids && !hasCustom) return null;
+
+  return (
+    <span className="inline">
+      {hasCustom ? <JobList items={customs} /> : null}
+      {hasCustom && (hasQuests || hasRoids) && (
+        <span className="text-muted-foreground">, </span>
+      )}
+      {hasQuests ? (
+        <span className="text-green-500">
+          {tick.quests.map((q, i) => (
+            <span key={q.id}>
+              {i > 0 && <span className="text-muted-foreground">, </span>}
+              {q.label}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {hasQuests && hasRoids && <span className="text-muted-foreground">, </span>}
+      {tick.roidLoot.map((loot, i) => {
+        const label = formatRoidLootLabel(loot);
+        if (!label) return null;
+        return (
+          <span key={`${loot.planEntryId}-${i}`} className="text-blue-400">
+            {i > 0 && <span className="text-muted-foreground">, </span>}
+            {label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 export function JobList({ items }: { items: DisplayJob[] }) {
   const collapsed = collapseEconomyJobs(items);
   return (
     <span className="inline">
-      {collapsed.map((item, i) => (
-        <span key={`${item.name}-${i}`}>
-          {i > 0 && <span className="text-muted-foreground">, </span>}
-          <span className={jobTypeClass(item.type)}>
-            {item.name}
-            {item.suffix ? (
-              <span className="text-muted-foreground"> {item.suffix}</span>
-            ) : null}
+      {collapsed.map((item, i) => {
+        const customCost =
+          item.type === "custom" && item.cost ? formatCustomCost(item.cost) : "";
+        const extra = customCost || item.suffix;
+        return (
+          <span key={`${item.name}-${i}`}>
+            {i > 0 && <span className="text-muted-foreground">, </span>}
+            <span className={jobTypeClass(item.type)}>
+              {item.name}
+              {extra ? <span className="text-muted-foreground"> {extra}</span> : null}
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </span>
   );
 }
@@ -213,36 +280,12 @@ export function TickTable({
                 )}
               </TruncateCell>
               <TruncateCell>
-                {t.started.length ? <JobList items={t.started} /> : null}
+                {withoutCustom(t.started).length ? (
+                  <JobList items={withoutCustom(t.started)} />
+                ) : null}
               </TruncateCell>
               <TruncateCell>
-                {t.quests.length || t.roidLoot.length ? (
-                  <>
-                    {t.quests.length ? (
-                      <span className="text-green-500">
-                        {t.quests.map((q, i) => (
-                          <span key={q.id}>
-                            {i > 0 && <span className="text-muted-foreground">, </span>}
-                            {q.label}
-                          </span>
-                        ))}
-                      </span>
-                    ) : null}
-                    {t.quests.length > 0 && t.roidLoot.length > 0 && (
-                      <span className="text-muted-foreground">, </span>
-                    )}
-                    {t.roidLoot.map((loot, i) => {
-                      const label = formatRoidLootLabel(loot);
-                      if (!label) return null;
-                      return (
-                        <span key={`${loot.planEntryId}-${i}`} className="text-blue-400">
-                          {i > 0 && <span className="text-muted-foreground">, </span>}
-                          {label}
-                        </span>
-                      );
-                    })}
-                  </>
-                ) : null}
+                <ExtraEvents customs={onlyCustom(t.started)} tick={t} />
               </TruncateCell>
             </TableRow>
           );
@@ -269,7 +312,7 @@ export function ActionPlan({ ticks, currentTick, hasPlan, isActive = false }: Ac
   }
 
   const nextTick =
-    ticks.find((t) => t.tick >= currentTick)?.tick ?? null;
+    ticks.find((t) => t.tick >= currentTick && withoutCustom(t.started).length > 0)?.tick ?? null;
 
   return (
     <Table>
@@ -278,21 +321,28 @@ export function ActionPlan({ ticks, currentTick, hasPlan, isActive = false }: Ac
           <TableHead>Tick</TableHead>
           <TableHead>Uhrzeit</TableHead>
           <TableHead>Auftrag</TableHead>
+          <TableHead>Quest</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {ticks.map((t) => {
           const isNext = nextTick !== null && t.tick === nextTick;
+          const orders = withoutCustom(t.started);
+          const extras = onlyCustom(t.started);
           return (
             <TableRow key={t.tick} ref={isNext ? currentRowRef : undefined}>
               <TableCell className={cn(isNext && "text-green-500")}>
                 {t.tick}
               </TableCell>
               <TableCell className={cn(isNext && "text-green-500")}>{t.clockLabel}</TableCell>
-              <TableCell>{t.started.length ? <JobList items={t.started} /> : "—"}</TableCell>
+              <TableCell>{orders.length ? <JobList items={orders} /> : "—"}</TableCell>
+              <TableCell>
+                <ExtraEvents customs={extras} tick={t} />
+              </TableCell>
             </TableRow>
           );
         })}
+
       </TableBody>
     </Table>
   );

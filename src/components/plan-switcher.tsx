@@ -1,9 +1,13 @@
 import { Badge } from "@/components/shadcn/badge";
-import { planTemplates } from "@/gn-data/plan";
+import {
+  PLAN_SLOT_IDS,
+  isPlanSlotId,
+  planSlotLabel,
+  planTemplates,
+  type PlanSlotId,
+} from "@/gn-data/plan";
 
-export const MY_PLAN_VIEW = "mine";
-
-export type PlanViewId = typeof MY_PLAN_VIEW | string;
+export type PlanViewId = PlanSlotId | string;
 
 export type PlanSwitcherProps = {
   viewId: PlanViewId;
@@ -13,18 +17,24 @@ export type PlanSwitcherProps = {
 export function PlanSwitcher({ viewId, onViewChange }: PlanSwitcherProps) {
   return (
     <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-1.5">
-      <Badge
-        variant={viewId === MY_PLAN_VIEW ? "default" : "outline"}
-        render={<button type="button" aria-pressed={viewId === MY_PLAN_VIEW} />}
-        onClick={() => onViewChange(MY_PLAN_VIEW)}
-      >
-        Mein Plan
-      </Badge>
+      {PLAN_SLOT_IDS.map((id) => {
+        const active = viewId === id;
+        return (
+          <Badge
+            key={id}
+            variant={active ? "default" : "outline"}
+            render={<button type="button" aria-pressed={active} />}
+            onClick={() => onViewChange(id)}
+          >
+            {planSlotLabel(id)}
+          </Badge>
+        );
+      })}
       <span className="pl-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
         Templates:
       </span>
       {planTemplates.map((template) => {
-        const active = viewId === template.id;
+        const active = !isPlanSlotId(viewId) && viewId === template.id;
         return (
           <Badge
             key={template.id}

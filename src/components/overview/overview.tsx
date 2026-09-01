@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ExportPlanDialog } from "@/components/export-plan-dialog";
 import { ImportPlanDialog } from "@/components/import-plan-dialog";
+import { ResetPlanDialog, type ResetPlanSource } from "@/components/reset-plan-dialog";
 import type { PlanEntry } from "@/gn-data/plan";
 import { ActionPlan } from "@/components/overview/actionplan";
 import { Protocol } from "@/components/overview/protocol";
@@ -33,6 +34,8 @@ export type OverviewProps = {
     | { ok: false; error: string };
   onEditJob?: (planEntryId: string | undefined) => void;
   slotShortage?: ExtractorSlotShortage | null;
+  resetSources?: ResetPlanSource[];
+  onResetPlan?: (sourceId: string) => void;
 };
 
 export function Overview({
@@ -47,6 +50,8 @@ export function Overview({
   parseImportPlan,
   onEditJob,
   slotShortage = null,
+  resetSources,
+  onResetPlan,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("timeline");
 
@@ -89,6 +94,9 @@ export function Overview({
                 <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />
               )}
               <ExportPlanDialog json={exportJson} />
+              {resetSources && onResetPlan && (
+                <ResetPlanDialog sources={resetSources} onReset={onResetPlan} />
+              )}
             </div>
           )}
         </div>

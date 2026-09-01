@@ -13,10 +13,10 @@ export type PlanEntry =
       startTick: number;
       /** Anzahl Asteroiden (0 = nur Extraktoren). */
       asteroids: number;
-      /** Anzahl Extraktoren (0 = nur Asteroiden). */
-      extractors: number;
-      /** Ressource der Extraktoren (irrelevant wenn extractors === 0). */
-      resource: "met" | "kris";
+      /** Metallextraktoren (0 = keine). */
+      extractorsMet: number;
+      /** Kristallextraktoren (0 = keine). */
+      extractorsKris: number;
     }
   /** Beliebige Ressourcen-Ausgabe mit Label (instant). */
   | {
@@ -54,6 +54,21 @@ export type PlanTemplate = {
   label: string;
   plan: PlanEntry[];
 };
+
+export const PLAN_SLOT_IDS = [1, 2, 3] as const;
+export type PlanSlotId = (typeof PLAN_SLOT_IDS)[number];
+
+export function isPlanSlotId(value: unknown): value is PlanSlotId {
+  return value === 1 || value === 2 || value === 3;
+}
+
+export function planSlotLabel(id: PlanSlotId): string {
+  return `Plan ${id}`;
+}
+
+export function clonePlanEntries(plan: PlanEntry[]): PlanEntry[] {
+  return structuredClone(plan);
+}
 
 export const planTemplates: PlanTemplate[] = [balanced, fastCleptor, fastRaumhafen];
 

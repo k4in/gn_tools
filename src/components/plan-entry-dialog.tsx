@@ -64,8 +64,8 @@ type EconomyTarget = {
   kind: "economy";
   defaultTick: number;
   defaultAsteroids: number;
-  defaultExtractors: number;
-  resource: "met" | "kris";
+  defaultExtractorsMet: number;
+  defaultExtractorsKris: number;
   /** Free slots before this entry's own asteroids/extractors. */
   freeSlots: number;
   asteroidsOwned: number;
@@ -111,9 +111,9 @@ export type PlanEntryDialogTarget =
 export type PlanEntryDialogSubmit = {
   startTick: number;
   count?: number;
-  resource?: "met" | "kris";
   asteroids?: number;
-  extractors?: number;
+  extractorsMet?: number;
+  extractorsKris?: number;
   label?: string;
   cost?: { met: number; kris: number };
   targetMet?: number;
@@ -156,8 +156,8 @@ export function PlanEntryDialog({
   const [startTick, setStartTick] = useState(0);
   const [count, setCount] = useState(1);
   const [asteroidCount, setAsteroidCount] = useState(0);
-  const [extractorCount, setExtractorCount] = useState(0);
-  const [resource, setResource] = useState<"met" | "kris">("met");
+  const [extractorMetCount, setExtractorMetCount] = useState(0);
+  const [extractorKrisCount, setExtractorKrisCount] = useState(0);
   const [label, setLabel] = useState("");
   const [met, setMet] = useState(0);
   const [kris, setKris] = useState(0);
@@ -171,20 +171,20 @@ export function PlanEntryDialog({
       setStartTick(entry.startTick);
       if (entry.kind === "economy") {
         setAsteroidCount(Math.max(0, entry.asteroids));
-        setExtractorCount(Math.max(0, entry.extractors));
-        setResource(entry.resource);
+        setExtractorMetCount(Math.max(0, entry.extractorsMet));
+        setExtractorKrisCount(Math.max(0, entry.extractorsKris));
         return;
       }
       if (entry.kind === "asteroids") {
         setAsteroidCount(Math.max(0, entry.count));
-        setExtractorCount(0);
-        setResource("met");
+        setExtractorMetCount(0);
+        setExtractorKrisCount(0);
         return;
       }
       if (entry.kind === "extractors") {
         setAsteroidCount(0);
-        setExtractorCount(Math.max(0, entry.count));
-        setResource(entry.resource);
+        setExtractorMetCount(entry.resource === "met" ? Math.max(0, entry.count) : 0);
+        setExtractorKrisCount(entry.resource === "kris" ? Math.max(0, entry.count) : 0);
         return;
       }
       if (entry.kind === "custom") {
@@ -210,8 +210,8 @@ export function PlanEntryDialog({
       setCount(Math.max(1, target.defaultCount));
     } else if (target.kind === "economy") {
       setAsteroidCount(Math.max(0, target.defaultAsteroids));
-      setExtractorCount(Math.max(0, target.defaultExtractors));
-      setResource(target.resource);
+      setExtractorMetCount(Math.max(0, target.defaultExtractorsMet));
+      setExtractorKrisCount(Math.max(0, target.defaultExtractorsKris));
     } else if (target.kind === "custom") {
       setLabel(target.defaultLabel);
       setMet(Math.max(0, target.defaultMet));
@@ -261,7 +261,7 @@ export function PlanEntryDialog({
   const economyCosts = useMemo(() => {
     if (!target || target.kind !== "economy" || !liveEconomy) return null;
     const a = Math.max(0, asteroidCount);
-    const e = Math.max(0, extractorCount);
+    const e = Math.max(0, extractorMetCount + extractorKrisCount);
     const costPerAst = target.costKrisPerAsteroid || ASTEROID_COST.kris;
     const slotsFromNew = a * ASTEROID_SLOT_CAPACITY;
     const freeAfterAst = liveEconomy.freeSlots + slotsFromNew;
@@ -287,7 +287,7 @@ export function PlanEntryDialog({
       totalKris,
       maxExtractors,
     };
-  }, [target, liveEconomy, asteroidCount, extractorCount]);
+  }, [target, liveEconomy, asteroidCount, extractorMetCount, extractorKrisCount]);
 
   if (!target) return null;
 
@@ -311,10 +311,11 @@ export function PlanEntryDialog({
     }
     if (target.kind === "economy") {
       const a = Math.max(0, asteroidCount);
-      const e = Math.max(0, extractorCount);
-      if (a <= 0 && e <= 0) return false;
+      const metEx = Math.max(0, extractorMetCount);
+      const krisEx = Math.max(0, extractorKrisCount);
+      if (a <= 0 && metEx <= 0 && krisEx <= 0) return false;
       if (a > 0 && !target.canAsteroids) return false;
-      if (e > 0 && !target.canExtractors) return false;
+      if ((metEx > 0 || krisEx > 0) && !target.canExtractors) return false;
       return true;
     }
     if (target.kind === "custom") {
@@ -346,8 +347,8 @@ export function PlanEntryDialog({
       onSubmit({
         startTick,
         asteroids: Math.max(0, asteroidCount),
-        extractors: Math.max(0, extractorCount),
-        resource,
+        extractorsMet: Math.max(0, extractorMetCount),
+        extractorsKris: Math.max(0, extractorKrisCount),
       });
     } else if (target.kind === "custom") {
       onSubmit({
@@ -437,7 +438,7 @@ export function PlanEntryDialog({
                   <dt>Extraktor-Kosten</dt>
                   <dd className="tabular-nums font-medium text-foreground">
                     {formatRes(economyCosts.totalMet)} M
-                    {extractorCount > 0
+                    {extractorMetCount + extractorKrisCount > 0
                       ? ` (nächster ${formatRes(economyCosts.nextCost)} M)`
                       : ""}
                   </dd>
@@ -447,9 +448,9 @@ export function PlanEntryDialog({
                   </dd>
                 </dl>
               )}
-              {extractorCount > 0 &&
+              {extractorMetCount + extractorKrisCount > 0 &&
                 economyCosts &&
-                extractorCount > economyCosts.maxExtractors && (
+                extractorMetCount + extractorKrisCount > economyCosts.maxExtractors && (
                   <p className="text-amber-500">
                     Mehr Extraktoren als Slots/Metall bei diesem Tick — ohne Asteroidenplatz liefern sie keine Rohstoffe.
                   </p>
@@ -457,7 +458,7 @@ export function PlanEntryDialog({
               {asteroidCount > 0 && !target.canAsteroids && (
                 <p className="text-amber-500">Observatorium fehlt im Plan.</p>
               )}
-              {extractorCount > 0 && !target.canExtractors && (
+              {(extractorMetCount > 0 || extractorKrisCount > 0) && !target.canExtractors && (
                 <p className="text-amber-500">Extraktor-Tech fehlt im Plan.</p>
               )}
             </div>
@@ -495,8 +496,8 @@ export function PlanEntryDialog({
             </div>
           )}
 
-          <div className="flex flex-wrap items-end gap-3">
-            <Field className="w-28">
+          <div className={target.kind === "economy" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
+            <Field className={target.kind === "economy" ? "w-full" : "w-28"}>
               <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
               <InputGroup>
                 <InputGroupInput
@@ -639,8 +640,8 @@ export function PlanEntryDialog({
             )}
 
             {target.kind === "economy" && (
-              <>
-                <Field className="w-28">
+              <div className="grid grid-cols-3 gap-3">
+                <Field>
                   <FieldLabel htmlFor="plan-asteroids">Asteroiden</FieldLabel>
                   <InputGroup>
                     <InputGroupInput
@@ -658,48 +659,45 @@ export function PlanEntryDialog({
                     />
                   </InputGroup>
                 </Field>
-                <Field className="w-28">
-                  <FieldLabel htmlFor="plan-extractors">Extraktoren</FieldLabel>
+                <Field>
+                  <FieldLabel htmlFor="plan-extractors-met">Met-Exen</FieldLabel>
                   <InputGroup>
                     <InputGroupInput
-                      id="plan-extractors"
+                      id="plan-extractors-met"
                       type="number"
                       min={0}
                       disabled={!target.canExtractors}
-                      value={extractorCount}
+                      value={extractorMetCount}
                       onChange={(e) => {
                         const n = Number(e.target.value);
                         if (!Number.isFinite(n)) return;
-                        setExtractorCount(Math.max(0, Math.floor(n)));
+                        setExtractorMetCount(Math.max(0, Math.floor(n)));
                       }}
                       className="tabular-nums"
                     />
                   </InputGroup>
                 </Field>
-              </>
+                <Field>
+                  <FieldLabel htmlFor="plan-extractors-kris">Kris-Exen</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-extractors-kris"
+                      type="number"
+                      min={0}
+                      disabled={!target.canExtractors}
+                      value={extractorKrisCount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setExtractorKrisCount(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+              </div>
             )}
           </div>
-
-          {target.kind === "economy" && target.canExtractors && (
-            <div className="flex gap-2 text-xs">
-              <Button
-                type="button"
-                size="sm"
-                variant={resource === "met" ? "default" : "outline"}
-                onClick={() => setResource("met")}
-              >
-                Metall
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={resource === "kris" ? "default" : "outline"}
-                onClick={() => setResource("kris")}
-              >
-                Kristall
-              </Button>
-            </div>
-          )}
 
           {(target.kind === "unit" || target.kind === "recon") && liveMax > 0 && (
             <p className="text-[11px] text-muted-foreground tabular-nums">

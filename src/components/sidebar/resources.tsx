@@ -11,8 +11,8 @@ export type ResourcesProps = {
   hasExtraktorTech: boolean;
   onAddEconomy: (preset?: {
     asteroids?: number;
-    extractors?: number;
-    resource?: "met" | "kris";
+    extractorsMet?: number;
+    extractorsKris?: number;
   }) => void;
   onAddRoid: () => void;
 };
