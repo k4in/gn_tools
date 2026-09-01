@@ -55,7 +55,7 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
     >
       <DialogTrigger render={<Button type="button" variant="outline" />}>
         <Import data-icon="inline-start" />
-        JSON importieren
+        Importieren
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
