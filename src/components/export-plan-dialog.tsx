@@ -61,7 +61,9 @@ export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
       <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Plan-JSON</DialogTitle>
-          <DialogDescription>Vollständiges JSON des aktuellen Plans.</DialogDescription>
+          <DialogDescription>
+            Vollständiges JSON des aktuellen Plans inklusive Steuern.
+          </DialogDescription>
         </DialogHeader>
         <Textarea
           readOnly

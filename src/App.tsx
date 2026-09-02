@@ -252,8 +252,13 @@ function normalizePlan(raw: unknown): PlanEntry[] {
   return out && out.length ? out : [...defaultConfig.plan];
 }
 
+type ImportedPlan = {
+  plan: PlanEntry[];
+  taxes: TaxSegment[];
+};
+
 type ImportPlanParseResult =
-  | { ok: true; plan: PlanEntry[] }
+  | { ok: true } & ImportedPlan
   | { ok: false; error: string };
 
 function parseImportedPlan(text: string): ImportPlanParseResult {
@@ -266,11 +271,14 @@ function parseImportedPlan(text: string): ImportPlanParseResult {
     return { ok: false, error: "Ungültiges JSON." };
   }
   let raw: unknown = parsed;
+  let taxesRaw: unknown;
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && "plan" in parsed) {
-    raw = (parsed as { plan: unknown }).plan;
+    const obj = parsed as { plan: unknown; taxes?: unknown };
+    raw = obj.plan;
+    taxesRaw = obj.taxes;
   }
   if (!Array.isArray(raw)) {
-    return { ok: false, error: "JSON muss ein Plan-Array sein." };
+    return { ok: false, error: "JSON muss ein Plan-Array oder { plan, taxes } sein." };
   }
   if (raw.length > MAX_IMPORT_PLAN_ENTRIES) {
     return {
@@ -282,7 +290,7 @@ function parseImportedPlan(text: string): ImportPlanParseResult {
   if (!plan || plan.length === 0) {
     return { ok: false, error: "Keine gültigen Plan-Einträge gefunden." };
   }
-  return { ok: true, plan };
+  return { ok: true, plan, taxes: normalizeTaxes(taxesRaw) };
 }
 
 function normalizeConfig(raw: unknown): StartConfig {
@@ -380,7 +388,12 @@ function normalizeConfig(raw: unknown): StartConfig {
   };
 }
 
-const STORAGE_VERSION = 2 as const;
+const STORAGE_VERSION = 3 as const;
+
+type StoredPlan = {
+  plan: PlanEntry[];
+  taxes: TaxSegment[];
+};
 
 type PersistedAppState = {
   version: typeof STORAGE_VERSION;
@@ -389,20 +402,14 @@ type PersistedAppState = {
   tick_minutes: number;
   max_ticks: number;
   starting_resources: { metall: number; kristall: number };
-  taxes: TaxSegment[];
   activePlanId: PlanSlotId;
-  plans: Record<PlanSlotId, PlanEntry[]>;
+  plans: Record<PlanSlotId, StoredPlan>;
 };
 
 function sharedFromConfig(
   cfg: Pick<
     StartConfig,
-    | "start_time"
-    | "start_date"
-    | "tick_minutes"
-    | "max_ticks"
-    | "starting_resources"
-    | "taxes"
+    "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "starting_resources"
   >,
 ) {
   return {
@@ -414,7 +421,6 @@ function sharedFromConfig(
       metall: cfg.starting_resources.metall,
       kristall: cfg.starting_resources.kristall,
     },
-    taxes: normalizeTaxes(cfg.taxes),
   };
 }
 
@@ -422,10 +428,35 @@ function defaultSlotPlan(): PlanEntry[] {
   return clonePlanEntries(normalizePlan(defaultConfig.plan));
 }
 
+function cloneStoredPlan(stored: StoredPlan): StoredPlan {
+  return {
+    plan: clonePlanEntries(stored.plan),
+    taxes: stored.taxes.map((seg) => ({ ...seg })),
+  };
+}
+
+function normalizeStoredPlan(raw: unknown, fallbackTaxes: TaxSegment[] = []): StoredPlan {
+  if (Array.isArray(raw)) {
+    return { plan: normalizePlan(raw), taxes: fallbackTaxes };
+  }
+  if (raw && typeof raw === "object") {
+    const o = raw as { plan?: unknown; taxes?: unknown };
+    if ("plan" in o) {
+      return {
+        plan: normalizePlan(o.plan),
+        taxes: o.taxes !== undefined ? normalizeTaxes(o.taxes) : fallbackTaxes,
+      };
+    }
+  }
+  return { plan: defaultSlotPlan(), taxes: fallbackTaxes };
+}
+
 function configFromState(state: PersistedAppState, planId: PlanSlotId): StartConfig {
+  const stored = state.plans[planId];
   return {
     ...sharedFromConfig(state),
-    plan: state.plans[planId],
+    plan: stored.plan,
+    taxes: stored.taxes,
   };
 }
 
@@ -436,9 +467,12 @@ function createDefaultState(plan1?: PlanEntry[], shared?: StartConfig): Persiste
     ...sharedFromConfig(cfg),
     activePlanId: 1,
     plans: {
-      1: clonePlanEntries(plan1 ?? cfg.plan),
-      2: defaultSlotPlan(),
-      3: defaultSlotPlan(),
+      1: {
+        plan: clonePlanEntries(plan1 ?? cfg.plan),
+        taxes: normalizeTaxes(cfg.taxes),
+      },
+      2: { plan: defaultSlotPlan(), taxes: [] },
+      3: { plan: defaultSlotPlan(), taxes: [] },
     },
   };
 }
@@ -452,22 +486,30 @@ function loadStoredState(): PersistedAppState {
       return initial;
     }
     const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && (parsed as { version?: unknown }).version === STORAGE_VERSION) {
+    const version =
+      parsed && typeof parsed === "object"
+        ? (parsed as { version?: unknown }).version
+        : undefined;
+    if (version === 2 || version === 3) {
       const obj = parsed as Partial<PersistedAppState> & {
+        taxes?: unknown;
         plans?: Partial<Record<PlanSlotId, unknown>>;
       };
+      const fallbackTaxes = normalizeTaxes(obj.taxes);
+      const slot1 = normalizeStoredPlan(obj.plans?.[1], fallbackTaxes);
       const cfg = normalizeConfig({
         ...obj,
-        plan: obj.plans?.[1] ?? defaultConfig.plan,
+        plan: slot1.plan,
+        taxes: slot1.taxes,
       });
       return {
         version: STORAGE_VERSION,
         ...sharedFromConfig(cfg),
         activePlanId: isPlanSlotId(obj.activePlanId) ? obj.activePlanId : 1,
         plans: {
-          1: normalizePlan(obj.plans?.[1]),
-          2: normalizePlan(obj.plans?.[2]),
-          3: normalizePlan(obj.plans?.[3]),
+          1: slot1,
+          2: normalizeStoredPlan(obj.plans?.[2], fallbackTaxes),
+          3: normalizeStoredPlan(obj.plans?.[3], fallbackTaxes),
         },
       };
     }
@@ -500,9 +542,10 @@ export default function App() {
   const updateCurrentPlan = (updater: (plan: PlanEntry[]) => PlanEntry[]) => {
     setAppState((prev) => {
       const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
+      const current = prev.plans[slot];
       return {
         ...prev,
-        plans: { ...prev.plans, [slot]: updater(prev.plans[slot]) },
+        plans: { ...prev.plans, [slot]: { ...current, plan: updater(current.plan) } },
       };
     });
   };
@@ -511,7 +554,7 @@ export default function App() {
     if (viewingOwnPlan) return startCfg;
     const template = planTemplates.find((item) => item.id === viewId);
     if (!template) return startCfg;
-    return { ...startCfg, plan: template.plan };
+    return { ...startCfg, plan: template.plan, taxes: [] };
   }, [startCfg, viewId, viewingOwnPlan]);
 
   const plan = useMemo(() => {
@@ -983,16 +1026,16 @@ export default function App() {
   const resetPlan = (sourceId: string) => {
     setAppState((prev) => {
       const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
-      let next: PlanEntry[] | null = null;
+      let next: StoredPlan | null = null;
       if (sourceId.startsWith("template:")) {
         const templateId = sourceId.slice("template:".length);
         const template = planTemplates.find((item) => item.id === templateId);
         if (!template) return prev;
-        next = clonePlanEntries(normalizePlan(template.plan));
+        next = { plan: clonePlanEntries(normalizePlan(template.plan)), taxes: [] };
       } else if (sourceId.startsWith("plan:")) {
         const id = Number(sourceId.slice("plan:".length));
         if (!isPlanSlotId(id) || id === slot) return prev;
-        next = clonePlanEntries(prev.plans[id]);
+        next = cloneStoredPlan(prev.plans[id]);
       }
       if (!next) return prev;
       return {
@@ -1048,12 +1091,27 @@ export default function App() {
             currentTick={currentTick}
             hasPlan={!!plan}
             slotShortage={plan ? getExtractorSlotShortage(plan) : null}
-            exportJson={viewingOwnPlan ? JSON.stringify(startCfg.plan, null, 2) : undefined}
+            exportJson={
+              viewingOwnPlan
+                ? JSON.stringify({ plan: startCfg.plan, taxes: startCfg.taxes }, null, 2)
+                : undefined
+            }
             exportPlanSlot={viewingOwnPlan ? activeSlot : undefined}
             parseImportPlan={viewingOwnPlan ? parseImportedPlan : undefined}
             onImportPlan={
               viewingOwnPlan
-                ? (imported) => updateCurrentPlan(() => imported)
+                ? (imported) => {
+                    setAppState((prev) => {
+                      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
+                      return {
+                        ...prev,
+                        plans: {
+                          ...prev.plans,
+                          [slot]: { plan: imported.plan, taxes: imported.taxes },
+                        },
+                      };
+                    });
+                  }
                 : undefined
             }
             resetSources={
@@ -1072,9 +1130,20 @@ export default function App() {
             }
             onResetPlan={viewingOwnPlan ? resetPlan : undefined}
             taxes={viewCfg.taxes}
-            onApplyTaxes={(next) => {
-              setAppState((prev) => ({ ...prev, taxes: next }));
-            }}
+            onApplyTaxes={
+              viewingOwnPlan
+                ? (next) => {
+                    setAppState((prev) => {
+                      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
+                      const current = prev.plans[slot];
+                      return {
+                        ...prev,
+                        plans: { ...prev.plans, [slot]: { ...current, taxes: next } },
+                      };
+                    });
+                  }
+                : undefined
+            }
             onEditJob={
               viewingOwnPlan
                 ? (planEntryId) => {

@@ -14,14 +14,15 @@ import {
 import { Field, FieldLabel } from "@/components/shadcn/field";
 import { Textarea } from "@/components/shadcn/textarea";
 import type { PlanEntry } from "@/gn-data/plan";
+import type { TaxSegment } from "@/lib/calculateFastestWayToGoal";
 
 export type ImportPlanParseResult =
-  | { ok: true; plan: PlanEntry[] }
+  | { ok: true; plan: PlanEntry[]; taxes: TaxSegment[] }
   | { ok: false; error: string };
 
 export type ImportPlanDialogProps = {
   parse: (json: string) => ImportPlanParseResult;
-  onReplace: (plan: PlanEntry[]) => void;
+  onReplace: (imported: { plan: PlanEntry[]; taxes: TaxSegment[] }) => void;
 };
 
 export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
@@ -40,7 +41,7 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
       setError(result.error);
       return;
     }
-    onReplace(result.plan);
+    onReplace({ plan: result.plan, taxes: result.taxes });
     reset();
     setOpen(false);
   };
@@ -61,7 +62,8 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
         <DialogHeader>
           <DialogTitle>Plan importieren</DialogTitle>
           <DialogDescription>
-            JSON eines exportierten Plans einfügen. Startzeit bleibt unverändert.
+            JSON eines exportierten Plans einfügen, inklusive Steuern. Startzeit bleibt
+            unverändert.
           </DialogDescription>
         </DialogHeader>
         <p
@@ -82,7 +84,7 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
             }}
             spellCheck={false}
             aria-invalid={error ? true : undefined}
-            placeholder='[ { "id": "...", "kind": "tech", ... } ]'
+            placeholder='{ "plan": [ { "id": "...", "kind": "tech", ... } ], "taxes": [] }'
             className="max-h-[60vh] min-h-64 resize-none overflow-auto font-mono text-xs/relaxed field-sizing-fixed"
           />
           {error ? (

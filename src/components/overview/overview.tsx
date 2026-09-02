@@ -31,9 +31,9 @@ export type OverviewProps = {
   hasPlan: boolean;
   exportJson?: string;
   exportPlanSlot?: number;
-  onImportPlan?: (plan: PlanEntry[]) => void;
+  onImportPlan?: (imported: { plan: PlanEntry[]; taxes: TaxSegment[] }) => void;
   parseImportPlan?: (json: string) =>
-    | { ok: true; plan: PlanEntry[] }
+    | { ok: true; plan: PlanEntry[]; taxes: TaxSegment[] }
     | { ok: false; error: string };
   onEditJob?: (planEntryId: string | undefined) => void;
   slotShortage?: ExtractorSlotShortage | null;
