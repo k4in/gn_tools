@@ -45,6 +45,15 @@ const INCOME_BY_BUILDING: Record<string, { met: number; kris: number }> = {
 // Plan model
 // ---------------------------------------------------------------------------
 
+/** Steuer-Abschnitt: gilt ab `fromTick` bis zum nächsten Abschnitt bzw. Planende. */
+export type TaxSegment = {
+  fromTick: number;
+  /** Steuer auf Metall-Einkommen in Prozent (0–100). */
+  met: number;
+  /** Steuer auf Kristall-Einkommen in Prozent (0–100). */
+  kris: number;
+};
+
 export type StartConfig = {
   start_time: string;
   start_date: string;
@@ -53,8 +62,77 @@ export type StartConfig = {
   /** Simulations-Horizont / Safety-Cap in Ticks. */
   max_ticks: number;
   starting_resources: { metall: number; kristall: number };
+  /** Steuer-Abschnitte; Tick 0 ist immer 0%/0%. */
+  taxes: TaxSegment[];
   plan: PlanEntry[];
 };
+
+export function normalizeTaxes(raw: unknown): TaxSegment[] {
+  if (!Array.isArray(raw)) return [];
+  const byTick = new Map<number, TaxSegment>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const fromTick =
+      typeof o.fromTick === "number" && Number.isFinite(o.fromTick)
+        ? Math.max(0, Math.floor(o.fromTick))
+        : NaN;
+    const met =
+      typeof o.met === "number" && Number.isFinite(o.met) ? o.met : NaN;
+    const kris =
+      typeof o.kris === "number" && Number.isFinite(o.kris) ? o.kris : NaN;
+    if (!Number.isFinite(fromTick) || !Number.isFinite(met) || !Number.isFinite(kris)) continue;
+    if (fromTick <= 0) continue;
+    byTick.set(fromTick, {
+      fromTick,
+      met: Math.min(100, Math.max(0, Math.floor(met))),
+      kris: Math.min(100, Math.max(0, Math.floor(kris))),
+    });
+  }
+  return [...byTick.values()].sort((a, b) => a.fromTick - b.fromTick);
+}
+
+export function taxRatesAt(
+  taxes: TaxSegment[] | undefined,
+  tick: number,
+): { met: number; kris: number } {
+  let current = { met: 0, kris: 0 };
+  if (!taxes) return current;
+  for (const seg of taxes) {
+    if (seg.fromTick > tick) break;
+    current = { met: seg.met, kris: seg.kris };
+  }
+  return current;
+}
+
+export function taxedIncome(
+  gross: Res,
+  taxes: TaxSegment[] | undefined,
+  tick: number,
+): Res {
+  const tax = taxRatesAt(taxes, tick);
+  return {
+    met: Math.floor((gross.met * (100 - tax.met)) / 100),
+    kris: Math.floor((gross.kris * (100 - tax.kris)) / 100),
+  };
+}
+
+function projectWithIncome(
+  start: Res,
+  fromTick: number,
+  toTick: number,
+  grossIncome: Res,
+  taxes: TaxSegment[] | undefined,
+): Res {
+  let met = start.met;
+  let kris = start.kris;
+  for (let t = fromTick + 1; t <= toTick; t++) {
+    const net = taxedIncome(grossIncome, taxes, t);
+    met += net.met;
+    kris += net.kris;
+  }
+  return { met, kris };
+}
 
 function tickMinutesOf(startCfg: StartConfig) {
   return startCfg.tick_minutes > 0 ? startCfg.tick_minutes : defaults.tick_minutes;
@@ -1297,10 +1375,14 @@ function simulatePlan(
     );
     const mineIncome = incomeFrom(producing);
     const extIncome = slottedExtractorStats(extractorQueue, extractorSlots).income;
-    const income: Res = {
-      met: mineIncome.met + extIncome.met,
-      kris: mineIncome.kris + extIncome.kris,
-    };
+    const income = taxedIncome(
+      {
+        met: mineIncome.met + extIncome.met,
+        kris: mineIncome.kris + extIncome.kris,
+      },
+      startCfg.taxes,
+      t,
+    );
     if (income.met || income.kris) {
       res = addRes(res, income);
     }
@@ -1494,8 +1576,9 @@ export function getEarliestTechStartTick(
   let met = plan.finalRes.met;
   let kris = plan.finalRes.kris;
   for (let t = (last?.tick ?? 0) + 1; t <= maxTicksOf(startCfg); t++) {
-    met += steady.met;
-    kris += steady.kris;
+    const net = taxedIncome(steady, startCfg.taxes, t);
+    met += net.met;
+    kris += net.kris;
     if (met >= cost.met && kris >= cost.kris) return Math.max(t, depsReady);
   }
   return depsReady;
@@ -1550,8 +1633,9 @@ export function getEarliestBuildStartTick(
   let kris = plan.finalRes.kris;
   const lastTick = plan.ticks[plan.ticks.length - 1]?.tick ?? 0;
   for (let t = lastTick + 1; t <= maxTicksOf(startCfg); t++) {
-    met += steady.met;
-    kris += steady.kris;
+    const net = taxedIncome(steady, startCfg.taxes, t);
+    met += net.met;
+    kris += net.kris;
     if (met >= cost.met && kris >= cost.kris) return Math.max(t, depsReady);
   }
   return depsReady;
@@ -1589,16 +1673,26 @@ export function getMaxBuildCountAtTick(
 
   // If tick is beyond simulation, project income
   if (snap && snap.tick < tick) {
-    const steady = estimateSteadyIncome(plan);
-    const dt = tick - snap.tick;
-    met += steady.met * dt;
-    kris += steady.kris * dt;
+    const projected = projectWithIncome(
+      { met, kris },
+      snap.tick,
+      tick,
+      estimateSteadyIncome(plan),
+      startCfg.taxes,
+    );
+    met = projected.met;
+    kris = projected.kris;
   } else if (!snap) {
-    const steady = estimateSteadyIncome(plan);
     const last = plan.ticks[plan.ticks.length - 1]?.tick ?? 0;
-    const dt = Math.max(0, tick - last);
-    met = plan.finalRes.met + steady.met * dt;
-    kris = plan.finalRes.kris + steady.kris * dt;
+    const projected = projectWithIncome(
+      plan.finalRes,
+      last,
+      tick,
+      estimateSteadyIncome(plan),
+      startCfg.taxes,
+    );
+    met = projected.met;
+    kris = projected.kris;
   }
 
   let count = 0;
@@ -1645,7 +1739,6 @@ export function getResourcesAtTick(
     };
   }
 
-  const steady = estimateSteadyIncome(plan);
   const base = snap ?? {
     tick: 0,
     met: plan.finalRes.met,
@@ -1654,10 +1747,16 @@ export function getResourcesAtTick(
     extractorsMet: plan.extractorsMet,
     extractorsKris: plan.extractorsKris,
   };
-  const dt = Math.max(0, tick - base.tick);
+  const projected = projectWithIncome(
+    { met: base.met, kris: base.kris },
+    base.tick,
+    tick,
+    estimateSteadyIncome(plan),
+    startCfg.taxes,
+  );
   return {
-    met: base.met + steady.met * dt,
-    kris: base.kris + steady.kris * dt,
+    met: projected.met,
+    kris: projected.kris,
     asteroids: "asteroids" in base ? base.asteroids : plan.asteroids,
     extractorsMet: "extractorsMet" in base ? base.extractorsMet : plan.extractorsMet,
     extractorsKris: "extractorsKris" in base ? base.extractorsKris : plan.extractorsKris,

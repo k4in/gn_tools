@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ExportPlanDialog } from "@/components/export-plan-dialog";
 import { ImportPlanDialog } from "@/components/import-plan-dialog";
 import { ResetPlanDialog, type ResetPlanSource } from "@/components/reset-plan-dialog";
+import { TaxesDialog } from "@/components/taxes-dialog";
 import type { PlanEntry } from "@/gn-data/plan";
 import { ActionPlan } from "@/components/overview/actionplan";
 import { Protocol } from "@/components/overview/protocol";
@@ -15,6 +16,7 @@ import {
 import type {
   ExtractorSlotShortage,
   Job,
+  TaxSegment,
   TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
 
@@ -37,6 +39,8 @@ export type OverviewProps = {
   slotShortage?: ExtractorSlotShortage | null;
   resetSources?: ResetPlanSource[];
   onResetPlan?: (sourceId: string) => void;
+  taxes?: TaxSegment[];
+  onApplyTaxes?: (taxes: TaxSegment[]) => void;
 };
 
 export function Overview({
@@ -54,6 +58,8 @@ export function Overview({
   slotShortage = null,
   resetSources,
   onResetPlan,
+  taxes = [],
+  onApplyTaxes,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("timeline");
 
@@ -72,6 +78,9 @@ export function Overview({
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="log">Tick-Protokoll</TabsTrigger>
             </TabsList>
+            {onApplyTaxes && (
+              <TaxesDialog taxes={taxes} currentTick={currentTick} onApply={onApplyTaxes} />
+            )}
             {slotShortage && (
               <p role="alert" className="min-w-0 truncate text-xs text-destructive">
                 Zu wenig Asteroidenplätze: {slotShortage.extractors} Extraktoren, aber nur{" "}

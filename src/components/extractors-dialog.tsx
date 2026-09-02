@@ -55,6 +55,50 @@ function snapshotAtTick(plan: PlanResult, currentTick: number) {
   return best;
 }
 
+function ExtractorStats({
+  asteroids,
+  metOwned,
+  krisOwned,
+}: {
+  asteroids: number;
+  metOwned: number;
+  krisOwned: number;
+}) {
+  const slots = asteroids * ASTEROID_SLOT_CAPACITY;
+  const occupied = Math.min(metOwned + krisOwned, slots);
+  const slotShortage = metOwned + krisOwned > slots;
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+      <div>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Asteroiden
+        </dt>
+        <dd className="tabular-nums font-medium">{asteroids}</dd>
+      </div>
+      <div>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Flächen
+        </dt>
+        <dd className={cn("tabular-nums font-medium", slotShortage && "text-destructive")}>
+          {occupied}/{slots}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Met-Exen
+        </dt>
+        <dd className="tabular-nums font-medium">{metOwned}</dd>
+      </div>
+      <div>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          Kris-Exen
+        </dt>
+        <dd className="tabular-nums font-medium">{krisOwned}</dd>
+      </div>
+    </dl>
+  );
+}
+
 function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[] {
   const rows: ExtractorEventRow[] = [];
   const roids = new Map<
@@ -150,12 +194,7 @@ export function ExtractorsDialog({
     [plan, startCfg],
   );
 
-  const asteroids = snap?.asteroids ?? 0;
-  const metOwned = snap?.extractorsMet ?? 0;
-  const krisOwned = snap?.extractorsKris ?? 0;
-  const slots = asteroids * ASTEROID_SLOT_CAPACITY;
-  const occupied = Math.min(metOwned + krisOwned, slots);
-  const slotShortage = metOwned + krisOwned > slots;
+  const tickLabel = currentTick < 0 ? `−${Math.abs(currentTick)}` : String(currentTick);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -170,37 +209,32 @@ export function ExtractorsDialog({
         <DialogHeader>
           <DialogTitle>Extraktoren</DialogTitle>
           <DialogDescription>
-            Bestand im aktuellen Tick und alle geplanten Zugänge.
+            Bestand im aktuellen Tick, am Planende und alle geplanten Zugänge.
           </DialogDescription>
         </DialogHeader>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-          <div>
-            <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Asteroiden
-            </dt>
-            <dd className="tabular-nums font-medium">{asteroids}</dd>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-md border border-border p-3">
+            <p className="mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Bestand im Tick {tickLabel}
+            </p>
+            <ExtractorStats
+              asteroids={snap?.asteroids ?? 0}
+              metOwned={snap?.extractorsMet ?? 0}
+              krisOwned={snap?.extractorsKris ?? 0}
+            />
           </div>
-          <div>
-            <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Flächen
-            </dt>
-            <dd className={cn("tabular-nums font-medium", slotShortage && "text-destructive")}>
-              {occupied}/{slots}
-            </dd>
+          <div className="rounded-md border border-border p-3">
+            <p className="mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Bestand am Planende
+              {plan ? ` (Tick ${plan.finishTick})` : ""}
+            </p>
+            <ExtractorStats
+              asteroids={plan?.asteroids ?? 0}
+              metOwned={plan?.extractorsMet ?? 0}
+              krisOwned={plan?.extractorsKris ?? 0}
+            />
           </div>
-          <div>
-            <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Met-Exen
-            </dt>
-            <dd className="tabular-nums font-medium">{metOwned}</dd>
-          </div>
-          <div>
-            <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Kris-Exen
-            </dt>
-            <dd className="tabular-nums font-medium">{krisOwned}</dd>
-          </div>
-        </dl>
+        </div>
         <div className="max-h-[60vh] overflow-auto">
         <Table>
           <TableHeader>

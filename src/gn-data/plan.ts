@@ -78,6 +78,7 @@ export const defaults: {
   /** Simulations-Horizont / Safety-Cap in Ticks. */
   max_ticks: number;
   starting_resources: { metall: number; kristall: number };
+  taxes: { fromTick: number; met: number; kris: number }[];
   plan: PlanEntry[];
 } = {
   start_time: "19:30",
@@ -88,5 +89,6 @@ export const defaults: {
     metall: 10500,
     kristall: 10500,
   },
+  taxes: [],
   plan: [...balanced.plan],
 };

@@ -21,9 +21,7 @@ import {
   computeCurrentTick,
   getAvailableRecon,
   getAvailableShips,
-  getEarliestAsteroidStartTick,
   getEarliestBuildStartTick,
-  getEarliestExtractorStartTick,
   getEarliestTechStartTick,
   getExtractorSlotShortage,
   getMaxBuildCountAtTick,
@@ -33,9 +31,11 @@ import {
   getUnlockedTechs,
   hasTechInPlan,
   newPlanEntryId,
+  normalizeTaxes,
   removePlanEntryCascade,
   type PlanEntry,
   type StartConfig,
+  type TaxSegment,
 } from "@/lib/calculateFastestWayToGoal";
 import { TooltipProvider } from "@/components/shadcn/tooltip";
 import { byName } from "@/lib/calculateFastestWayToGoal";
@@ -295,6 +295,7 @@ function normalizeConfig(raw: unknown): StartConfig {
       metall: defaultConfig.starting_resources.metall,
       kristall: defaultConfig.starting_resources.kristall,
     },
+    taxes: [...defaultConfig.taxes],
     plan: [...defaultConfig.plan],
   };
 
@@ -374,6 +375,7 @@ function normalizeConfig(raw: unknown): StartConfig {
     tick_minutes,
     max_ticks,
     starting_resources: { metall, kristall },
+    taxes: normalizeTaxes(obj.taxes),
     plan,
   };
 }
@@ -387,6 +389,7 @@ type PersistedAppState = {
   tick_minutes: number;
   max_ticks: number;
   starting_resources: { metall: number; kristall: number };
+  taxes: TaxSegment[];
   activePlanId: PlanSlotId;
   plans: Record<PlanSlotId, PlanEntry[]>;
 };
@@ -394,7 +397,12 @@ type PersistedAppState = {
 function sharedFromConfig(
   cfg: Pick<
     StartConfig,
-    "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "starting_resources"
+    | "start_time"
+    | "start_date"
+    | "tick_minutes"
+    | "max_ticks"
+    | "starting_resources"
+    | "taxes"
   >,
 ) {
   return {
@@ -406,6 +414,7 @@ function sharedFromConfig(
       metall: cfg.starting_resources.metall,
       kristall: cfg.starting_resources.kristall,
     },
+    taxes: normalizeTaxes(cfg.taxes),
   };
 }
 
@@ -620,23 +629,16 @@ export default function App() {
     extractorsKris?: number;
   } = {}) => {
     if (!viewingOwnPlan) return;
-    const defaultTick = Math.max(
-      hasObservatorium ? getEarliestAsteroidStartTick(startCfg) : 0,
-      hasExtraktorTech ? getEarliestExtractorStartTick(startCfg) : 0,
-    );
+    const defaultTick = Math.max(0, currentTick);
     const info = getMaxExtractorsAtTick(startCfg, defaultTick);
-    const wantAst = preset.asteroids ?? (hasObservatorium ? 1 : 0);
-    const defaultMax = hasExtraktorTech ? Math.max(1, info.max) : 0;
-    const wantMet = preset.extractorsMet ?? defaultMax;
-    const wantKris = preset.extractorsKris ?? 0;
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
       kind: "economy",
       defaultTick,
-      defaultAsteroids: wantAst,
-      defaultExtractorsMet: wantMet,
-      defaultExtractorsKris: wantKris,
+      defaultAsteroids: preset.asteroids ?? 0,
+      defaultExtractorsMet: preset.extractorsMet ?? 0,
+      defaultExtractorsKris: preset.extractorsKris ?? 0,
       freeSlots: info.freeSlots,
       asteroidsOwned: info.asteroids,
       alreadyBuilt: info.alreadyBuilt,
@@ -1069,6 +1071,10 @@ export default function App() {
                 : undefined
             }
             onResetPlan={viewingOwnPlan ? resetPlan : undefined}
+            taxes={viewCfg.taxes}
+            onApplyTaxes={(next) => {
+              setAppState((prev) => ({ ...prev, taxes: next }));
+            }}
             onEditJob={
               viewingOwnPlan
                 ? (planEntryId) => {
