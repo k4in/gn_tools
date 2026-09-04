@@ -897,7 +897,8 @@ function startKindRank(kind: PlanEntry["kind"]): number {
  * - Tatsächlicher Start: max(desired, earliest feasible) — nie früher als desired
  * - Ressourcenkonflikte: Tech > Units > Recon > Custom > Trade > Roid > Economy.
  *   Innerhalb derselben Art: früherer Wunsch-Tick, dann Plan-Reihenfolge.
- *   Economy (Asteroiden/Extraktoren) nimmt nur Reste und rollt in Folgeticks weiter.
+ *   Economy (Asteroiden/Extraktoren) nimmt nur Reste, rollt in Folgeticks weiter
+ *   und gibt nichts aus, was geplante Tech/Units/Recon/Custom/Trade verzögern würde.
  * - Unbegrenzt parallele Jobs
  */
 function simulatePlan(
@@ -1092,11 +1093,158 @@ function simulatePlan(
     entryDone.add(id);
   };
 
+  const hasPendingHpJobs = () =>
+    pendingTechs.size > 0 ||
+    pendingUnits.some((u) => u.remaining > 0) ||
+    pendingCustom.some((c) => !c.done) ||
+    pendingTrades.some((c) => !c.done);
+
+  /** When each remaining high-priority job would start if economy spends nothing more. */
+  const projectHpJobStartTicks = (startRes: Res, fromTick: number): Map<string, number> => {
+    const starts = new Map<string, number>();
+    let bank: Res = { met: startRes.met, kris: startRes.kris };
+    const doneTechs = new Set(completed);
+    const doneAt = new Map(completedAt);
+    let act = active.map((j) => ({ ...j }));
+    const techsLeft = new Map(pendingTechs);
+    const unitsLeft = pendingUnits
+      .filter((u) => u.remaining > 0)
+      .map((u) => ({ ...u }));
+    const customLeft = pendingCustom.filter((c) => !c.done).map((c) => ({ ...c }));
+    const tradesLeft = pendingTrades.filter((c) => !c.done).map((c) => ({ ...c }));
+
+    const hpLeft = () =>
+      techsLeft.size +
+      unitsLeft.filter((u) => u.remaining > 0).length +
+      customLeft.filter((c) => !c.done).length +
+      tradesLeft.filter((c) => !c.done).length;
+
+    const markUnstarted = () => {
+      for (const pending of techsLeft.values()) starts.set(pending.entryId, Infinity);
+      for (const u of unitsLeft) if (u.remaining > 0) starts.set(u.entryId, Infinity);
+      for (const c of customLeft) if (!c.done) starts.set(c.entryId, Infinity);
+      for (const tr of tradesLeft) if (!tr.done) starts.set(tr.entryId, Infinity);
+    };
+
+    if (hpLeft() === 0) return starts;
+
+    const maxTicks = maxTicksOf(startCfg);
+    for (let ft = fromTick + 1; ft <= maxTicks && hpLeft() > 0; ft++) {
+      const finishing = act.filter((j) => j.endTick === ft);
+      act = act.filter((j) => j.endTick !== ft);
+      for (const job of finishing) {
+        if (job.type === "building" || job.type === "research") {
+          doneTechs.add(job.name);
+          doneAt.set(job.name, ft);
+        }
+      }
+
+      const producing = new Set(
+        [...doneTechs].filter((n) => {
+          const at = doneAt.get(n) ?? 0;
+          return n === "Koloniezentrum" ? at <= ft : at < ft;
+        }),
+      );
+      const mineIncome = incomeFrom(producing);
+      const extIncome = slottedExtractorStats(extractorQueue, extractorSlots).income;
+      const income = taxedIncome(
+        {
+          met: mineIncome.met + extIncome.met,
+          kris: mineIncome.kris + extIncome.kris,
+        },
+        startCfg.taxes,
+        ft,
+      );
+      bank = addRes(bank, income);
+
+      for (const entry of startOrder) {
+        if (entry.kind === "tech") {
+          const pending = techsLeft.get(entry.name);
+          if (!pending || pending.entryId !== entry.id) continue;
+          if (ft < pending.desiredTick) continue;
+          const tech = map.get(entry.name);
+          if (!tech) continue;
+          const cost = { met: tech.cost.met, kris: tech.cost.kris };
+          if (!canAfford(bank, cost)) continue;
+          bank = pay(bank, cost);
+          act.push({
+            name: entry.name,
+            type: tech.type,
+            startTick: ft,
+            endTick: ft + tech.ticks,
+            cost,
+            planEntryId: entry.id,
+          });
+          starts.set(entry.id, ft);
+          techsLeft.delete(entry.name);
+        } else if (entry.kind === "unit" || entry.kind === "recon") {
+          const pending = unitsLeft.find((u) => u.entryId === entry.id && u.remaining > 0);
+          if (!pending) continue;
+          if (ft < pending.desiredTick) continue;
+          const totalCost = {
+            met: pending.unitCost.met * pending.remaining,
+            kris: pending.unitCost.kris * pending.remaining,
+          };
+          if (!canAfford(bank, totalCost)) continue;
+          bank = pay(bank, totalCost);
+          starts.set(entry.id, ft);
+          pending.remaining = 0;
+        } else if (entry.kind === "custom") {
+          const pending = customLeft.find((p) => p.entryId === entry.id && !p.done);
+          if (!pending) continue;
+          if (ft < pending.desiredTick) continue;
+          if (!canAfford(bank, pending.cost)) continue;
+          bank = pay(bank, pending.cost);
+          pending.done = true;
+          starts.set(entry.id, ft);
+        } else if (entry.kind === "trade") {
+          const pending = tradesLeft.find((p) => p.entryId === entry.id && !p.done);
+          if (!pending) continue;
+          if (ft < pending.desiredTick) continue;
+          const have = pending.give === "met" ? bank.met : bank.kris;
+          if (have < pending.giveAmount) continue;
+          if (pending.give === "met") {
+            bank = {
+              met: bank.met - pending.giveAmount,
+              kris: bank.kris + pending.receiveAmount,
+            };
+          } else {
+            bank = {
+              met: bank.met + pending.receiveAmount,
+              kris: bank.kris - pending.giveAmount,
+            };
+          }
+          pending.done = true;
+          starts.set(entry.id, ft);
+        }
+      }
+
+      if (income.met === 0 && income.kris === 0 && act.length === 0) break;
+    }
+
+    markUnstarted();
+    return starts;
+  };
+
   const tryStart = (tick: number) => {
     const startedJobs: NamedJob[] = [];
     const finishedJobs: NamedJob[] = [];
     const roidLoot: RoidLootEvent[] = [];
     let spent: Res = { met: 0, kris: 0 };
+    let hpBaseline: Map<string, number> | null | undefined;
+
+    const economySpendOk = (cost: Res): boolean => {
+      if (!canAfford(res, cost)) return false;
+      if (hpBaseline === undefined) {
+        hpBaseline = hasPendingHpJobs() ? projectHpJobStartTicks(res, tick) : null;
+      }
+      if (!hpBaseline || hpBaseline.size === 0) return true;
+      const next = projectHpJobStartTicks(pay(res, cost), tick);
+      for (const [id, start] of hpBaseline) {
+        if ((next.get(id) ?? Infinity) > start) return false;
+      }
+      return true;
+    };
 
     // Type priority first; same type keeps earlier desired tick, then plan order.
     for (const entry of startOrder) {
@@ -1225,11 +1373,9 @@ function simulatePlan(
 
         // Asteroids first so slots open for extractors in the same entry/tick.
         if (pending.remainingAsteroids > 0) {
-          while (
-            pending.remainingAsteroids > 0 &&
-            canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })
-          ) {
+          while (pending.remainingAsteroids > 0) {
             const cost = { met: 0, kris: ASTEROID_COST_KRIS };
+            if (!economySpendOk(cost)) break;
             res = pay(res, cost);
             spent = addRes(spent, cost);
             asteroids += 1;
@@ -1259,7 +1405,7 @@ function simulatePlan(
           while (pending[remainingKey] > 0) {
             const nextIndex = totalExtractors() + 1;
             const cost = { met: extractorUnitCost(nextIndex), kris: 0 };
-            if (!canAfford(res, cost)) break;
+            if (!economySpendOk(cost)) break;
             res = pay(res, cost);
             spent = addRes(spent, cost);
             if (resource === "met") extractorsMet += 1;
