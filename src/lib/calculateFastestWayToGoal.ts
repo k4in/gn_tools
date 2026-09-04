@@ -869,11 +869,35 @@ type PendingRoid = {
   ticksDone: number;
 };
 
+/** Resource spend order when several jobs are ready in the same tick. */
+function startKindRank(kind: PlanEntry["kind"]): number {
+  switch (kind) {
+    case "tech":
+      return 0;
+    case "unit":
+      return 1;
+    case "recon":
+      return 2;
+    case "custom":
+      return 3;
+    case "trade":
+      return 4;
+    case "roid":
+      return 5;
+    case "economy":
+    case "asteroids":
+    case "extractors":
+      return 6;
+  }
+}
+
 /**
  * Plan-getriebene Simulation:
  * - Jeder Plan-Eintrag hat desired startTick (User-Input)
  * - Tatsächlicher Start: max(desired, earliest feasible) — nie früher als desired
- * - Ressourcenkonflikte: früherer Wunsch-Tick hat Vorrang; gleicher Tick → Plan-Reihenfolge
+ * - Ressourcenkonflikte: Tech > Units > Recon > Custom > Trade > Roid > Economy.
+ *   Innerhalb derselben Art: früherer Wunsch-Tick, dann Plan-Reihenfolge.
+ *   Economy (Asteroiden/Extraktoren) nimmt nur Reste und rollt in Folgeticks weiter.
  * - Unbegrenzt parallele Jobs
  */
 function simulatePlan(
@@ -1023,7 +1047,12 @@ function simulatePlan(
 
   const startOrder = plan
     .map((entry, index) => ({ entry, index }))
-    .sort((a, b) => a.entry.startTick - b.entry.startTick || a.index - b.index)
+    .sort(
+      (a, b) =>
+        startKindRank(a.entry.kind) - startKindRank(b.entry.kind) ||
+        a.entry.startTick - b.entry.startTick ||
+        a.index - b.index,
+    )
     .map(({ entry }) => entry);
 
   const totalExtractors = () => extractorsMet + extractorsKris;
@@ -1069,7 +1098,7 @@ function simulatePlan(
     const roidLoot: RoidLootEvent[] = [];
     let spent: Res = { met: 0, kris: 0 };
 
-    // Earlier desired startTick first; same tick keeps plan order.
+    // Type priority first; same type keeps earlier desired tick, then plan order.
     for (const entry of startOrder) {
       if (entry.kind === "tech") {
         const pending = pendingTechs.get(entry.name);
