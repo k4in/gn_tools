@@ -28,8 +28,8 @@ export type TechName =
   | "Geschützscan (+Unit)"
   | "Militärscan"
   | "Nachrichtenscan"
-  | "Aufwertung des Militärscans"
-  | "Aufwertung des Nachrichtenscans"
+  | "Erweiterter Militärscan"
+  | "Erweiterter Nachrichtenscan"
   | "Opto-elektrische Störfelder"
   | "Intergalaktisches Ortungssystem"
   | "Raumstation"
@@ -411,7 +411,7 @@ export const techtree: TechTreeEntry[] = [
     eliminates: ["Einheitenscan (+Def)"],
   },
   {
-    name: "Aufwertung des Militärscans",
+    name: "Erweiterter Militärscan",
     type: "research",
     ticks: 216,
     time: 3240,
@@ -423,7 +423,7 @@ export const techtree: TechTreeEntry[] = [
     eliminates: [],
   },
   {
-    name: "Aufwertung des Nachrichtenscans",
+    name: "Erweiterter Nachrichtenscan",
     type: "research",
     ticks: 216,
     time: 3240,

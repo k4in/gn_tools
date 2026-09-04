@@ -638,23 +638,55 @@ export function plannedTechNames(plan: PlanEntry[]): string[] {
   );
 }
 
+/** Namen, die durch bereits geplante Techs via `eliminates` blockiert sind. */
+export function eliminatedTechNames(
+  owned: Iterable<string>,
+  map: Map<string, TechTreeEntry> = byName(),
+): Set<string> {
+  const eliminated = new Set<string>();
+  for (const name of owned) {
+    const tech = map.get(name);
+    if (!tech) continue;
+    for (const n of tech.eliminates) eliminated.add(n);
+  }
+  return eliminated;
+}
+
+function isBlockedByElimination(
+  tech: TechTreeEntry,
+  eliminated: Set<string>,
+  map: Map<string, TechTreeEntry>,
+): boolean {
+  if (eliminated.size === 0) return false;
+  for (const n of requiredClosure(tech.name, map)) {
+    if (eliminated.has(n)) return true;
+  }
+  return false;
+}
+
 /**
  * Freigeschaltete Technologien: Dependencies sind im Plan als Tech enthalten,
- * Tech selbst noch nicht im Plan.
+ * Tech selbst noch nicht im Plan, nicht durch `eliminates` blockiert.
  */
 export function getUnlockedTechs(plan: PlanEntry[]): TechTreeEntry[] {
   const owned = new Set(plannedTechNames(plan));
+  const map = byName();
+  const eliminated = eliminatedTechNames(owned, map);
   return techtree
     .filter((e) => !owned.has(e.name))
     .filter((e) => e.dependencies.every((d) => owned.has(d)))
+    .filter((e) => !isBlockedByElimination(e, eliminated, map))
     .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
 }
 
-/** Alle Techs, die noch nicht im Plan stehen. */
+/** Alle Techs, die noch nicht im Plan stehen und nicht eliminiert sind. */
 export function getAddableTechs(plan: PlanEntry[]): TechTreeEntry[] {
   const owned = new Set(plannedTechNames(plan));
+  const map = byName();
+  const eliminated = eliminatedTechNames(owned, map);
   return techtree
     .filter((e) => !owned.has(e.name))
+    .filter((e) => !isBlockedByElimination(e, eliminated, map))
     .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
 }
 

@@ -208,6 +208,21 @@ function toEconomyEntry(raw: PlanEntry): Extract<PlanEntry, { kind: "economy" }>
 
 const MAX_IMPORT_PLAN_ENTRIES = 1000;
 
+const TECH_RENAMES: Record<string, string> = {
+  "Aufwertung des Militärscans": "Erweiterter Militärscan",
+  "Aufwertung des Nachrichtenscans": "Erweiterter Nachrichtenscan",
+};
+
+function renameTech(name: string): string {
+  return TECH_RENAMES[name] ?? name;
+}
+
+function migratePlanEntry(entry: PlanEntry): PlanEntry {
+  if (entry.kind !== "tech") return entry;
+  const name = renameTech(entry.name);
+  return name === entry.name ? entry : { ...entry, name };
+}
+
 function collectPlanEntries(raw: unknown): PlanEntry[] | null {
   if (!Array.isArray(raw)) return null;
   const out: PlanEntry[] = [];
@@ -217,13 +232,13 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
       out.push({
         id: newPlanEntryId("legacy"),
         kind: "tech",
-        name: item.trim(),
+        name: renameTech(item.trim()),
         startTick: 0,
       });
       continue;
     }
     if (!isPlanEntry(item)) continue;
-    const e = item as PlanEntry;
+    const e = migratePlanEntry(item as PlanEntry);
     if (e.kind === "economy" || e.kind === "asteroids" || e.kind === "extractors") {
       const eco = toEconomyEntry(e);
       if (eco) out.push(eco);
