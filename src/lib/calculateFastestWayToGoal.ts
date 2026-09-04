@@ -112,8 +112,8 @@ export function taxedIncome(
 ): Res {
   const tax = taxRatesAt(taxes, tick);
   return {
-    met: Math.floor((gross.met * (100 - tax.met)) / 100),
-    kris: Math.floor((gross.kris * (100 - tax.kris)) / 100),
+    met: Math.ceil((gross.met * (100 - tax.met)) / 100),
+    kris: Math.ceil((gross.kris * (100 - tax.kris)) / 100),
   };
 }
 
