@@ -51,12 +51,13 @@ function resourcesAtCurrentTick(
 export function Header({ now, currentTick, startCfg, plan, nextAction, onApplyStart }: HeaderProps) {
   const extractorJob = plan?.steps.find((s) => s.name === "Extraktor");
   const extractorTick = extractorJob?.endTick;
-  const nextJobs = nextAction?.started.filter((job) => job.type !== "custom") ?? [];
+  const nextJobs = nextAction?.started.filter((job) => job.type !== "custom" && job.type !== "trade") ?? [];
   const followingAction =
     plan && nextAction
       ? plan.ticks.find(
           (tick) =>
-            tick.tick > nextAction.tick && tick.started.some((job) => job.type !== "custom"),
+            tick.tick > nextAction.tick &&
+            tick.started.some((job) => job.type !== "custom" && job.type !== "trade"),
         ) ?? null
       : null;
   const resources = resourcesAtCurrentTick(plan, startCfg, currentTick);
@@ -135,9 +136,7 @@ export function Header({ now, currentTick, startCfg, plan, nextAction, onApplySt
               </span>
               <span className="text-sm font-medium tabular-nums">
                 {formatRes(resources.met)} M
-                <span className="ml-1.5 font-normal text-muted-foreground">
-                  {formatRes(resources.kris)} K
-                </span>
+                <span className="ml-1.5">{formatRes(resources.kris)} K</span>
               </span>
             </div>
             <Separator orientation="vertical" />

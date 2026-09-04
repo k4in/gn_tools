@@ -31,11 +31,13 @@ function formatCustomCost(cost: { met: number; kris: number }) {
   return parts.join(" · ");
 }
 
+
 export function jobTypeClass(type: JobKind) {
   if (type === "building") return "text-amber-500";
   if (type === "research") return "text-fuchsia-500";
   if (type === "unit" || type === "recon") return "text-emerald-400";
   if (type === "custom") return "text-silver-500";
+  if (type === "trade") return "text-zinc-400";
   if (type === "roid") return "text-blue-400";
   return "text-sky-500";
 }
@@ -107,11 +109,11 @@ export function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
 }
 
 function withoutCustom(items: DisplayJob[]) {
-  return items.filter((item) => item.type !== "custom");
+  return items.filter((item) => item.type !== "custom" && item.type !== "trade");
 }
 
 function onlyCustom(items: DisplayJob[]) {
-  return items.filter((item) => item.type === "custom");
+  return items.filter((item) => item.type === "custom" || item.type === "trade");
 }
 
 export function ExtraEvents({
@@ -258,7 +260,7 @@ export function TickTable({
           <TableHead className="text-right">+K</TableHead>
           <TableHead>Aktiv</TableHead>
           <TableHead>Start</TableHead>
-          <TableHead>Quest</TableHead>
+          <TableHead>Quest/Custom</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -351,7 +353,7 @@ export function ActionPlan({
           <TableHead>Tick</TableHead>
           <TableHead>Uhrzeit</TableHead>
           <TableHead>Auftrag</TableHead>
-          <TableHead>Quest</TableHead>
+          <TableHead>Quest/Custom</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

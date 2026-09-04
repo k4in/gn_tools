@@ -24,6 +24,18 @@ export type PlanEntry =
       label: string;
       cost: { met: number; kris: number };
     }
+  /** Rohstoffe tauschen (Handelsplatz, instant). */
+  | {
+      id: string;
+      kind: "trade";
+      startTick: number;
+      /** Abgegebener Rohstoff. */
+      give: "met" | "kris";
+      /** Menge die abgegeben wird. */
+      giveAmount: number;
+      /** Menge die vom anderen Rohstoff ankommt. */
+      receiveAmount: number;
+    }
   /** Extraktoren erbeuten (Roid): 10% der Ziel-Exen pro Tick, kostenlos. */
   | {
       id: string;

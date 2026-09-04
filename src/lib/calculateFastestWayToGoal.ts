@@ -144,7 +144,7 @@ function maxTicksOf(startCfg: StartConfig) {
 
 export type Res = { met: number; kris: number };
 
-export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid";
+export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid" | "trade";
 
 export type Job = {
   name: string;
@@ -478,9 +478,21 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return formatAsteroidLabel(entry.count);
     case "custom":
       return entry.label.trim() || "Custom";
+    case "trade":
+      return formatTradePlanLabel(entry.give, entry.giveAmount, entry.receiveAmount);
     case "roid":
       return formatRoidPlanLabel(entry.targetMet, entry.targetKris);
   }
+}
+
+export function formatTradePlanLabel(
+  give: "met" | "kris",
+  giveAmount: number,
+  receiveAmount: number,
+) {
+  const from = give === "met" ? "M" : "K";
+  const to = give === "met" ? "K" : "M";
+  return `Trade ${formatRes(giveAmount)}${from} → ${formatRes(receiveAmount)}${to}`;
 }
 
 export const ROID_STEAL_RATE = 0.1;
@@ -719,6 +731,11 @@ export function removePlanEntryCascade(plan: PlanEntry[], id: string): PlanEntry
           toRemove.add(entry.id);
           changed = true;
         }
+      } else if (entry.kind === "trade") {
+        if (removedTechNames.has("Handelsplatz")) {
+          toRemove.add(entry.id);
+          changed = true;
+        }
       }
     }
   }
@@ -752,6 +769,15 @@ type PendingCustom = {
   entryId: string;
   label: string;
   cost: Res;
+  desiredTick: number;
+  done: boolean;
+};
+
+type PendingTrade = {
+  entryId: string;
+  give: "met" | "kris";
+  giveAmount: number;
+  receiveAmount: number;
   desiredTick: number;
   done: boolean;
 };
@@ -821,6 +847,7 @@ function simulatePlan(
   const pendingUnits: PendingUnit[] = [];
   const pendingEconomy: PendingEconomy[] = [];
   const pendingCustom: PendingCustom[] = [];
+  const pendingTrades: PendingTrade[] = [];
   const pendingRoids: PendingRoid[] = [];
 
   for (const e of plan) {
@@ -889,6 +916,18 @@ function simulatePlan(
         desiredTick: e.startTick,
         done: false,
       });
+    } else if (e.kind === "trade") {
+      const giveAmount = Math.max(0, Math.floor(e.giveAmount));
+      const receiveAmount = Math.max(0, Math.floor(e.receiveAmount));
+      if (giveAmount <= 0 || receiveAmount <= 0) continue;
+      pendingTrades.push({
+        entryId: e.id,
+        give: e.give === "kris" ? "kris" : "met",
+        giveAmount,
+        receiveAmount,
+        desiredTick: e.startTick,
+        done: false,
+      });
     } else if (e.kind === "roid") {
       const targetMet = Math.max(0, Math.floor(e.targetMet));
       const targetKris = Math.max(0, Math.floor(e.targetKris));
@@ -931,6 +970,7 @@ function simulatePlan(
       return false;
     }
     if (pendingCustom.some((c) => !c.done)) return false;
+    if (pendingTrades.some((c) => !c.done)) return false;
     if (pendingRoids.some((r) => r.ticksDone < r.duration)) return false;
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
@@ -1128,6 +1168,52 @@ function simulatePlan(
         ) {
           markEntryFinish(entry.id, tick);
         }
+        continue;
+      }
+
+      if (entry.kind === "trade") {
+        const pending = pendingTrades.find((p) => p.entryId === entry.id);
+        if (!pending || pending.done) continue;
+        if (tick < pending.desiredTick) continue;
+        if (!completed.has("Handelsplatz")) continue;
+        const have = pending.give === "met" ? res.met : res.kris;
+        if (have < pending.giveAmount) continue;
+
+        if (pending.give === "met") {
+          res = { met: res.met - pending.giveAmount, kris: res.kris + pending.receiveAmount };
+        } else {
+          res = { met: res.met + pending.receiveAmount, kris: res.kris - pending.giveAmount };
+        }
+        const cost: Res =
+          pending.give === "met"
+            ? { met: pending.giveAmount, kris: -pending.receiveAmount }
+            : { met: -pending.receiveAmount, kris: pending.giveAmount };
+        spent = addRes(spent, cost);
+        const name = formatTradePlanLabel(pending.give, pending.giveAmount, pending.receiveAmount);
+        const job: Job = {
+          name,
+          type: "trade",
+          startTick: tick,
+          endTick: tick,
+          cost,
+          planEntryId: entry.id,
+        };
+        steps.push(job);
+        startedJobs.push({
+          name,
+          type: "trade",
+          planEntryId: entry.id,
+          cost,
+        });
+        finishedJobs.push({
+          name,
+          type: "trade",
+          planEntryId: entry.id,
+          cost,
+        });
+        markEntryStart(entry.id, tick);
+        markEntryFinish(entry.id, tick);
+        pending.done = true;
         continue;
       }
 
@@ -1472,14 +1558,23 @@ function simulatePlan(
         if (p.done || t < p.desiredTick) return false;
         return !canAfford(res, p.cost);
       });
+      const hasPendingTrade = pendingTrades.some((p) => !p.done);
+      const stuckTrade = pendingTrades.some((p) => {
+        if (p.done || t < p.desiredTick) return false;
+        if (!completed.has("Handelsplatz")) return true;
+        const have = p.give === "met" ? res.met : res.kris;
+        return have < p.giveAmount;
+      });
       if (
         (pendingTechs.size > 0 ||
           pendingUnits.some((u) => u.remaining > 0) ||
           hasPendingEco ||
-          hasPendingCustom) &&
+          hasPendingCustom ||
+          hasPendingTrade) &&
         (stuckTech ||
           stuckEco ||
           stuckCustom ||
+          stuckTrade ||
           pendingUnits.some((u) => u.remaining > 0))
       ) {
         // If purely waiting for income that will never come

@@ -29,6 +29,8 @@ export type SidebarProps = {
   }) => void;
   onAddRoid: () => void;
   onAddCustom: () => void;
+  onAddTrade: () => void;
+  hasHandelsplatz: boolean;
 };
 
 export function Sidebar({
@@ -43,6 +45,8 @@ export function Sidebar({
   onAddEconomy,
   onAddRoid,
   onAddCustom,
+  onAddTrade,
+  hasHandelsplatz,
 }: SidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border">
@@ -94,7 +98,7 @@ export function Sidebar({
           value="custom"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Custom onAddCustom={onAddCustom} />
+          <Custom onAddCustom={onAddCustom} onAddTrade={onAddTrade} hasHandelsplatz={hasHandelsplatz} />
         </TabsContent>
       </Tabs>
     </aside>

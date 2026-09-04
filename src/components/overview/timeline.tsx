@@ -273,6 +273,7 @@ export function Timeline({
                               s.type === "economy" && "bg-cyan-500/20 text-cyan-300 ring-cyan-500/40",
                               s.type === "roid" && "bg-blue-800/35 text-blue-400 ring-blue-700/50",
                               s.type === "custom" && "bg-silver-500/20 text-silver-500 ring-silver-500/40",
+                              s.type === "trade" && "bg-zinc-500/20 text-zinc-400 ring-zinc-500/40",
                               clickable && "cursor-pointer hover:brightness-125",
                               !clickable && "cursor-default",
                             )}

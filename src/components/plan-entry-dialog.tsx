@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/shadcn/dialog";
 import { Field, FieldLabel } from "@/components/shadcn/field";
+import { RadioGroup, RadioGroupItem } from "@/components/shadcn/radio-group";
 import { Input } from "@/components/shadcn/input";
 import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group";
 import {
@@ -25,6 +26,7 @@ import {
   extractorUnitCost,
   formatRes,
   formatRoidPlanLabel,
+  formatTradePlanLabel,
   maxAffordableExtractors,
   ROID_DURATION_MAX,
   ROID_DURATION_MIN,
@@ -85,6 +87,14 @@ type CustomTarget = {
   defaultKris: number;
 };
 
+type TradeTarget = {
+  kind: "trade";
+  defaultTick: number;
+  defaultGive: "met" | "kris";
+  defaultGiveAmount: number;
+  defaultReceiveAmount: number;
+};
+
 export type OccupiedRoid = {
   startTick: number;
   duration: number;
@@ -106,6 +116,7 @@ export type PlanEntryDialogTarget =
   | CountableTarget
   | EconomyTarget
   | CustomTarget
+  | TradeTarget
   | RoidTarget;
 
 export type PlanEntryDialogSubmit = {
@@ -116,6 +127,9 @@ export type PlanEntryDialogSubmit = {
   extractorsKris?: number;
   label?: string;
   cost?: { met: number; kris: number };
+  give?: "met" | "kris";
+  giveAmount?: number;
+  receiveAmount?: number;
   targetMet?: number;
   targetKris?: number;
   duration?: number;
@@ -161,6 +175,9 @@ export function PlanEntryDialog({
   const [label, setLabel] = useState("");
   const [met, setMet] = useState(0);
   const [kris, setKris] = useState(0);
+  const [give, setGive] = useState<"met" | "kris">("met");
+  const [giveAmount, setGiveAmount] = useState(0);
+  const [receiveAmount, setReceiveAmount] = useState(0);
   const [targetMet, setTargetMet] = useState(0);
   const [targetKris, setTargetKris] = useState(0);
   const [duration, setDuration] = useState(ROID_DURATION_MIN);
@@ -193,6 +210,12 @@ export function PlanEntryDialog({
         setKris(Math.max(0, entry.cost.kris));
         return;
       }
+      if (entry.kind === "trade") {
+        setGive(entry.give);
+        setGiveAmount(Math.max(0, entry.giveAmount));
+        setReceiveAmount(Math.max(0, entry.receiveAmount));
+        return;
+      }
       if (entry.kind === "roid") {
         setTargetMet(Math.max(0, entry.targetMet));
         setTargetKris(Math.max(0, entry.targetKris));
@@ -216,6 +239,10 @@ export function PlanEntryDialog({
       setLabel(target.defaultLabel);
       setMet(Math.max(0, target.defaultMet));
       setKris(Math.max(0, target.defaultKris));
+    } else if (target.kind === "trade") {
+      setGive(target.defaultGive);
+      setGiveAmount(Math.max(0, target.defaultGiveAmount));
+      setReceiveAmount(Math.max(0, target.defaultReceiveAmount));
     } else if (target.kind === "roid") {
       setTargetMet(Math.max(0, target.defaultTargetMet));
       setTargetKris(Math.max(0, target.defaultTargetKris));
@@ -247,6 +274,15 @@ export function PlanEntryDialog({
       met: 0,
       kris: 0,
     };
+  }, [target, startTick, resolveEconomyAtTick]);
+
+  const liveTradeRes = useMemo(() => {
+    if (!target || target.kind !== "trade") return null;
+    if (resolveEconomyAtTick) {
+      const snap = resolveEconomyAtTick(startTick);
+      return { met: snap.met, kris: snap.kris };
+    }
+    return { met: 0, kris: 0 };
   }, [target, startTick, resolveEconomyAtTick]);
 
   const unitTotalCost = useMemo(() => {
@@ -295,6 +331,11 @@ export function PlanEntryDialog({
     if (target.kind === "tech") return target.tech.name;
     if (target.kind === "unit" || target.kind === "recon") return target.name;
     if (target.kind === "custom") return label.trim() || "Custom-Ausgabe";
+    if (target.kind === "trade") {
+      return giveAmount > 0 && receiveAmount > 0
+        ? formatTradePlanLabel(give, giveAmount, receiveAmount)
+        : "Trade";
+    }
     if (target.kind === "roid") {
       return targetMet > 0 || targetKris > 0
         ? formatRoidPlanLabel(targetMet, targetKris)
@@ -320,6 +361,9 @@ export function PlanEntryDialog({
     }
     if (target.kind === "custom") {
       return label.trim().length > 0 && met >= 0 && kris >= 0;
+    }
+    if (target.kind === "trade") {
+      return giveAmount > 0 && receiveAmount > 0;
     }
     if (target.kind === "roid") {
       if (targetMet <= 0 && targetKris <= 0) return false;
@@ -355,6 +399,13 @@ export function PlanEntryDialog({
         startTick,
         label: label.trim(),
         cost: { met: Math.max(0, met), kris: Math.max(0, kris) },
+      });
+    } else if (target.kind === "trade") {
+      onSubmit({
+        startTick,
+        give,
+        giveAmount: Math.max(0, giveAmount),
+        receiveAmount: Math.max(0, receiveAmount),
       });
     } else if (target.kind === "roid") {
       onSubmit({
@@ -496,7 +547,8 @@ export function PlanEntryDialog({
             </div>
           )}
 
-          <div className={target.kind === "economy" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
+          <div className={target.kind === "economy" || target.kind === "trade" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
+            {target.kind !== "trade" && (
             <Field className={target.kind === "economy" ? "w-full" : "w-28"}>
               <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
               <InputGroup>
@@ -514,6 +566,7 @@ export function PlanEntryDialog({
                 />
               </InputGroup>
             </Field>
+            )}
 
             {(target.kind === "unit" || target.kind === "recon") && (
               <Field className="w-28">
@@ -534,6 +587,87 @@ export function PlanEntryDialog({
                   />
                 </InputGroup>
               </Field>
+            )}
+
+            {target.kind === "trade" && (
+              <>
+                <div className="flex w-full flex-wrap items-end gap-3">
+                  <Field className="w-28">
+                    <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="plan-start-tick"
+                        type="number"
+                        min={0}
+                        value={startTick}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setStartTick(Math.max(0, Math.floor(n)));
+                        }}
+                        className="tabular-nums"
+                      />
+                    </InputGroup>
+                  </Field>
+                  <Field className="min-w-40 flex-1">
+                    <FieldLabel>Rohstoff</FieldLabel>
+                    <RadioGroup
+                      value={give}
+                      onValueChange={(value) => {
+                        if (value === "met" || value === "kris") setGive(value);
+                      }}
+                      className="flex h-7 items-center gap-4"
+                    >
+                      <label className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value="met" />
+                        Metall
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <RadioGroupItem value="kris" />
+                        Kristall
+                      </label>
+                    </RadioGroup>
+                  </Field>
+                </div>
+                <div className="flex w-full flex-wrap items-end gap-3">
+                  <Field className="min-w-28 flex-1">
+                    <FieldLabel htmlFor="plan-trade-from">Menge</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="plan-trade-from"
+                        type="number"
+                        min={0}
+                        value={giveAmount}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setGiveAmount(Math.max(0, Math.floor(n)));
+                        }}
+                        className="tabular-nums"
+                      />
+                    </InputGroup>
+                  </Field>
+                  <Field className="min-w-28 flex-1">
+                    <FieldLabel htmlFor="plan-trade-to">
+                      Nach Rohstoff ({give === "met" ? "Kristall" : "Metall"})
+                    </FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="plan-trade-to"
+                        type="number"
+                        min={0}
+                        value={receiveAmount}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setReceiveAmount(Math.max(0, Math.floor(n)));
+                        }}
+                        className="tabular-nums"
+                      />
+                    </InputGroup>
+                  </Field>
+                </div>
+              </>
             )}
 
             {target.kind === "custom" && (
@@ -710,6 +844,12 @@ export function PlanEntryDialog({
               Max. Extraktoren bei Tick {startTick} (Slots + Metall, nach Asteroiden-Kosten):{" "}
               {economyCosts.maxExtractors}
               {" · "}Slots: {economyCosts.freeAfterAst}
+            </p>
+          )}
+          {target.kind === "trade" && liveTradeRes && giveAmount > (give === "met" ? liveTradeRes.met : liveTradeRes.kris) && (
+            <p className="text-amber-500">
+              Mehr {give === "met" ? "Metall" : "Kristall"} als bei Tick {startTick} verfügbar (
+              {formatRes(give === "met" ? liveTradeRes.met : liveTradeRes.kris)}).
             </p>
           )}
         </div>

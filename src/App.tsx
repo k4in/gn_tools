@@ -116,6 +116,14 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       o.label = o.label.trim();
       return true;
     }
+    case "trade": {
+      if (o.give !== "met" && o.give !== "kris") return false;
+      if (typeof o.giveAmount !== "number" || !Number.isFinite(o.giveAmount)) return false;
+      if (typeof o.receiveAmount !== "number" || !Number.isFinite(o.receiveAmount)) return false;
+      o.giveAmount = Math.max(0, Math.floor(o.giveAmount));
+      o.receiveAmount = Math.max(0, Math.floor(o.receiveAmount));
+      return o.giveAmount > 0 && o.receiveAmount > 0;
+    }
     case "roid": {
       const targetMet = o.targetMet;
       const targetKris = o.targetKris;
@@ -224,6 +232,17 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
           met: Math.max(0, Math.floor(e.cost.met)),
           kris: Math.max(0, Math.floor(e.cost.kris)),
         },
+      });
+      continue;
+    }
+    if (e.kind === "trade") {
+      out.push({
+        id: e.id,
+        kind: "trade",
+        startTick: Math.max(0, Math.floor(e.startTick)),
+        give: e.give === "kris" ? "kris" : "met",
+        giveAmount: Math.max(0, Math.floor(e.giveAmount)),
+        receiveAmount: Math.max(0, Math.floor(e.receiveAmount)),
       });
       continue;
     }
@@ -580,6 +599,7 @@ export default function App() {
 
   const hasObservatorium = hasTechInPlan(viewCfg.plan, "Observatorium");
   const hasExtraktorTech = hasTechInPlan(viewCfg.plan, "Extraktor");
+  const hasHandelsplatz = hasTechInPlan(viewCfg.plan, "Handelsplatz");
 
   const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
@@ -596,7 +616,7 @@ export default function App() {
   const currentTick = computeCurrentTick(startCfg, now);
   const nextAction = useMemo(() => {
     const ticks = actionTicks.filter((t) =>
-      t.started.some((job) => job.type !== "custom"),
+      t.started.some((job) => job.type !== "custom" && job.type !== "trade"),
     );
     return ticks.find((t) => t.tick >= currentTick) ?? null;
   }, [actionTicks, currentTick]);
@@ -710,6 +730,21 @@ export default function App() {
       defaultLabel: "",
       defaultMet: 0,
       defaultKris: 0,
+    });
+    setDialogOpen(true);
+  };
+
+  const openAddTrade = () => {
+    if (!viewingOwnPlan || !hasHandelsplatz) return;
+    const doneTick = plan?.steps.find((s) => s.name === "Handelsplatz")?.endTick ?? 0;
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "trade",
+      defaultTick: Math.max(0, currentTick, doneTick),
+      defaultGive: "met",
+      defaultGiveAmount: 0,
+      defaultReceiveAmount: 0,
     });
     setDialogOpen(true);
   };
@@ -852,6 +887,14 @@ export default function App() {
         defaultMet: entry.cost.met,
         defaultKris: entry.cost.kris,
       });
+    } else if (entry.kind === "trade") {
+      setDialogTarget({
+        kind: "trade",
+        defaultTick: entry.startTick,
+        defaultGive: entry.give,
+        defaultGiveAmount: entry.giveAmount,
+        defaultReceiveAmount: entry.receiveAmount,
+      });
     } else if (entry.kind === "roid") {
       setDialogTarget({
         kind: "roid",
@@ -873,6 +916,9 @@ export default function App() {
     extractorsKris?: number;
     label?: string;
     cost?: { met: number; kris: number };
+    give?: "met" | "kris";
+    giveAmount?: number;
+    receiveAmount?: number;
     targetMet?: number;
     targetKris?: number;
     duration?: number;
@@ -912,6 +958,16 @@ export default function App() {
                 met: Math.max(0, values.cost?.met ?? e.cost.met),
                 kris: Math.max(0, values.cost?.kris ?? e.cost.kris),
               },
+            };
+          }
+          if (e.kind === "trade") {
+            const give = values.give === "kris" ? "kris" : "met";
+            return {
+              ...e,
+              startTick: values.startTick,
+              give,
+              giveAmount: Math.max(0, values.giveAmount ?? e.giveAmount),
+              receiveAmount: Math.max(0, values.receiveAmount ?? e.receiveAmount),
             };
           }
           if (e.kind === "roid") {
@@ -1007,6 +1063,23 @@ export default function App() {
       return;
     }
 
+    if (dialogTarget.kind === "trade") {
+      const give = values.give === "kris" ? "kris" : "met";
+      const giveAmount = Math.max(0, values.giveAmount ?? 0);
+      const receiveAmount = Math.max(0, values.receiveAmount ?? 0);
+      if (giveAmount <= 0 || receiveAmount <= 0) return;
+      const entry: PlanEntry = {
+        id: newPlanEntryId("trade"),
+        kind: "trade",
+        startTick: values.startTick,
+        give,
+        giveAmount,
+        receiveAmount,
+      };
+      updateCurrentPlan((plan) => [...plan, entry]);
+      return;
+    }
+
     if (dialogTarget.kind === "roid") {
       const targetMet = Math.max(0, values.targetMet ?? 0);
       const targetKris = Math.max(0, values.targetKris ?? 0);
@@ -1089,6 +1162,8 @@ export default function App() {
               onAddEconomy={openAddEconomy}
               onAddRoid={openAddRoid}
               onAddCustom={openAddCustom}
+              onAddTrade={openAddTrade}
+              hasHandelsplatz={hasHandelsplatz}
             />
           )}
           <Overview
@@ -1224,12 +1299,18 @@ export default function App() {
             const refundKris = bonusAst * ASTEROID_COST.kris;
             const refundMet =
               bonusExt > 0 ? extractorBatchCost(alreadyBuilt, bonusExt) : 0;
+            let met = snap.met + refundMet;
+            let kris = snap.kris + refundKris;
+            if (dialogMode === "edit" && editingEntry?.kind === "trade") {
+              if (editingEntry.give === "met") met += editingEntry.giveAmount;
+              else kris += editingEntry.giveAmount;
+            }
             return {
               freeSlots,
               asteroids,
               alreadyBuilt,
-              met: snap.met + refundMet,
-              kris: snap.kris + refundKris,
+              met,
+              kris,
             };
           }}
         />
