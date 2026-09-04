@@ -20,7 +20,7 @@ import type {
   TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
 
-type OverviewTab = "timeline" | "log";
+type OverviewTab = "compact" | "detailed";
 
 export type OverviewProps = {
   actionTicks: TickSnapshot[];
@@ -61,22 +61,22 @@ export function Overview({
   taxes = [],
   onApplyTaxes,
 }: OverviewProps) {
-  const [tab, setTab] = useState<OverviewTab>("timeline");
+  const [tab, setTab] = useState<OverviewTab>("compact");
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          if (value === "timeline" || value === "log") setTab(value);
+          if (value === "compact" || value === "detailed") setTab(value);
         }}
         className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <TabsList>
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger value="log">Tick-Protokoll</TabsTrigger>
+              <TabsTrigger value="compact">Kompakt</TabsTrigger>
+              <TabsTrigger value="detailed">Detailliert</TabsTrigger>
             </TabsList>
             {onApplyTaxes && (
               <TaxesDialog taxes={taxes} currentTick={currentTick} onApply={onApplyTaxes} />
@@ -112,39 +112,38 @@ export function Overview({
           )}
         </div>
 
+        <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-border">
+          <Timeline
+            steps={steps}
+            maxTick={maxTick}
+            currentTick={currentTick}
+            hasPlan={hasPlan}
+            isActive
+            onEditJob={onEditJob}
+          />
+        </div>
+
         <TabsContent
-          value="timeline"
-          className="flex min-h-0 flex-1 flex-col overflow-hidden data-hidden:hidden"
+          value="compact"
+          className="min-h-0 flex-[3] overflow-auto data-hidden:hidden"
         >
-          <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-border">
-            <Timeline
-              steps={steps}
-              maxTick={maxTick}
-              currentTick={currentTick}
-              hasPlan={hasPlan}
-              isActive={tab === "timeline"}
-              onEditJob={onEditJob}
-            />
-          </div>
-          <div className="min-h-0 flex-[3] overflow-auto">
-            <ActionPlan
-              ticks={actionTicks}
-              currentTick={currentTick}
-              hasPlan={hasPlan}
-              isActive={tab === "timeline"}
-            />
-          </div>
+          <ActionPlan
+            ticks={actionTicks}
+            currentTick={currentTick}
+            hasPlan={hasPlan}
+            isActive={tab === "compact"}
+          />
         </TabsContent>
 
         <TabsContent
-          value="log"
-          className="min-h-0 flex-1 overflow-auto data-hidden:hidden"
+          value="detailed"
+          className="min-h-0 flex-[3] overflow-auto data-hidden:hidden"
         >
           <Protocol
             ticks={logTicks}
             currentTick={currentTick}
             hasPlan={hasPlan}
-            isActive={tab === "log"}
+            isActive={tab === "detailed"}
           />
         </TabsContent>
       </Tabs>

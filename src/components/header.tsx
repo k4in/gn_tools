@@ -6,6 +6,7 @@ import { Badge } from "@/components/shadcn/badge";
 import { Separator } from "@/components/shadcn/separator";
 import {
   clockLabel,
+  formatRes,
   formatTimeUntilTick,
   formatWallClock,
   type PlanResult,
@@ -22,10 +23,43 @@ export type HeaderProps = {
   onApplyStart: (next: { start_date: string; start_time: string; tick_minutes: number }) => void;
 };
 
+function resourcesAtCurrentTick(
+  plan: PlanResult | null,
+  startCfg: StartConfig,
+  currentTick: number,
+) {
+  if (!plan || currentTick < 0) {
+    return {
+      met: startCfg.starting_resources.metall,
+      kris: startCfg.starting_resources.kristall,
+    };
+  }
+  let best: TickSnapshot | null = null;
+  for (const tick of plan.ticks) {
+    if (tick.tick > currentTick) break;
+    best = tick;
+  }
+  if (!best) {
+    return {
+      met: startCfg.starting_resources.metall,
+      kris: startCfg.starting_resources.kristall,
+    };
+  }
+  return { met: best.met, kris: best.kris };
+}
+
 export function Header({ now, currentTick, startCfg, plan, nextAction, onApplyStart }: HeaderProps) {
   const extractorJob = plan?.steps.find((s) => s.name === "Extraktor");
   const extractorTick = extractorJob?.endTick;
   const nextJobs = nextAction?.started.filter((job) => job.type !== "custom") ?? [];
+  const followingAction =
+    plan && nextAction
+      ? plan.ticks.find(
+          (tick) =>
+            tick.tick > nextAction.tick && tick.started.some((job) => job.type !== "custom"),
+        ) ?? null
+      : null;
+  const resources = resourcesAtCurrentTick(plan, startCfg, currentTick);
 
   return (
     <header className="shrink-0 border-b border-border">
@@ -64,7 +98,7 @@ export function Header({ now, currentTick, startCfg, plan, nextAction, onApplySt
 
         <div className="flex min-w-0 flex-1 items-stretch gap-8 overflow-x-auto px-6 py-2">
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Nächste Aktion</span>
+            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Aktuelle Aktion</span>
             {nextAction && nextJobs.length > 0 ? (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div className="flex items-baseline gap-2">
@@ -80,7 +114,32 @@ export function Header({ now, currentTick, startCfg, plan, nextAction, onApplySt
             )}
           </div>
 
+          <div className="flex shrink-0 flex-col justify-center gap-0.5">
+            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              Nächste Aktion
+            </span>
+            {followingAction ? (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                T{followingAction.tick} · {followingAction.clockLabel}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+          </div>
+
           <div className="flex shrink-0 items-stretch gap-4">
+            <Separator orientation="vertical" />
+            <div className="flex min-w-28 flex-col justify-center gap-0.5">
+              <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                Aktuelle Ressourcen
+              </span>
+              <span className="text-sm font-medium tabular-nums">
+                {formatRes(resources.met)} M
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  {formatRes(resources.kris)} K
+                </span>
+              </span>
+            </div>
             <Separator orientation="vertical" />
             <ExtractorsDialog startCfg={startCfg} plan={plan} currentTick={currentTick}>
               <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">

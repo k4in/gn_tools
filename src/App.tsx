@@ -21,7 +21,9 @@ import {
   computeCurrentTick,
   getAvailableRecon,
   getAvailableShips,
+  getEarliestAsteroidStartTick,
   getEarliestBuildStartTick,
+  getEarliestExtractorStartTick,
   getEarliestTechStartTick,
   getExtractorSlotShortage,
   getMaxBuildCountAtTick,
@@ -672,7 +674,13 @@ export default function App() {
     extractorsKris?: number;
   } = {}) => {
     if (!viewingOwnPlan) return;
-    const defaultTick = Math.max(0, currentTick);
+    const earliest =
+      hasExtraktorTech
+        ? getEarliestExtractorStartTick(startCfg)
+        : hasObservatorium
+          ? getEarliestAsteroidStartTick(startCfg)
+          : 0;
+    const defaultTick = Math.max(0, currentTick, earliest);
     const info = getMaxExtractorsAtTick(startCfg, defaultTick);
     setDialogMode("add");
     setEditingEntry(null);
