@@ -118,11 +118,15 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
     }
     case "trade": {
       if (o.give !== "met" && o.give !== "kris") return false;
-      if (typeof o.giveAmount !== "number" || !Number.isFinite(o.giveAmount)) return false;
-      if (typeof o.receiveAmount !== "number" || !Number.isFinite(o.receiveAmount)) return false;
-      o.giveAmount = Math.max(0, Math.floor(o.giveAmount));
-      o.receiveAmount = Math.max(0, Math.floor(o.receiveAmount));
-      return o.giveAmount > 0 && o.receiveAmount > 0;
+      const giveAmount = o.giveAmount;
+      const receiveAmount = o.receiveAmount;
+      if (typeof giveAmount !== "number" || !Number.isFinite(giveAmount)) return false;
+      if (typeof receiveAmount !== "number" || !Number.isFinite(receiveAmount)) return false;
+      const giveAmt = Math.max(0, Math.floor(giveAmount));
+      const receiveAmt = Math.max(0, Math.floor(receiveAmount));
+      o.giveAmount = giveAmt;
+      o.receiveAmount = receiveAmt;
+      return giveAmt > 0 && receiveAmt > 0;
     }
     case "roid": {
       const targetMet = o.targetMet;
