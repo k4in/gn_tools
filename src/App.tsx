@@ -19,8 +19,7 @@ import {
 import {
   calculateFastestWayToGoal,
   computeCurrentTick,
-  getAvailableRecon,
-  getAvailableShips,
+  getAddableTechs,
   getEarliestAsteroidStartTick,
   getEarliestBuildStartTick,
   getEarliestExtractorStartTick,
@@ -29,12 +28,16 @@ import {
   getMaxBuildCountAtTick,
   extractorBatchCost,
   getMaxExtractorsAtTick,
+  getReconItems,
   getResourcesAtTick,
-  getUnlockedTechs,
+  getShips,
   hasTechInPlan,
+  missingRequiredTechs,
   newPlanEntryId,
   normalizeTaxes,
+  reconByName,
   removePlanEntryCascade,
+  shipByName,
   type PlanEntry,
   type StartConfig,
   type TaxSegment,
@@ -604,15 +607,17 @@ export default function App() {
     }
   }, [viewCfg]);
 
-  const unlocked = useMemo(() => getUnlockedTechs(viewCfg.plan), [viewCfg.plan]);
-  const availableShips = useMemo(
-    () => getAvailableShips(viewCfg.plan),
+  const addableTechs = useMemo(() => getAddableTechs(viewCfg.plan), [viewCfg.plan]);
+  const neededTechs = useMemo(
+    () => missingRequiredTechs(viewCfg.plan),
     [viewCfg.plan],
   );
-  const availableRecon = useMemo(
-    () => getAvailableRecon(viewCfg.plan),
+  const plannedTechs = useMemo(
+    () => new Set(viewCfg.plan.filter((e) => e.kind === "tech").map((e) => e.name)),
     [viewCfg.plan],
   );
+  const allShips = useMemo(() => getShips(), []);
+  const allRecon = useMemo(() => getReconItems(), []);
 
   const hasObservatorium = hasTechInPlan(viewCfg.plan, "Observatorium");
   const hasExtraktorTech = hasTechInPlan(viewCfg.plan, "Extraktor");
@@ -665,7 +670,7 @@ export default function App() {
 
   const openAddUnit = (name: string) => {
     if (!viewingOwnPlan) return;
-    const ship = availableShips.find((s) => s.name === name);
+    const ship = shipByName(name);
     if (!ship) return;
     const defaultTick = defaultAddTick(
       inspectTick,
@@ -693,7 +698,7 @@ export default function App() {
 
   const openAddRecon = (name: string) => {
     if (!viewingOwnPlan) return;
-    const item = availableRecon.find((s) => s.name === name);
+    const item = reconByName(name);
     if (!item) return;
     const defaultTick = defaultAddTick(
       inspectTick,
@@ -744,8 +749,8 @@ export default function App() {
       freeSlots: info.freeSlots,
       asteroidsOwned: info.asteroids,
       alreadyBuilt: info.alreadyBuilt,
-      canAsteroids: hasObservatorium,
-      canExtractors: hasExtraktorTech,
+      canAsteroids: true,
+      canExtractors: true,
       costKrisPerAsteroid: ASTEROID_COST.kris,
     });
     setDialogOpen(true);
@@ -766,7 +771,7 @@ export default function App() {
   };
 
   const openAddTrade = () => {
-    if (!viewingOwnPlan || !hasHandelsplatz) return;
+    if (!viewingOwnPlan) return;
     const doneTick = plan?.steps.find((s) => s.name === "Handelsplatz")?.endTick ?? 0;
     setDialogMode("add");
     setEditingEntry(null);
@@ -824,7 +829,7 @@ export default function App() {
         defaultTick: entry.startTick,
       });
     } else if (entry.kind === "unit") {
-      const ship = availableShips.find((s) => s.name === entry.name) ?? {
+      const ship = shipByName(entry.name) ?? {
         name: entry.name as never,
         ticks: 0,
         time: 0,
@@ -846,7 +851,7 @@ export default function App() {
         maxCount,
       });
     } else if (entry.kind === "recon") {
-      const item = availableRecon.find((s) => s.name === entry.name);
+      const item = reconByName(entry.name);
       const maxCount = Math.max(
         entry.count,
         getMaxBuildCountAtTick(startCfg, "recon", entry.name, entry.startTick),
@@ -906,8 +911,8 @@ export default function App() {
         freeSlots,
         asteroidsOwned,
         alreadyBuilt,
-        canAsteroids: hasObservatorium,
-        canExtractors: hasExtraktorTech,
+        canAsteroids: true,
+        canExtractors: true,
         costKrisPerAsteroid: ASTEROID_COST.kris,
       });
     } else if (entry.kind === "custom") {
@@ -1183,9 +1188,11 @@ export default function App() {
         <div className={viewingOwnPlan ? "grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-1"}>
           {viewingOwnPlan && (
             <Sidebar
-              unlocked={unlocked}
-              availableShips={availableShips}
-              availableRecon={availableRecon}
+              techs={addableTechs}
+              neededTechs={neededTechs}
+              plannedTechs={plannedTechs}
+              ships={allShips}
+              recon={allRecon}
               hasObservatorium={hasObservatorium}
               hasExtraktorTech={hasExtraktorTech}
               onAddTech={openAddTech}

@@ -14,9 +14,11 @@ import type { Ship } from "@/gn-data/ships";
 import type { Utility } from "@/gn-data/utility";
 
 export type SidebarProps = {
-  unlocked: TechTreeEntry[];
-  availableShips: Ship[];
-  availableRecon: Utility[];
+  techs: TechTreeEntry[];
+  neededTechs: Set<string>;
+  plannedTechs: Set<string>;
+  ships: Ship[];
+  recon: Utility[];
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
   onAddTech: (name: string) => void;
@@ -34,9 +36,11 @@ export type SidebarProps = {
 };
 
 export function Sidebar({
-  unlocked,
-  availableShips,
-  availableRecon,
+  techs,
+  neededTechs,
+  plannedTechs,
+  ships,
+  recon,
   hasObservatorium,
   hasExtraktorTech,
   onAddTech,
@@ -65,7 +69,7 @@ export function Sidebar({
           value="tech"
           className="flex min-h-0 flex-1 flex-col gap-0 data-hidden:hidden"
         >
-          <Tech unlocked={unlocked} onAdd={onAddTech} />
+          <Tech techs={techs} needed={neededTechs} planned={plannedTechs} onAdd={onAddTech} />
         </TabsContent>
 
         <TabsContent
@@ -84,14 +88,14 @@ export function Sidebar({
           value="units"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Units ships={availableShips} onAdd={onAddUnit} />
+          <Units ships={ships} planned={plannedTechs} onAdd={onAddUnit} />
         </TabsContent>
 
         <TabsContent
           value="recon"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Recon items={availableRecon} onAdd={onAddRecon} />
+          <Recon items={recon} planned={plannedTechs} onAdd={onAddRecon} />
         </TabsContent>
 
         <TabsContent

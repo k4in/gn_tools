@@ -5,6 +5,7 @@ import {
   CardTitle,
 } from "@/components/shadcn/card";
 import { ScrollArea } from "@/components/shadcn/scroll-area";
+import { StatusDot } from "@/components/sidebar/status-dot";
 
 export type CustomProps = {
   onAddCustom: () => void;
@@ -36,28 +37,29 @@ export function Custom({ onAddCustom, onAddTrade, hasHandelsplatz }: CustomProps
             </CardDescription>
           </CardHeader>
         </Card>
-        {hasHandelsplatz ? (
-          <Card
-            size="sm"
-            role="button"
-            tabIndex={0}
-            className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={onAddTrade}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onAddTrade();
-              }
-            }}
-          >
-            <CardHeader>
-              <CardTitle>Trade</CardTitle>
-              <CardDescription>
-                Rohstoffe über den Handelsplatz tauschen — Von, Rohstoff und Nach.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ) : null}
+        <Card
+          size="sm"
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={onAddTrade}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onAddTrade();
+            }
+          }}
+        >
+          <CardHeader>
+            <CardTitle>
+              Trade
+              {hasHandelsplatz ? null : <StatusDot kind="blocked" />}
+            </CardTitle>
+            <CardDescription>
+              Rohstoffe über den Handelsplatz tauschen — Von, Rohstoff und Nach.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     </ScrollArea>
   );

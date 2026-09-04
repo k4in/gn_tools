@@ -131,6 +131,7 @@ export function Timeline({
       ...prev,
       startTick: Math.min(prev.startTick, s.startTick),
       endTick: Math.max(prev.endTick, s.endTick),
+      blocked: Boolean(prev.blocked || s.blocked),
       name: prev.planEntryId
         ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "")
         : prev.name,
@@ -265,15 +266,28 @@ export function Timeline({
                               if (clickable) onEditJob?.(s.planEntryId);
                             }}
                             className={cn(
-                              "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-inset",
-                              isBuilding && "bg-amber-500/20 text-amber-300 ring-amber-500/40",
-                              isResearch && "bg-fuchsia-500/20 text-fuchsia-300 ring-fuchsia-500/40",
+                              "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight",
+                              isBuilding && "bg-amber-500/20 text-amber-300",
+                              isResearch && "bg-fuchsia-500/20 text-fuchsia-300",
                               (s.type === "unit" || s.type === "recon") &&
-                                "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40",
-                              s.type === "economy" && "bg-cyan-500/20 text-cyan-300 ring-cyan-500/40",
-                              s.type === "roid" && "bg-blue-800/35 text-blue-400 ring-blue-700/50",
-                              s.type === "custom" && "bg-silver-500/20 text-silver-500 ring-silver-500/40",
-                              s.type === "trade" && "bg-zinc-500/20 text-zinc-400 ring-zinc-500/40",
+                                "bg-emerald-500/20 text-emerald-300",
+                              s.type === "economy" && "bg-cyan-500/20 text-cyan-300",
+                              s.type === "roid" && "bg-blue-800/35 text-blue-400",
+                              s.type === "custom" && "bg-silver-500/20 text-silver-500",
+                              s.type === "trade" && "bg-zinc-500/20 text-zinc-400",
+                              s.blocked
+                                ? "ring-[3px] ring-destructive"
+                                : cn(
+                                    "ring-1 ring-inset",
+                                    isBuilding && "ring-amber-500/40",
+                                    isResearch && "ring-fuchsia-500/40",
+                                    (s.type === "unit" || s.type === "recon") &&
+                                      "ring-emerald-500/40",
+                                    s.type === "economy" && "ring-cyan-500/40",
+                                    s.type === "roid" && "ring-blue-700/50",
+                                    s.type === "custom" && "ring-silver-500/40",
+                                    s.type === "trade" && "ring-zinc-500/40",
+                                  ),
                               clickable && "cursor-pointer hover:brightness-125",
                               !clickable && "cursor-default",
                             )}

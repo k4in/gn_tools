@@ -5,6 +5,7 @@ import {
   CardTitle,
 } from "@/components/shadcn/card";
 import { ScrollArea } from "@/components/shadcn/scroll-area";
+import { StatusDot } from "@/components/sidebar/status-dot";
 
 export type ResourcesProps = {
   hasObservatorium: boolean;
@@ -23,18 +24,7 @@ export function Resources({
   onAddEconomy,
   onAddRoid,
 }: ResourcesProps) {
-  if (!hasExtraktorTech && !hasObservatorium) {
-    return (
-      <div className="flex flex-1 items-start p-4">
-        <p className="text-sm text-muted-foreground">
-          Noch gesperrt — füge zuerst{" "}
-          <span className="font-medium text-foreground">Observatorium</span> und{" "}
-          <span className="font-medium text-foreground">Extraktor</span> im Tech-Plan
-          hinzu.
-        </p>
-      </div>
-    );
-  }
+  const economyBlocked = !hasObservatorium && !hasExtraktorTech;
 
   return (
     <ScrollArea className="min-h-0 flex-1">
@@ -53,7 +43,10 @@ export function Resources({
           }}
         >
           <CardHeader>
-            <CardTitle>Asteroiden scannen & Extraktoren bauen</CardTitle>
+            <CardTitle>
+              Asteroiden scannen & Extraktoren bauen
+              {economyBlocked ? <StatusDot kind="blocked" /> : null}
+            </CardTitle>
             <CardDescription>
               Asteroiden scannen und/oder Extraktoren bauen — einzeln oder kombiniert.
             </CardDescription>

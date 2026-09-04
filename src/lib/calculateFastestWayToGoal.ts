@@ -154,6 +154,8 @@ export type Job = {
   cost: Res;
   /** Verknüpfung zum Plan-Eintrag (für Timeline-Edit). */
   planEntryId?: string;
+  /** Deps fehlen im Plan — Job wird trotzdem simuliert. */
+  blocked?: boolean;
 };
 
 export type NamedJob = {
@@ -645,6 +647,41 @@ export function getUnlockedTechs(plan: PlanEntry[]): TechTreeEntry[] {
     .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
 }
 
+/** Alle Techs, die noch nicht im Plan stehen. */
+export function getAddableTechs(plan: PlanEntry[]): TechTreeEntry[] {
+  const owned = new Set(plannedTechNames(plan));
+  return techtree
+    .filter((e) => !owned.has(e.name))
+    .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+}
+
+/** Techs, die noch fehlen, damit alle Plan-Einträge erfüllbar sind. */
+export function missingRequiredTechs(plan: PlanEntry[]): Set<string> {
+  const map = byName();
+  const owned = new Set(plannedTechNames(plan));
+  const needed = new Set<string>();
+  const addName = (name: string) => {
+    if (!map.has(name)) return;
+    for (const n of requiredClosure(name, map)) {
+      if (!owned.has(n)) needed.add(n);
+    }
+  };
+  for (const e of plan) {
+    if (e.kind === "tech") addName(e.name);
+    else if (e.kind === "unit") {
+      for (const d of shipByName(e.name)?.dependencies ?? []) addName(d);
+    } else if (e.kind === "recon") {
+      for (const d of reconByName(e.name)?.dependencies ?? []) addName(d);
+    } else if (e.kind === "economy") {
+      if (e.asteroids > 0) addName("Observatorium");
+      if (e.extractorsMet > 0 || e.extractorsKris > 0) addName("Extraktor");
+    } else if (e.kind === "asteroids") addName("Observatorium");
+    else if (e.kind === "extractors") addName("Extraktor");
+    else if (e.kind === "trade") addName("Handelsplatz");
+  }
+  return needed;
+}
+
 /** Schiffe, deren Tech-Dependencies im Plan stehen. */
 export function getAvailableShips(plan: PlanEntry[]): Ship[] {
   const owned = new Set(plannedTechNames(plan));
@@ -835,6 +872,7 @@ function simulatePlan(
   const techEntries = plan.filter(
     (e): e is Extract<PlanEntry, { kind: "tech" }> => e.kind === "tech",
   );
+  const plannedTechSet = new Set(techEntries.map((e) => e.name));
   const pendingTechs = new Map<string, { entryId: string; desiredTick: number }>();
   for (const e of techEntries) {
     if (!map.has(e.name)) throw new Error(`Unbekannte Technologie: ${e.name}`);
@@ -951,9 +989,10 @@ function simulatePlan(
 
   const totalExtractors = () => extractorsMet + extractorsKris;
 
+  const depReady = (d: string) => completed.has(d) || !plannedTechSet.has(d);
   const isReady = (name: string) => {
     const e = map.get(name)!;
-    return e.dependencies.every((d) => completed.has(d));
+    return e.dependencies.every(depReady);
   };
 
   const allDone = () => {
@@ -1017,6 +1056,7 @@ function simulatePlan(
           endTick: tick + tech.ticks,
           cost,
           planEntryId: entry.id,
+          blocked: tech.dependencies.some((d) => !plannedTechSet.has(d)),
         };
         active.push(job);
         steps.push(job);
@@ -1036,7 +1076,7 @@ function simulatePlan(
           entry.kind === "unit"
             ? shipByName(entry.name)?.dependencies ?? []
             : reconByName(entry.name)?.dependencies ?? [];
-        if (!deps.every((d) => completed.has(d))) continue;
+        if (!deps.every(depReady)) continue;
 
         // Batch as many as affordable this tick into one job ("500 Cleptor bauen")
         let built = 0;
@@ -1060,6 +1100,7 @@ function simulatePlan(
           endTick: tick + duration,
           cost: batchCost,
           planEntryId: entry.id,
+          blocked: deps.some((d) => !plannedTechSet.has(d)),
         };
         if (duration <= 0) {
           steps.push(job);
@@ -1096,7 +1137,7 @@ function simulatePlan(
         let didWork = false;
 
         // Asteroids first so slots open for extractors in the same entry/tick.
-        if (pending.remainingAsteroids > 0 && completed.has("Observatorium")) {
+        if (pending.remainingAsteroids > 0 && depReady("Observatorium")) {
           while (
             pending.remainingAsteroids > 0 &&
             canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })
@@ -1116,6 +1157,7 @@ function simulatePlan(
               endTick: tick,
               cost,
               planEntryId: entry.id,
+              blocked: !plannedTechSet.has("Observatorium"),
             };
             steps.push(job);
             startedJobs.push({ name, type: "economy", planEntryId: entry.id });
@@ -1125,7 +1167,7 @@ function simulatePlan(
         }
 
         const buildExtractors = (resource: "met" | "kris") => {
-          if (!completed.has("Extraktor")) return;
+          if (!depReady("Extraktor")) return;
           const remainingKey =
             resource === "met" ? "remainingExtractorsMet" : "remainingExtractorsKris";
           while (pending[remainingKey] > 0) {
@@ -1150,6 +1192,7 @@ function simulatePlan(
               endTick: tick,
               cost,
               planEntryId: entry.id,
+              blocked: !plannedTechSet.has("Extraktor"),
             };
             steps.push(job);
             startedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
@@ -1175,7 +1218,7 @@ function simulatePlan(
         const pending = pendingTrades.find((p) => p.entryId === entry.id);
         if (!pending || pending.done) continue;
         if (tick < pending.desiredTick) continue;
-        if (!completed.has("Handelsplatz")) continue;
+        if (!depReady("Handelsplatz")) continue;
         const have = pending.give === "met" ? res.met : res.kris;
         if (have < pending.giveAmount) continue;
 
@@ -1197,6 +1240,7 @@ function simulatePlan(
           endTick: tick,
           cost,
           planEntryId: entry.id,
+          blocked: !plannedTechSet.has("Handelsplatz"),
         };
         steps.push(job);
         startedJobs.push({

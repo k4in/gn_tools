@@ -2,14 +2,16 @@ import { AvailableTechs } from "@/components/sidebar/available-techs";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 
 export type TechProps = {
-  unlocked: TechTreeEntry[];
+  techs: TechTreeEntry[];
+  needed: Set<string>;
+  planned: Set<string>;
   onAdd: (name: string) => void;
 };
 
-export function Tech({ unlocked, onAdd }: TechProps) {
+export function Tech({ techs, needed, planned, onAdd }: TechProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <AvailableTechs unlocked={unlocked} onAdd={onAdd} />
+      <AvailableTechs techs={techs} needed={needed} planned={planned} onAdd={onAdd} />
     </div>
   );
 }
