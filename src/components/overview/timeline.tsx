@@ -1,32 +1,60 @@
 import { useEffect, useRef } from "react";
-import type { Job } from "@/lib/calculateFastestWayToGoal";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/shadcn/tooltip";
+import { type Job, type TickSnapshot } from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
-/** Sichtbare Breite der Timeline in Ticks (Viewport). */
-const TIMELINE_VIEWPORT_TICKS = 150;
+/** Sichtbare Breite der Timeline in Ticks (Viewport). Skala bleibt immer so grob. */
+const TIMELINE_VIEWPORT_TICKS = 192;
 
 export type TimelineProps = {
   steps: Job[];
+  ticks?: TickSnapshot[];
   maxTick: number;
   currentTick: number;
+  inspectTick?: number | null;
   hasPlan: boolean;
   isActive?: boolean;
   onEditJob?: (planEntryId: string | undefined) => void;
+  onInspectTick?: (tick: number) => void;
 };
+
+function snapshotAtOrBefore(ticks: TickSnapshot[] | undefined, tick: number) {
+  if (!ticks?.length) return null;
+  let best: TickSnapshot | null = null;
+  for (const snap of ticks) {
+    if (snap.tick > tick) break;
+    best = snap;
+  }
+  return best;
+}
+
+function tickFromClick(el: HTMLElement, clientX: number, totalTicks: number) {
+  const rect = el.getBoundingClientRect();
+  if (rect.width <= 0) return 0;
+  const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  return Math.round(ratio * totalTicks);
+}
 
 export function Timeline({
   steps,
+  ticks,
   maxTick,
   currentTick,
+  inspectTick = null,
   hasPlan,
   isActive = false,
   onEditJob,
+  onInspectTick,
 }: TimelineProps) {
   const xScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isActive) return;
-    const total = Math.max(maxTick, 1);
+    const total = Math.max(maxTick, TIMELINE_VIEWPORT_TICKS);
     const tick = Math.min(Math.max(currentTick, 0), total);
     const id = requestAnimationFrame(() => {
       const scroller = xScrollRef.current;
@@ -46,7 +74,7 @@ export function Timeline({
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
 
-  const totalTicks = Math.max(maxTick, 1);
+  const totalTicks = Math.max(maxTick, TIMELINE_VIEWPORT_TICKS);
   const rows: Job[][] = [];
   // Group multi-unit/economy micro-jobs that share planEntryId into one bar
   const grouped = new Map<string, Job>();
@@ -132,9 +160,13 @@ export function Timeline({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
           <div
-            className="relative"
+            className="relative cursor-crosshair"
             style={{
-              width: `max(100%, calc(100% * ${totalTicks} / ${TIMELINE_VIEWPORT_TICKS}))`,
+              width: `calc(100% * ${totalTicks} / ${TIMELINE_VIEWPORT_TICKS})`,
+            }}
+            onClick={(event) => {
+              if (!onInspectTick) return;
+              onInspectTick(tickFromClick(event.currentTarget, event.clientX, totalTicks));
             }}
           >
             <div
@@ -155,6 +187,13 @@ export function Timeline({
                   style={{ left: `${(currentTick / totalTicks) * 100}%` }}
                 />
               )}
+              {inspectTick != null && inspectTick >= 0 && inspectTick <= totalTicks && (
+                <div
+                  title={`Inspektion Tick ${inspectTick}`}
+                  className="absolute inset-y-0 z-10 w-0.5 bg-primary"
+                  style={{ left: `${(inspectTick / totalTicks) * 100}%` }}
+                />
+              )}
             </div>
 
             <div className="relative" style={{ height: trackHeight }}>
@@ -169,34 +208,68 @@ export function Timeline({
                   const isResearch = s.type === "research";
                   const top = 4 + rowIndex * rowHeight;
                   const clickable = !!s.planEntryId && !!onEditJob;
+                  const startSnap = snapshotAtOrBefore(ticks, s.startTick);
+                  const endSnap =
+                    s.endTick === s.startTick
+                      ? startSnap
+                      : snapshotAtOrBefore(ticks, s.endTick);
                   return (
-                    <button
-                      key={`${s.name}-${s.startTick}-${s.planEntryId ?? ""}`}
-                      type="button"
-                      title={`${s.name}: t${s.startTick}–${s.endTick}${clickable ? " · klicken zum Bearbeiten" : ""}`}
-                      disabled={!clickable}
-                      onClick={() => onEditJob?.(s.planEntryId)}
-                      className={cn(
-                        "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-inset",
-                        isBuilding && "bg-amber-500/20 text-amber-300 ring-amber-500/40",
-                        isResearch && "bg-fuchsia-500/20 text-fuchsia-300 ring-fuchsia-500/40",
-                        (s.type === "unit" || s.type === "recon") &&
-                          "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40",
-                        s.type === "economy" && "bg-cyan-500/20 text-cyan-300 ring-cyan-500/40",
-                        s.type === "roid" && "bg-blue-800/35 text-blue-400 ring-blue-700/50",
-                        s.type === "custom" && "bg-silver-500/20 text-silver-500 ring-silver-500/40",
-                        clickable && "cursor-pointer hover:brightness-125",
-                        !clickable && "cursor-default",
-                      )}
-                      style={{
-                        left: `${left}%`,
-                        width: `${widthPct}%`,
-                        top,
-                        height: rowHeight - 8,
-                      }}
-                    >
-                      <span className="block truncate font-medium">{s.name}</span>
-                    </button>
+                    <Tooltip key={`${s.name}-${s.startTick}-${s.planEntryId ?? ""}`}>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (clickable) onEditJob?.(s.planEntryId);
+                            }}
+                            className={cn(
+                              "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight ring-1 ring-inset",
+                              isBuilding && "bg-amber-500/20 text-amber-300 ring-amber-500/40",
+                              isResearch && "bg-fuchsia-500/20 text-fuchsia-300 ring-fuchsia-500/40",
+                              (s.type === "unit" || s.type === "recon") &&
+                                "bg-emerald-500/20 text-emerald-300 ring-emerald-500/40",
+                              s.type === "economy" && "bg-cyan-500/20 text-cyan-300 ring-cyan-500/40",
+                              s.type === "roid" && "bg-blue-800/35 text-blue-400 ring-blue-700/50",
+                              s.type === "custom" && "bg-silver-500/20 text-silver-500 ring-silver-500/40",
+                              clickable && "cursor-pointer hover:brightness-125",
+                              !clickable && "cursor-default",
+                            )}
+                            style={{
+                              left: `${left}%`,
+                              width: `${widthPct}%`,
+                              top,
+                              height: rowHeight - 8,
+                            }}
+                          />
+                        }
+                      >
+                        <span className="block truncate font-medium">{s.name}</span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="flex-col items-start gap-0.5 text-left"
+                      >
+                        <span className="font-medium">{s.name}</span>
+                        {s.endTick === s.startTick ? (
+                          <span className="tabular-nums text-muted-foreground">
+                            Tick {s.startTick}
+                            {startSnap ? ` – ${startSnap.clockLabel}` : ""}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="tabular-nums text-muted-foreground">
+                              Start: Tick {s.startTick}
+                              {startSnap ? ` – ${startSnap.clockLabel}` : ""}
+                            </span>
+                            <span className="tabular-nums text-muted-foreground">
+                              Ende: Tick {s.endTick}
+                              {endSnap ? ` – ${endSnap.clockLabel}` : ""}
+                            </span>
+                          </>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 }),
               )}
@@ -220,6 +293,38 @@ export function Timeline({
                   {t}
                 </span>
               ))}
+              {currentTick >= 0 && currentTick <= totalTicks && (
+                <span
+                  className="absolute z-10 text-[10px] text-green-500 tabular-nums"
+                  style={{
+                    left: `${(currentTick / totalTicks) * 100}%`,
+                    transform:
+                      currentTick === 0
+                        ? "none"
+                        : currentTick === totalTicks
+                          ? "translateX(-100%)"
+                          : "translateX(-50%)",
+                  }}
+                >
+                  {currentTick}
+                </span>
+              )}
+              {inspectTick != null && inspectTick >= 0 && inspectTick <= totalTicks && (
+                <span
+                  className="absolute z-10 text-[10px] text-primary tabular-nums"
+                  style={{
+                    left: `${(inspectTick / totalTicks) * 100}%`,
+                    transform:
+                      inspectTick === 0
+                        ? "none"
+                        : inspectTick === totalTicks
+                          ? "translateX(-100%)"
+                          : "translateX(-50%)",
+                  }}
+                >
+                  {inspectTick}
+                </span>
+              )}
             </div>
           </div>
         </div>

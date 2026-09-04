@@ -62,6 +62,7 @@ export function Overview({
   onApplyTaxes,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("compact");
+  const [inspectTick, setInspectTick] = useState<number | null>(null);
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -115,11 +116,14 @@ export function Overview({
         <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-border">
           <Timeline
             steps={steps}
+            ticks={logTicks}
             maxTick={maxTick}
             currentTick={currentTick}
+            inspectTick={inspectTick}
             hasPlan={hasPlan}
             isActive
             onEditJob={onEditJob}
+            onInspectTick={setInspectTick}
           />
         </div>
 
@@ -130,6 +134,7 @@ export function Overview({
           <ActionPlan
             ticks={actionTicks}
             currentTick={currentTick}
+            inspectTick={inspectTick}
             hasPlan={hasPlan}
             isActive={tab === "compact"}
           />
@@ -142,6 +147,7 @@ export function Overview({
           <Protocol
             ticks={logTicks}
             currentTick={currentTick}
+            inspectTick={inspectTick}
             hasPlan={hasPlan}
             isActive={tab === "detailed"}
           />

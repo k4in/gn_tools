@@ -204,24 +204,36 @@ function TruncateCell({
   );
 }
 
+function tickAtOrBefore(ticks: TickSnapshot[], target: number) {
+  let best: number | null = null;
+  for (const t of ticks) {
+    if (t.tick > target) break;
+    best = t.tick;
+  }
+  return best;
+}
+
+function tickAtOrAfter(ticks: TickSnapshot[], target: number) {
+  return ticks.find((t) => t.tick >= target)?.tick ?? ticks.at(-1)?.tick ?? null;
+}
+
 /** Vollständiges Tick-Protokoll (Ressourcen + Aktiv/Start/Quest). */
 export function TickTable({
   ticks,
   currentTick,
+  inspectTick = null,
   isActive = false,
 }: {
   ticks: TickSnapshot[];
   currentTick: number;
+  inspectTick?: number | null;
   isActive?: boolean;
 }) {
   const currentRowRef = useRef<HTMLTableRowElement>(null);
-  useScrollIntoViewWhenActive(isActive, currentRowRef);
-
-  const highlightTick = ticks.reduce<number | null>((best, t) => {
-    if (t.tick > currentTick) return best;
-    if (best === null || t.tick > best) return t.tick;
-    return best;
-  }, null);
+  const nowTick = tickAtOrBefore(ticks, currentTick);
+  const inspectRowTick = inspectTick != null ? tickAtOrBefore(ticks, inspectTick) : null;
+  const scrollTick = inspectRowTick ?? nowTick;
+  useScrollIntoViewWhenActive(isActive, currentRowRef, "center", "nearest", scrollTick);
 
   return (
     <Table className="table-fixed" containerClassName="overflow-x-hidden">
@@ -251,11 +263,17 @@ export function TickTable({
       </TableHeader>
       <TableBody>
         {ticks.map((t) => {
-          const isCurrent = highlightTick !== null && t.tick === highlightTick;
+          const isNow = nowTick !== null && t.tick === nowTick;
+          const isInspect = inspectRowTick !== null && t.tick === inspectRowTick;
           return (
-            <TableRow key={t.tick} ref={isCurrent ? currentRowRef : undefined}>
+            <TableRow
+              key={t.tick}
+              ref={scrollTick === t.tick ? currentRowRef : undefined}
+              data-state={isInspect ? "selected" : undefined}
+              className={cn(isInspect && "bg-primary/10")}
+            >
               <TableCell className="tabular-nums">{t.tick}</TableCell>
-              <TableCell className={cn("tabular-nums", isCurrent && "text-green-500")}>
+              <TableCell className={cn("tabular-nums", isNow && "text-green-500")}>
                 {t.clockLabel}
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatRes(t.met)}</TableCell>
@@ -298,21 +316,33 @@ export function TickTable({
 export type ActionPlanProps = {
   ticks: TickSnapshot[];
   currentTick: number;
+  inspectTick?: number | null;
   hasPlan: boolean;
   isActive?: boolean;
 };
 
 /** Kompakter Auftragsplan: Tick · Uhrzeit · Auftrag */
-export function ActionPlan({ ticks, currentTick, hasPlan, isActive = false }: ActionPlanProps) {
+export function ActionPlan({
+  ticks,
+  currentTick,
+  inspectTick = null,
+  hasPlan,
+  isActive = false,
+}: ActionPlanProps) {
   const currentRowRef = useRef<HTMLTableRowElement>(null);
-  useScrollIntoViewWhenActive(isActive, currentRowRef);
+  const nextTick =
+    hasPlan
+      ? ticks.find((t) => t.tick >= currentTick && withoutCustom(t.started).length > 0)?.tick ??
+        null
+      : null;
+  const inspectRowTick =
+    hasPlan && inspectTick != null ? tickAtOrAfter(ticks, inspectTick) : null;
+  const scrollTick = inspectRowTick ?? nextTick;
+  useScrollIntoViewWhenActive(isActive, currentRowRef, "center", "nearest", scrollTick);
 
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
-
-  const nextTick =
-    ticks.find((t) => t.tick >= currentTick && withoutCustom(t.started).length > 0)?.tick ?? null;
 
   return (
     <Table>
@@ -327,10 +357,16 @@ export function ActionPlan({ ticks, currentTick, hasPlan, isActive = false }: Ac
       <TableBody>
         {ticks.map((t) => {
           const isNext = nextTick !== null && t.tick === nextTick;
+          const isInspect = inspectRowTick !== null && t.tick === inspectRowTick;
           const orders = withoutCustom(t.started);
           const extras = onlyCustom(t.started);
           return (
-            <TableRow key={t.tick} ref={isNext ? currentRowRef : undefined}>
+            <TableRow
+              key={t.tick}
+              ref={scrollTick === t.tick ? currentRowRef : undefined}
+              data-state={isInspect ? "selected" : undefined}
+              className={cn(isInspect && "bg-primary/10")}
+            >
               <TableCell className={cn(isNext && "text-green-500")}>
                 {t.tick}
               </TableCell>
