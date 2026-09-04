@@ -192,10 +192,8 @@ export function Timeline({
   if (markers[markers.length - 1] !== totalTicks) markers.push(totalTicks);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
-          <div
+    <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
+      <div
             className="relative cursor-crosshair"
             style={{
               width: `calc(100% * ${totalTicks} / ${TIMELINE_VIEWPORT_TICKS})`,
@@ -370,8 +368,6 @@ export function Timeline({
               )}
             </div>
           </div>
-        </div>
-      </div>
     </div>
   );
 }

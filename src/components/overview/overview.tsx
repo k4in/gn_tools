@@ -113,7 +113,7 @@ export function Overview({
           )}
         </div>
 
-        <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-border">
+        <div className="shrink-0 border-b border-border">
           <Timeline
             steps={steps}
             ticks={logTicks}
@@ -129,7 +129,7 @@ export function Overview({
 
         <TabsContent
           value="compact"
-          className="min-h-0 flex-[3] overflow-auto data-hidden:hidden"
+          className="min-h-0 flex-1 overflow-hidden data-hidden:hidden"
         >
           <ActionPlan
             ticks={actionTicks}
@@ -142,7 +142,7 @@ export function Overview({
 
         <TabsContent
           value="detailed"
-          className="min-h-0 flex-[3] overflow-auto data-hidden:hidden"
+          className="min-h-0 flex-1 overflow-hidden data-hidden:hidden"
         >
           <Protocol
             ticks={logTicks}

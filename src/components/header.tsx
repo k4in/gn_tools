@@ -142,18 +142,24 @@ export function Header({ now, currentTick, startCfg, plan, nextAction, onApplySt
             </div>
             <Separator orientation="vertical" />
             <ExtractorsDialog startCfg={startCfg} plan={plan} currentTick={currentTick}>
-              <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                Extraktoren
-              </span>
-              {extractorTick !== undefined ? (
-                <span className="text-sm font-medium tabular-nums">
-                  ab Tick {extractorTick}
-                  <span className="ml-1.5 font-normal text-muted-foreground">
-                    {clockLabel(startCfg, extractorTick)}
-                  </span>
-                </span>
+              {extractorTick !== undefined && currentTick >= extractorTick ? (
+                <span className="text-sm font-medium text-sky-500">Extraktoren</span>
               ) : (
-                <span className="text-sm text-muted-foreground">nicht im Plan</span>
+                <>
+                  <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                    Extraktoren
+                  </span>
+                  {extractorTick !== undefined ? (
+                    <span className="text-sm font-medium tabular-nums">
+                      ab Tick {extractorTick}
+                      <span className="ml-1.5 font-normal text-muted-foreground">
+                        {clockLabel(startCfg, extractorTick)}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">nicht im Plan</span>
+                  )}
+                </>
               )}
             </ExtractorsDialog>
           </div>

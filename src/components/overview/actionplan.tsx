@@ -236,7 +236,7 @@ export function TickTable({
   useScrollIntoViewWhenActive(isActive, currentRowRef, "center", "nearest", scrollTick);
 
   return (
-    <Table className="table-fixed" containerClassName="overflow-x-hidden">
+    <Table className="table-fixed" containerClassName="h-full overflow-auto">
       <colgroup>
         <col className="w-14" />
         <col className="w-28" />
@@ -345,7 +345,7 @@ export function ActionPlan({
   }
 
   return (
-    <Table>
+    <Table containerClassName="h-full overflow-auto">
       <TableHeader>
         <TableRow>
           <TableHead>Tick</TableHead>
