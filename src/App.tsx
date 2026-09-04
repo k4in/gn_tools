@@ -428,6 +428,8 @@ type PersistedAppState = {
   max_ticks: number;
   starting_resources: { metall: number; kristall: number };
   activePlanId: PlanSlotId;
+  /** Kosmetisch: welcher Slot gerade gespielt wird. Fehlt in alten Saves. */
+  livePlanId: PlanSlotId | null;
   plans: Record<PlanSlotId, StoredPlan>;
 };
 
@@ -491,6 +493,7 @@ function createDefaultState(plan1?: PlanEntry[], shared?: StartConfig): Persiste
     version: STORAGE_VERSION,
     ...sharedFromConfig(cfg),
     activePlanId: 1,
+    livePlanId: null,
     plans: {
       1: {
         plan: clonePlanEntries(plan1 ?? cfg.plan),
@@ -531,6 +534,7 @@ function loadStoredState(): PersistedAppState {
         version: STORAGE_VERSION,
         ...sharedFromConfig(cfg),
         activePlanId: isPlanSlotId(obj.activePlanId) ? obj.activePlanId : 1,
+        livePlanId: isPlanSlotId(obj.livePlanId) ? obj.livePlanId : null,
         plans: {
           1: slot1,
           2: normalizeStoredPlan(obj.plans?.[2], fallbackTaxes),
@@ -543,6 +547,15 @@ function loadStoredState(): PersistedAppState {
   } catch {
     return createDefaultState();
   }
+}
+
+function defaultAddTick(
+  inspectTick: number | null,
+  currentTick: number,
+  earliest = 0,
+): number {
+  const preferred = inspectTick != null ? inspectTick : currentTick;
+  return Math.max(0, preferred, earliest);
 }
 
 export default function App() {
@@ -625,6 +638,8 @@ export default function App() {
     return ticks.find((t) => t.tick >= currentTick) ?? null;
   }, [actionTicks, currentTick]);
 
+  const [inspectTick, setInspectTick] = useState<number | null>(null);
+
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
@@ -637,7 +652,11 @@ export default function App() {
     if (!viewingOwnPlan) return;
     const tech = byName().get(name);
     if (!tech) return;
-    const defaultTick = getEarliestTechStartTick(startCfg, name);
+    const defaultTick = defaultAddTick(
+      inspectTick,
+      currentTick,
+      getEarliestTechStartTick(startCfg, name),
+    );
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({ kind: "tech", tech, defaultTick });
@@ -648,7 +667,11 @@ export default function App() {
     if (!viewingOwnPlan) return;
     const ship = availableShips.find((s) => s.name === name);
     if (!ship) return;
-    const defaultTick = getEarliestBuildStartTick(startCfg, "unit", name);
+    const defaultTick = defaultAddTick(
+      inspectTick,
+      currentTick,
+      getEarliestBuildStartTick(startCfg, "unit", name),
+    );
     const maxCount = Math.max(
       1,
       getMaxBuildCountAtTick(startCfg, "unit", name, defaultTick),
@@ -672,7 +695,11 @@ export default function App() {
     if (!viewingOwnPlan) return;
     const item = availableRecon.find((s) => s.name === name);
     if (!item) return;
-    const defaultTick = getEarliestBuildStartTick(startCfg, "recon", name);
+    const defaultTick = defaultAddTick(
+      inspectTick,
+      currentTick,
+      getEarliestBuildStartTick(startCfg, "recon", name),
+    );
     const maxCount = Math.max(
       1,
       getMaxBuildCountAtTick(startCfg, "recon", name, defaultTick),
@@ -704,7 +731,7 @@ export default function App() {
         : hasObservatorium
           ? getEarliestAsteroidStartTick(startCfg)
           : 0;
-    const defaultTick = Math.max(0, currentTick, earliest);
+    const defaultTick = defaultAddTick(inspectTick, currentTick, earliest);
     const info = getMaxExtractorsAtTick(startCfg, defaultTick);
     setDialogMode("add");
     setEditingEntry(null);
@@ -730,7 +757,7 @@ export default function App() {
     setEditingEntry(null);
     setDialogTarget({
       kind: "custom",
-      defaultTick: Math.max(0, currentTick),
+      defaultTick: defaultAddTick(inspectTick, currentTick),
       defaultLabel: "",
       defaultMet: 0,
       defaultKris: 0,
@@ -745,7 +772,7 @@ export default function App() {
     setEditingEntry(null);
     setDialogTarget({
       kind: "trade",
-      defaultTick: Math.max(0, currentTick, doneTick),
+      defaultTick: defaultAddTick(inspectTick, currentTick, doneTick),
       defaultGive: "met",
       defaultGiveAmount: 0,
       defaultReceiveAmount: 0,
@@ -772,7 +799,7 @@ export default function App() {
     setEditingEntry(null);
     setDialogTarget({
       kind: "roid",
-      defaultTick: Math.max(0, currentTick),
+      defaultTick: defaultAddTick(inspectTick, currentTick),
       defaultTargetMet: 0,
       defaultTargetKris: 0,
       defaultDuration: 1,
@@ -1145,6 +1172,7 @@ export default function App() {
         />
         <PlanSwitcher
           viewId={viewId}
+          livePlanId={appState.livePlanId}
           onViewChange={(id) => {
             setViewId(id);
             if (isPlanSlotId(id)) {
@@ -1176,6 +1204,8 @@ export default function App() {
             steps={plan?.steps ?? []}
             maxTick={maxTick}
             currentTick={currentTick}
+            inspectTick={inspectTick}
+            onInspectTick={setInspectTick}
             hasPlan={!!plan}
             slotShortage={plan ? getExtractorSlotShortage(plan) : null}
             exportJson={
@@ -1228,6 +1258,14 @@ export default function App() {
                         plans: { ...prev.plans, [slot]: { ...current, taxes: next } },
                       };
                     });
+                  }
+                : undefined
+            }
+            isLivePlan={viewingOwnPlan && appState.livePlanId === activeSlot}
+            onSetLivePlan={
+              viewingOwnPlan
+                ? () => {
+                    setAppState((prev) => ({ ...prev, livePlanId: activeSlot }));
                   }
                 : undefined
             }

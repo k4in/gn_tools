@@ -271,11 +271,10 @@ export function TickTable({
             <TableRow
               key={t.tick}
               ref={scrollTick === t.tick ? currentRowRef : undefined}
-              data-state={isInspect ? "selected" : undefined}
-              className={cn(isInspect && "bg-primary/10")}
+              className={cn(isNow && "bg-green-500/15")}
             >
               <TableCell className="tabular-nums">{t.tick}</TableCell>
-              <TableCell className={cn("tabular-nums", isNow && "text-green-500")}>
+              <TableCell className={cn("tabular-nums", isInspect && "text-primary")}>
                 {t.clockLabel}
               </TableCell>
               <TableCell className="text-right tabular-nums">{formatRes(t.met)}</TableCell>
@@ -366,13 +365,10 @@ export function ActionPlan({
             <TableRow
               key={t.tick}
               ref={scrollTick === t.tick ? currentRowRef : undefined}
-              data-state={isInspect ? "selected" : undefined}
-              className={cn(isInspect && "bg-primary/10")}
+              className={cn(isNext && "bg-green-500/15")}
             >
-              <TableCell className={cn(isNext && "text-green-500")}>
-                {t.tick}
-              </TableCell>
-              <TableCell className={cn(isNext && "text-green-500")}>{t.clockLabel}</TableCell>
+              <TableCell>{t.tick}</TableCell>
+              <TableCell className={cn(isInspect && "text-primary")}>{t.clockLabel}</TableCell>
               <TableCell>{orders.length ? <JobList items={orders} /> : "—"}</TableCell>
               <TableCell>
                 <ExtraEvents customs={extras} tick={t} />

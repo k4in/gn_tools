@@ -11,10 +11,11 @@ export type PlanViewId = PlanSlotId | string;
 
 export type PlanSwitcherProps = {
   viewId: PlanViewId;
+  livePlanId?: PlanSlotId | null;
   onViewChange: (viewId: PlanViewId) => void;
 };
 
-export function PlanSwitcher({ viewId, onViewChange }: PlanSwitcherProps) {
+export function PlanSwitcher({ viewId, livePlanId = null, onViewChange }: PlanSwitcherProps) {
   return (
     <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border px-4 py-1.5">
       {PLAN_SLOT_IDS.map((id) => {
@@ -26,7 +27,7 @@ export function PlanSwitcher({ viewId, onViewChange }: PlanSwitcherProps) {
             render={<button type="button" aria-pressed={active} />}
             onClick={() => onViewChange(id)}
           >
-            {planSlotLabel(id)}
+            {livePlanId === id ? `${planSlotLabel(id)} - aktiv` : planSlotLabel(id)}
           </Badge>
         );
       })}

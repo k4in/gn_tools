@@ -7,6 +7,7 @@ import type { PlanEntry } from "@/gn-data/plan";
 import { ActionPlan } from "@/components/overview/actionplan";
 import { Protocol } from "@/components/overview/protocol";
 import { Timeline } from "@/components/overview/timeline";
+import { Button } from "@/components/shadcn/button";
 import {
   Tabs,
   TabsContent,
@@ -41,6 +42,10 @@ export type OverviewProps = {
   onResetPlan?: (sourceId: string) => void;
   taxes?: TaxSegment[];
   onApplyTaxes?: (taxes: TaxSegment[]) => void;
+  isLivePlan?: boolean;
+  onSetLivePlan?: () => void;
+  inspectTick?: number | null;
+  onInspectTick?: (tick: number) => void;
 };
 
 export function Overview({
@@ -60,9 +65,12 @@ export function Overview({
   onResetPlan,
   taxes = [],
   onApplyTaxes,
+  isLivePlan = false,
+  onSetLivePlan,
+  inspectTick = null,
+  onInspectTick,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("compact");
-  const [inspectTick, setInspectTick] = useState<number | null>(null);
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -102,6 +110,17 @@ export function Overview({
           </div>
           {exportJson !== undefined && (
             <div className="flex shrink-0 gap-2">
+              {onSetLivePlan && (
+                <Button
+                  type="button"
+                  variant={isLivePlan ? "default" : "outline"}
+                  disabled={isLivePlan}
+                  className={isLivePlan ? "disabled:opacity-100" : undefined}
+                  onClick={onSetLivePlan}
+                >
+                  {isLivePlan ? "Aktiv" : "Als aktiv setzen"}
+                </Button>
+              )}
               {parseImportPlan && onImportPlan && (
                 <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />
               )}
@@ -123,7 +142,7 @@ export function Overview({
             hasPlan={hasPlan}
             isActive
             onEditJob={onEditJob}
-            onInspectTick={setInspectTick}
+            onInspectTick={onInspectTick}
           />
         </div>
 
