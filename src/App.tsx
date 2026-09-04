@@ -622,6 +622,9 @@ export default function App() {
   const hasObservatorium = hasTechInPlan(viewCfg.plan, "Observatorium");
   const hasExtraktorTech = hasTechInPlan(viewCfg.plan, "Extraktor");
   const hasHandelsplatz = hasTechInPlan(viewCfg.plan, "Handelsplatz");
+  const roidBlocked =
+    !hasTechInPlan(viewCfg.plan, "Marineakademie") ||
+    !viewCfg.plan.some((e) => e.kind === "unit" && e.name === "Cleptor");
 
   const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
@@ -1195,6 +1198,7 @@ export default function App() {
               recon={allRecon}
               hasObservatorium={hasObservatorium}
               hasExtraktorTech={hasExtraktorTech}
+              roidBlocked={roidBlocked}
               onAddTech={openAddTech}
               onAddUnit={openAddUnit}
               onAddRecon={openAddRecon}

@@ -156,6 +156,8 @@ export type Job = {
   planEntryId?: string;
   /** Deps fehlen im Plan — Job wird trotzdem simuliert. */
   blocked?: boolean;
+  /** Start nach desiredTick, weil Rohstoffe nicht gereicht haben. */
+  delayed?: boolean;
 };
 
 export type NamedJob = {
@@ -163,6 +165,7 @@ export type NamedJob = {
   type: JobKind;
   planEntryId?: string;
   cost?: Res;
+  delayed?: boolean;
 };
 
 export type ActiveJob = NamedJob & {
@@ -678,6 +681,10 @@ export function missingRequiredTechs(plan: PlanEntry[]): Set<string> {
     } else if (e.kind === "asteroids") addName("Observatorium");
     else if (e.kind === "extractors") addName("Extraktor");
     else if (e.kind === "trade") addName("Handelsplatz");
+    else if (e.kind === "roid") {
+      addName("Marineakademie");
+      addName("Kaperschiff");
+    }
   }
   return needed;
 }
@@ -872,7 +879,7 @@ function simulatePlan(
   const techEntries = plan.filter(
     (e): e is Extract<PlanEntry, { kind: "tech" }> => e.kind === "tech",
   );
-  const plannedTechSet = new Set(techEntries.map((e) => e.name));
+  const completedUnits = new Set<string>();
   const pendingTechs = new Map<string, { entryId: string; desiredTick: number }>();
   for (const e of techEntries) {
     if (!map.has(e.name)) throw new Error(`Unbekannte Technologie: ${e.name}`);
@@ -989,10 +996,9 @@ function simulatePlan(
 
   const totalExtractors = () => extractorsMet + extractorsKris;
 
-  const depReady = (d: string) => completed.has(d) || !plannedTechSet.has(d);
   const isReady = (name: string) => {
     const e = map.get(name)!;
-    return e.dependencies.every(depReady);
+    return e.dependencies.every((d) => completed.has(d));
   };
 
   const allDone = () => {
@@ -1042,7 +1048,6 @@ function simulatePlan(
           continue;
         }
         if (active.some((j) => j.name === entry.name)) continue;
-        if (!isReady(entry.name)) continue;
         const tech = map.get(entry.name)!;
         const cost = { met: tech.cost.met, kris: tech.cost.kris };
         if (!canAfford(res, cost)) continue;
@@ -1056,11 +1061,17 @@ function simulatePlan(
           endTick: tick + tech.ticks,
           cost,
           planEntryId: entry.id,
-          blocked: tech.dependencies.some((d) => !plannedTechSet.has(d)),
+          blocked: !isReady(entry.name),
+          delayed: tick > pending.desiredTick,
         };
         active.push(job);
         steps.push(job);
-        startedJobs.push({ name: entry.name, type: tech.type, planEntryId: entry.id });
+        startedJobs.push({
+          name: entry.name,
+          type: tech.type,
+          planEntryId: entry.id,
+          delayed: job.delayed,
+        });
         markEntryStart(entry.id, tick);
         pendingTechs.delete(entry.name);
         continue;
@@ -1076,40 +1087,55 @@ function simulatePlan(
           entry.kind === "unit"
             ? shipByName(entry.name)?.dependencies ?? []
             : reconByName(entry.name)?.dependencies ?? [];
-        if (!deps.every(depReady)) continue;
 
-        // Batch as many as affordable this tick into one job ("500 Cleptor bauen")
-        let built = 0;
-        let batchCost: Res = { met: 0, kris: 0 };
-        while (pending.remaining > 0 && canAfford(res, pending.unitCost)) {
-          res = pay(res, pending.unitCost);
-          batchCost = addRes(batchCost, pending.unitCost);
-          spent = addRes(spent, pending.unitCost);
-          pending.remaining -= 1;
-          built += 1;
-        }
-        if (built <= 0) continue;
+        const count = pending.remaining;
+        const totalCost = {
+          met: pending.unitCost.met * count,
+          kris: pending.unitCost.kris * count,
+        };
+        if (!canAfford(res, totalCost)) continue;
+
+        res = pay(res, totalCost);
+        spent = addRes(spent, totalCost);
+        pending.remaining = 0;
 
         const label =
-          built === 1 ? `1 ${entry.name} bauen` : `${built} ${entry.name} bauen`;
+          count === 1 ? `1 ${entry.name} bauen` : `${count} ${entry.name} bauen`;
         const duration = pending.duration;
         const job: Job = {
           name: label,
           type: pending.type,
           startTick: tick,
           endTick: tick + duration,
-          cost: batchCost,
+          cost: totalCost,
           planEntryId: entry.id,
-          blocked: deps.some((d) => !plannedTechSet.has(d)),
+          blocked: deps.some((d) => !completed.has(d)),
+          delayed: tick > pending.desiredTick,
         };
         if (duration <= 0) {
+          if (pending.type === "unit") completedUnits.add(pending.name);
           steps.push(job);
-          startedJobs.push({ name: label, type: pending.type, planEntryId: entry.id });
-          finishedJobs.push({ name: label, type: pending.type, planEntryId: entry.id });
+          startedJobs.push({
+            name: label,
+            type: pending.type,
+            planEntryId: entry.id,
+            delayed: job.delayed,
+          });
+          finishedJobs.push({
+            name: label,
+            type: pending.type,
+            planEntryId: entry.id,
+            delayed: job.delayed,
+          });
         } else {
           active.push(job);
           steps.push(job);
-          startedJobs.push({ name: label, type: pending.type, planEntryId: entry.id });
+          startedJobs.push({
+            name: label,
+            type: pending.type,
+            planEntryId: entry.id,
+            delayed: job.delayed,
+          });
         }
         markEntryStart(entry.id, tick);
         if (pending.remaining <= 0) {
@@ -1137,7 +1163,7 @@ function simulatePlan(
         let didWork = false;
 
         // Asteroids first so slots open for extractors in the same entry/tick.
-        if (pending.remainingAsteroids > 0 && depReady("Observatorium")) {
+        if (pending.remainingAsteroids > 0) {
           while (
             pending.remainingAsteroids > 0 &&
             canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })
@@ -1157,7 +1183,7 @@ function simulatePlan(
               endTick: tick,
               cost,
               planEntryId: entry.id,
-              blocked: !plannedTechSet.has("Observatorium"),
+              blocked: !completed.has("Observatorium"),
             };
             steps.push(job);
             startedJobs.push({ name, type: "economy", planEntryId: entry.id });
@@ -1167,7 +1193,6 @@ function simulatePlan(
         }
 
         const buildExtractors = (resource: "met" | "kris") => {
-          if (!depReady("Extraktor")) return;
           const remainingKey =
             resource === "met" ? "remainingExtractorsMet" : "remainingExtractorsKris";
           while (pending[remainingKey] > 0) {
@@ -1192,7 +1217,7 @@ function simulatePlan(
               endTick: tick,
               cost,
               planEntryId: entry.id,
-              blocked: !plannedTechSet.has("Extraktor"),
+              blocked: !completed.has("Extraktor"),
             };
             steps.push(job);
             startedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
@@ -1218,7 +1243,6 @@ function simulatePlan(
         const pending = pendingTrades.find((p) => p.entryId === entry.id);
         if (!pending || pending.done) continue;
         if (tick < pending.desiredTick) continue;
-        if (!depReady("Handelsplatz")) continue;
         const have = pending.give === "met" ? res.met : res.kris;
         if (have < pending.giveAmount) continue;
 
@@ -1240,7 +1264,8 @@ function simulatePlan(
           endTick: tick,
           cost,
           planEntryId: entry.id,
-          blocked: !plannedTechSet.has("Handelsplatz"),
+          blocked: !completed.has("Handelsplatz"),
+          delayed: tick > pending.desiredTick,
         };
         steps.push(job);
         startedJobs.push({
@@ -1248,12 +1273,14 @@ function simulatePlan(
           type: "trade",
           planEntryId: entry.id,
           cost,
+          delayed: job.delayed,
         });
         finishedJobs.push({
           name,
           type: "trade",
           planEntryId: entry.id,
           cost,
+          delayed: job.delayed,
         });
         markEntryStart(entry.id, tick);
         markEntryFinish(entry.id, tick);
@@ -1276,6 +1303,7 @@ function simulatePlan(
           endTick: tick,
           cost: pending.cost,
           planEntryId: entry.id,
+          delayed: tick > pending.desiredTick,
         };
         steps.push(job);
         startedJobs.push({
@@ -1283,6 +1311,7 @@ function simulatePlan(
           type: "custom",
           planEntryId: entry.id,
           cost: pending.cost,
+          delayed: job.delayed,
         });
         finishedJobs.push({
           name: pending.label,
@@ -1310,6 +1339,9 @@ function simulatePlan(
             endTick: pending.desiredTick + pending.duration,
             cost: { met: 0, kris: 0 },
             planEntryId: entry.id,
+            blocked:
+              !completed.has("Marineakademie") || !completedUnits.has("Cleptor"),
+            delayed: tick > pending.desiredTick,
           });
           markEntryStart(entry.id, tick);
           if (firstRoidStartTick === null) firstRoidStartTick = tick;
@@ -1414,6 +1446,7 @@ function simulatePlan(
         type: j.type,
         remainingTicks: Math.max(0, j.endTick - tick),
         planEntryId: j.planEntryId,
+        delayed: j.delayed,
       }))
       .sort((a, b) => a.remainingTicks - b.remainingTicks || a.name.localeCompare(b.name)),
     started,
@@ -1478,6 +1511,16 @@ function simulatePlan(
         completed.add(job.name);
         completedAt.set(job.name, t);
         if (job.planEntryId) markEntryFinish(job.planEntryId, t);
+      } else if (job.type === "unit" && job.planEntryId) {
+        const unit = pendingUnits.find((u) => u.entryId === job.planEntryId);
+        if (unit) completedUnits.add(unit.name);
+        if (entryFinishTicks[job.planEntryId] === undefined) {
+          const stillActive = active.some((j) => j.planEntryId === job.planEntryId);
+          const stillPending = pendingUnits.some(
+            (u) => u.entryId === job.planEntryId && u.remaining > 0,
+          );
+          if (!stillActive && !stillPending) markEntryFinish(job.planEntryId, t);
+        }
       } else if (job.planEntryId && entryFinishTicks[job.planEntryId] === undefined) {
         // unit/recon multi: finish already marked when last started with endTick
         const stillActive = active.some((j) => j.planEntryId === job.planEntryId);
@@ -1575,20 +1618,17 @@ function simulatePlan(
       income.kris === 0 &&
       startedJobs.length === 0
     ) {
-      const stuckTech = [...pendingTechs.keys()].some((n) => {
-        if (!isReady(n)) return true;
-        const c = map.get(n)!.cost;
+      const stuckTech = [...pendingTechs.entries()].some(([name, pending]) => {
+        if (t < pending.desiredTick) return false;
+        const c = map.get(name)!.cost;
         return !canAfford(res, { met: c.met, kris: c.kris });
       });
       const stuckEco = pendingEconomy.some((p) => {
         if (t < p.desiredTick) return false;
-        const stuckAst =
-          p.remainingAsteroids > 0 &&
-          (!completed.has("Observatorium") || res.kris < ASTEROID_COST_KRIS);
+        const stuckAst = p.remainingAsteroids > 0 && res.kris < ASTEROID_COST_KRIS;
         const stuckExt =
           (p.remainingExtractorsMet > 0 || p.remainingExtractorsKris > 0) &&
-          (!completed.has("Extraktor") ||
-            res.met < extractorUnitCost(totalExtractors() + 1));
+          res.met < extractorUnitCost(totalExtractors() + 1);
         return stuckAst || stuckExt;
       });
       const hasPendingEco = pendingEconomy.some(
@@ -1605,7 +1645,6 @@ function simulatePlan(
       const hasPendingTrade = pendingTrades.some((p) => !p.done);
       const stuckTrade = pendingTrades.some((p) => {
         if (p.done || t < p.desiredTick) return false;
-        if (!completed.has("Handelsplatz")) return true;
         const have = p.give === "met" ? res.met : res.kris;
         return have < p.giveAmount;
       });

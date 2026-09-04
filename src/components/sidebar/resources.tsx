@@ -10,6 +10,7 @@ import { StatusDot } from "@/components/sidebar/status-dot";
 export type ResourcesProps = {
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
+  roidBlocked?: boolean;
   onAddEconomy: (preset?: {
     asteroids?: number;
     extractorsMet?: number;
@@ -21,6 +22,7 @@ export type ResourcesProps = {
 export function Resources({
   hasObservatorium,
   hasExtraktorTech,
+  roidBlocked = false,
   onAddEconomy,
   onAddRoid,
 }: ResourcesProps) {
@@ -66,7 +68,10 @@ export function Resources({
           }}
         >
           <CardHeader>
-            <CardTitle>Roid</CardTitle>
+            <CardTitle>
+              Roid
+              {roidBlocked ? <StatusDot kind="blocked" /> : null}
+            </CardTitle>
             <CardDescription>
               Extraktoren erbeuten — 10% der Ziel-Exen pro Tick, kostenlos.
             </CardDescription>

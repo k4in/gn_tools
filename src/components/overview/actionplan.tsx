@@ -15,6 +15,7 @@ import {
   type NamedJob,
   type TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
+import { StatusDot } from "@/components/sidebar/status-dot";
 import { cn } from "@/lib/utils/cn";
 
 export type DisplayJob = {
@@ -22,6 +23,7 @@ export type DisplayJob = {
   type: JobKind;
   suffix?: string;
   cost?: { met: number; kris: number };
+  delayed?: boolean;
 };
 
 function formatCustomCost(cost: { met: number; kris: number }) {
@@ -172,6 +174,7 @@ export function JobList({ items }: { items: DisplayJob[] }) {
             {i > 0 && <span className="text-muted-foreground">, </span>}
             <span className={jobTypeClass(item.type)}>
               {item.name}
+              {item.delayed ? <StatusDot kind="delayed" /> : null}
               {extra ? <span className="text-muted-foreground"> {extra}</span> : null}
             </span>
           </span>

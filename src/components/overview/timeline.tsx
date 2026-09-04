@@ -4,6 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/shadcn/tooltip";
+import { StatusDot } from "@/components/sidebar/status-dot";
 import { type Job, type JobKind, type TickSnapshot } from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
@@ -132,6 +133,7 @@ export function Timeline({
       startTick: Math.min(prev.startTick, s.startTick),
       endTick: Math.max(prev.endTick, s.endTick),
       blocked: Boolean(prev.blocked || s.blocked),
+      delayed: Boolean(prev.delayed || s.delayed),
       name: prev.planEntryId
         ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "")
         : prev.name,
@@ -300,7 +302,10 @@ export function Timeline({
                           />
                         }
                       >
-                        <span className="block truncate font-medium">{s.name}</span>
+                        <span className="flex min-w-0 items-center">
+                          <span className="truncate font-medium">{s.name}</span>
+                          {s.delayed ? <StatusDot kind="delayed" /> : null}
+                        </span>
                       </TooltipTrigger>
                       <TooltipContent
                         side="top"

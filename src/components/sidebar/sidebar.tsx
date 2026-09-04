@@ -21,6 +21,7 @@ export type SidebarProps = {
   recon: Utility[];
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
+  roidBlocked?: boolean;
   onAddTech: (name: string) => void;
   onAddUnit: (name: string) => void;
   onAddRecon: (name: string) => void;
@@ -43,6 +44,7 @@ export function Sidebar({
   recon,
   hasObservatorium,
   hasExtraktorTech,
+  roidBlocked = false,
   onAddTech,
   onAddUnit,
   onAddRecon,
@@ -79,6 +81,7 @@ export function Sidebar({
           <Resources
             hasObservatorium={hasObservatorium}
             hasExtraktorTech={hasExtraktorTech}
+            roidBlocked={roidBlocked}
             onAddEconomy={onAddEconomy}
             onAddRoid={onAddRoid}
           />
