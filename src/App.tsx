@@ -46,6 +46,7 @@ import { TooltipProvider } from "@/components/shadcn/tooltip";
 import { byName } from "@/lib/calculateFastestWayToGoal";
 import { ASTEROID_COST } from "@/lib/calculateFastestWayToGoal";
 
+// Redeploy
 const STORAGE_KEY = "gn_tool.plan";
 
 function isPlanEntry(raw: unknown): raw is PlanEntry {
