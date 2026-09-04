@@ -4,7 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/shadcn/tooltip";
-import { type Job, type TickSnapshot } from "@/lib/calculateFastestWayToGoal";
+import { type Job, type JobKind, type TickSnapshot } from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
 /** Sichtbare Breite der Timeline in Ticks (Viewport). Skala bleibt immer so grob. */
@@ -37,6 +37,38 @@ function tickFromClick(el: HTMLElement, clientX: number, totalTicks: number) {
   if (rect.width <= 0) return 0;
   const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   return Math.round(ratio * totalTicks);
+}
+
+type TimelineLane = "tech" | "fleet" | "econ";
+
+function laneOf(type: JobKind): TimelineLane {
+  if (type === "building" || type === "research") return "tech";
+  if (type === "unit" || type === "recon") return "fleet";
+  return "econ";
+}
+
+function packRows(jobs: Job[]): Job[][] {
+  const sorted = [...jobs].sort(
+    (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
+  );
+  const rows: Job[][] = [];
+  for (const job of sorted) {
+    let placed = false;
+    for (const row of rows) {
+      const last = row[row.length - 1];
+      const lastEnd = Math.max(
+        last.endTick,
+        last.startTick + (last.endTick === last.startTick ? 0.5 : 0),
+      );
+      if (lastEnd <= job.startTick) {
+        row.push(job);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) rows.push([job]);
+  }
+  return rows;
 }
 
 export function Timeline({
@@ -75,7 +107,6 @@ export function Timeline({
   }
 
   const totalTicks = Math.max(maxTick, TIMELINE_VIEWPORT_TICKS);
-  const rows: Job[][] = [];
   // Group multi-unit/economy micro-jobs that share planEntryId into one bar
   const grouped = new Map<string, Job>();
   const economyParts = new Map<
@@ -128,28 +159,33 @@ export function Timeline({
     }
     if (labels.length) job.name = labels.join(" + ");
   }
-  const sorted = [...grouped.values()].sort(
-    (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
-  );
-  for (const job of sorted) {
-    let placed = false;
-    for (const row of rows) {
-      const last = row[row.length - 1];
-      const lastEnd = Math.max(
-        last.endTick,
-        last.startTick + (last.endTick === last.startTick ? 0.5 : 0),
-      );
-      if (lastEnd <= job.startTick) {
-        row.push(job);
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) rows.push([job]);
+
+  const byLane: Record<TimelineLane, Job[]> = { tech: [], fleet: [], econ: [] };
+  for (const job of grouped.values()) {
+    byLane[laneOf(job.type)].push(job);
   }
+  const laneRows = ([
+    "tech",
+    "fleet",
+    "econ",
+  ] as const).map((lane) => packRows(byLane[lane])).filter((rows) => rows.length > 0);
 
   const rowHeight = 32;
-  const trackHeight = Math.max(rows.length, 1) * rowHeight + 8;
+  const laneGap = 10;
+  const packedRows: { jobs: Job[]; top: number }[] = [];
+  const separators: number[] = [];
+  let cursor = 4;
+  laneRows.forEach((rows, laneIndex) => {
+    if (laneIndex > 0) {
+      separators.push(cursor - 4 + laneGap / 2);
+      cursor += laneGap;
+    }
+    for (const jobs of rows) {
+      packedRows.push({ jobs, top: cursor });
+      cursor += rowHeight;
+    }
+  });
+  const trackHeight = Math.max(cursor + 4, rowHeight + 8);
   const step = 10;
   const markers: number[] = [];
   for (let t = 0; t <= totalTicks; t += step) markers.push(t);
@@ -194,11 +230,18 @@ export function Timeline({
                   style={{ left: `${(inspectTick / totalTicks) * 100}%` }}
                 />
               )}
+              {separators.map((top) => (
+                <div
+                  key={`lane-${top}`}
+                  className="absolute inset-x-0 h-px bg-border"
+                  style={{ top }}
+                />
+              ))}
             </div>
 
             <div className="relative" style={{ height: trackHeight }}>
-              {rows.map((row, rowIndex) =>
-                row.map((s) => {
+              {packedRows.map((row) =>
+                row.jobs.map((s) => {
                   const start = Math.max(0, Math.min(s.startTick, totalTicks));
                   const displayEnd = s.endTick === s.startTick ? s.startTick + 0.5 : s.endTick;
                   const endClamped = Math.max(start, Math.min(displayEnd, totalTicks));
@@ -206,7 +249,7 @@ export function Timeline({
                   const widthPct = Math.max(((endClamped - start) / totalTicks) * 100, 0.25);
                   const isBuilding = s.type === "building";
                   const isResearch = s.type === "research";
-                  const top = 4 + rowIndex * rowHeight;
+                  const top = row.top;
                   const clickable = !!s.planEntryId && !!onEditJob;
                   const startSnap = snapshotAtOrBefore(ticks, s.startTick);
                   const endSnap =
