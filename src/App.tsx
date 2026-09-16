@@ -10,7 +10,7 @@ import {
 } from "@/gn-data/plan";
 import { Header } from "@/components/header";
 import { Overview } from "@/components/overview/overview";
-import { PlanSwitcher, type PlanViewId } from "@/components/plan-switcher";
+import { PlanSwitcher } from "@/components/plan-switcher";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import {
   PlanEntryDialog,
@@ -640,9 +640,8 @@ function defaultAddTick(
 
 export default function App() {
   const [appState, setAppState] = useState<PersistedAppState>(() => loadStoredState());
-  const [viewId, setViewId] = useState<PlanViewId>(appState.activePlanId);
-  const viewingOwnPlan = isPlanSlotId(viewId);
-  const activeSlot: PlanSlotId = viewingOwnPlan ? viewId : appState.activePlanId;
+  const [viewId, setViewId] = useState<PlanSlotId>(appState.activePlanId);
+  const activeSlot = viewId;
 
   useEffect(() => {
     try {
@@ -659,50 +658,42 @@ export default function App() {
 
   const updateCurrentPlan = (updater: (plan: PlanEntry[]) => PlanEntry[]) => {
     setAppState((prev) => {
-      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
-      const current = prev.plans[slot];
+      const current = prev.plans[viewId];
       return {
         ...prev,
-        plans: { ...prev.plans, [slot]: { ...current, plan: updater(current.plan) } },
+        plans: { ...prev.plans, [viewId]: { ...current, plan: updater(current.plan) } },
       };
     });
   };
 
-  const viewCfg = useMemo((): StartConfig => {
-    if (viewingOwnPlan) return startCfg;
-    const template = planTemplates.find((item) => item.id === viewId);
-    if (!template) return startCfg;
-    return { ...startCfg, plan: template.plan, taxes: [] };
-  }, [startCfg, viewId, viewingOwnPlan]);
-
   const plan = useMemo(() => {
     try {
-      return calculateFastestWayToGoal(viewCfg);
+      return calculateFastestWayToGoal(startCfg);
     } catch (err) {
       console.error(err);
       return null;
     }
-  }, [viewCfg]);
+  }, [startCfg]);
 
-  const addableTechs = useMemo(() => getAddableTechs(viewCfg.plan), [viewCfg.plan]);
+  const addableTechs = useMemo(() => getAddableTechs(startCfg.plan), [startCfg.plan]);
   const neededTechs = useMemo(
-    () => missingRequiredTechs(viewCfg.plan),
-    [viewCfg.plan],
+    () => missingRequiredTechs(startCfg.plan),
+    [startCfg.plan],
   );
   const plannedTechs = useMemo(
-    () => new Set(viewCfg.plan.filter((e) => e.kind === "tech").map((e) => e.name)),
-    [viewCfg.plan],
+    () => new Set(startCfg.plan.filter((e) => e.kind === "tech").map((e) => e.name)),
+    [startCfg.plan],
   );
   const allShips = useMemo(() => getShips(), []);
   const allDefenses = useMemo(() => getDefenses(), []);
   const allRecon = useMemo(() => getReconItems(), []);
 
-  const hasObservatorium = hasTechInPlan(viewCfg.plan, "Observatorium");
-  const hasExtraktorTech = hasTechInPlan(viewCfg.plan, "Extraktor");
-  const hasInterstellarerHandel = hasTechInPlan(viewCfg.plan, "Interstellarer Handel");
+  const hasObservatorium = hasTechInPlan(startCfg.plan, "Observatorium");
+  const hasExtraktorTech = hasTechInPlan(startCfg.plan, "Extraktor");
+  const hasInterstellarerHandel = hasTechInPlan(startCfg.plan, "Interstellarer Handel");
   const roidBlocked =
-    !hasTechInPlan(viewCfg.plan, "Marineakademie") ||
-    !viewCfg.plan.some((e) => e.kind === "unit" && e.name === "Cleptor");
+    !hasTechInPlan(startCfg.plan, "Marineakademie") ||
+    !startCfg.plan.some((e) => e.kind === "unit" && e.name === "Cleptor");
 
   const maxTick = Math.max(plan?.finishTick ?? 1, 1);
   const actionTicks = useMemo(
@@ -737,7 +728,6 @@ export default function App() {
   const [editingEntry, setEditingEntry] = useState<PlanEntry | null>(null);
 
   const openAddTech = (name: string) => {
-    if (!viewingOwnPlan) return;
     const tech = byName().get(name);
     if (!tech) return;
     const defaultTick = defaultAddTick(
@@ -752,7 +742,6 @@ export default function App() {
   };
 
   const openAddUnit = (name: string) => {
-    if (!viewingOwnPlan) return;
     const unit = unitByName(name);
     if (!unit) return;
     const defaultTick = defaultAddTick(
@@ -780,7 +769,6 @@ export default function App() {
   };
 
   const openAddRecon = (name: string) => {
-    if (!viewingOwnPlan) return;
     const item = reconByName(name);
     if (!item) return;
     const defaultTick = defaultAddTick(
@@ -812,7 +800,6 @@ export default function App() {
     extractorsMet?: number;
     extractorsKris?: number;
   } = {}) => {
-    if (!viewingOwnPlan) return;
     const earliest =
       hasExtraktorTech
         ? getEarliestExtractorStartTick(startCfg)
@@ -840,7 +827,6 @@ export default function App() {
   };
 
   const openAddCustom = () => {
-    if (!viewingOwnPlan) return;
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -854,7 +840,6 @@ export default function App() {
   };
 
   const openAddTrade = () => {
-    if (!viewingOwnPlan) return;
     const doneTick = plan?.steps.find((s) => s.name === "Interstellarer Handel")?.endTick ?? 0;
     setDialogMode("add");
     setEditingEntry(null);
@@ -882,7 +867,6 @@ export default function App() {
       }));
 
   const openAddRoid = () => {
-    if (!viewingOwnPlan) return;
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -897,7 +881,6 @@ export default function App() {
   };
 
   const openAddCatastrophe = () => {
-    if (!viewingOwnPlan) return;
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -909,7 +892,6 @@ export default function App() {
   };
 
   const openAddSnapshot = () => {
-    if (!viewingOwnPlan) return;
     const defaultTick = currentTick > 0 ? currentTick : 1;
     const snap = getResourcesAtTick(startCfg, defaultTick);
     setDialogMode("add");
@@ -927,7 +909,6 @@ export default function App() {
   };
 
   const openEditEntry = (id: string) => {
-    if (!viewingOwnPlan) return;
     const entry = startCfg.plan.find((e) => e.id === id);
     if (!entry) return;
     setDialogMode("edit");
@@ -1316,7 +1297,7 @@ export default function App() {
 
   const resetPlan = (sourceId: string) => {
     setAppState((prev) => {
-      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
+      const slot = viewId;
       let next: StoredPlan | null = null;
       if (sourceId.startsWith("template:")) {
         const templateId = sourceId.slice("template:".length);
@@ -1342,7 +1323,7 @@ export default function App() {
         <Header
           now={now}
           currentTick={currentTick}
-          startCfg={viewCfg}
+          startCfg={startCfg}
           plan={plan}
           nextAction={nextAction}
           onApplyStart={({ start_date, start_time, tick_minutes }) => {
@@ -1358,14 +1339,11 @@ export default function App() {
           livePlanId={appState.livePlanId}
           onViewChange={(id) => {
             setViewId(id);
-            if (isPlanSlotId(id)) {
-              setAppState((prev) => ({ ...prev, activePlanId: id }));
-            }
+            setAppState((prev) => ({ ...prev, activePlanId: id }));
           }}
         />
-        <div className={viewingOwnPlan ? "grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]" : "grid min-h-0 flex-1 grid-cols-1"}>
-          {viewingOwnPlan && (
-            <Sidebar
+        <div className="grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]">
+          <Sidebar
               techs={addableTechs}
               neededTechs={neededTechs}
               plannedTechs={plannedTechs}
@@ -1385,7 +1363,6 @@ export default function App() {
               onAddTrade={openAddTrade}
               hasInterstellarerHandel={hasInterstellarerHandel}
             />
-          )}
           <Overview
             actionTicks={actionTicks}
             logTicks={plan?.ticks ?? []}
@@ -1397,75 +1374,47 @@ export default function App() {
             onInspectTick={setInspectTick}
             hasPlan={!!plan}
             slotShortage={plan ? getExtractorSlotShortage(plan) : null}
-            exportJson={
-              viewingOwnPlan
-                ? JSON.stringify({ plan: startCfg.plan, taxes: startCfg.taxes }, null, 2)
-                : undefined
-            }
-            exportPlanSlot={viewingOwnPlan ? activeSlot : undefined}
-            parseImportPlan={viewingOwnPlan ? parseImportedPlan : undefined}
-            onImportPlan={
-              viewingOwnPlan
-                ? (imported) => {
-                    setAppState((prev) => {
-                      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
-                      return {
-                        ...prev,
-                        plans: {
-                          ...prev.plans,
-                          [slot]: { plan: imported.plan, taxes: imported.taxes },
-                        },
-                      };
-                    });
-                  }
-                : undefined
-            }
-            resetSources={
-              viewingOwnPlan
-                ? [
-                    ...planTemplates.map((template) => ({
-                      id: `template:${template.id}`,
-                      label: template.label,
-                    })),
-                    ...PLAN_SLOT_IDS.filter((id) => id !== activeSlot).map((id) => ({
-                      id: `plan:${id}`,
-                      label: planSlotLabel(id),
-                    })),
-                  ]
-                : undefined
-            }
-            onResetPlan={viewingOwnPlan ? resetPlan : undefined}
-            taxes={viewCfg.taxes}
-            onAddSnapshot={viewingOwnPlan ? openAddSnapshot : undefined}
-            onApplyTaxes={
-              viewingOwnPlan
-                ? (next) => {
-                    setAppState((prev) => {
-                      const slot = isPlanSlotId(viewId) ? viewId : prev.activePlanId;
-                      const current = prev.plans[slot];
-                      return {
-                        ...prev,
-                        plans: { ...prev.plans, [slot]: { ...current, taxes: next } },
-                      };
-                    });
-                  }
-                : undefined
-            }
-            isLivePlan={viewingOwnPlan && appState.livePlanId === activeSlot}
-            onSetLivePlan={
-              viewingOwnPlan
-                ? () => {
-                    setAppState((prev) => ({ ...prev, livePlanId: activeSlot }));
-                  }
-                : undefined
-            }
-            onEditJob={
-              viewingOwnPlan
-                ? (planEntryId) => {
-                    if (planEntryId) openEditEntry(planEntryId);
-                  }
-                : undefined
-            }
+            exportJson={JSON.stringify({ plan: startCfg.plan, taxes: startCfg.taxes }, null, 2)}
+            exportPlanSlot={activeSlot}
+            parseImportPlan={parseImportedPlan}
+            onImportPlan={(imported) => {
+              setAppState((prev) => ({
+                ...prev,
+                plans: {
+                  ...prev.plans,
+                  [viewId]: { plan: imported.plan, taxes: imported.taxes },
+                },
+              }));
+            }}
+            resetSources={[
+              ...planTemplates.map((template) => ({
+                id: `template:${template.id}`,
+                label: template.label,
+              })),
+              ...PLAN_SLOT_IDS.filter((id) => id !== activeSlot).map((id) => ({
+                id: `plan:${id}`,
+                label: planSlotLabel(id),
+              })),
+            ]}
+            onResetPlan={resetPlan}
+            taxes={startCfg.taxes}
+            onAddSnapshot={openAddSnapshot}
+            onApplyTaxes={(next) => {
+              setAppState((prev) => {
+                const current = prev.plans[viewId];
+                return {
+                  ...prev,
+                  plans: { ...prev.plans, [viewId]: { ...current, taxes: next } },
+                };
+              });
+            }}
+            isLivePlan={appState.livePlanId === activeSlot}
+            onSetLivePlan={() => {
+              setAppState((prev) => ({ ...prev, livePlanId: activeSlot }));
+            }}
+            onEditJob={(planEntryId) => {
+              if (planEntryId) openEditEntry(planEntryId);
+            }}
           />
         </div>
 

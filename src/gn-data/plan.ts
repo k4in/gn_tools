@@ -1,4 +1,5 @@
 import { balanced } from "@/gn-data/plan-template/balanced";
+import { empty } from "@/gn-data/plan-template/empty";
 
 export type PlanEntry =
   | { id: string; kind: "tech"; name: string; startTick: number }
@@ -99,7 +100,7 @@ export function clonePlanEntries(plan: PlanEntry[]): PlanEntry[] {
   return structuredClone(plan);
 }
 
-export const planTemplates: PlanTemplate[] = [balanced];
+export const planTemplates: PlanTemplate[] = [empty, balanced];
 
 export const defaults: {
   start_time: string;
