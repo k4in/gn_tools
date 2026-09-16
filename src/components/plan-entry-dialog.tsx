@@ -24,6 +24,9 @@ import {
   ASTEROID_SLOT_CAPACITY,
   extractorBatchCost,
   extractorUnitCost,
+  CATASTROPHE_DURATION_MAX,
+  CATASTROPHE_DURATION_MIN,
+  formatCatastrophePlanLabel,
   formatRes,
   formatRoidPlanLabel,
   formatTradePlanLabel,
@@ -34,12 +37,17 @@ import {
   type PlanEntry,
 } from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
+import type { Defense } from "@/gn-data/defense";
 import type { Ship } from "@/gn-data/ships";
 import type { Utility } from "@/gn-data/utility";
 
 const ROID_DURATION_ITEMS = Array.from(
   { length: ROID_DURATION_MAX - ROID_DURATION_MIN + 1 },
   (_, i) => String(ROID_DURATION_MIN + i),
+);
+const CATASTROPHE_DURATION_ITEMS = Array.from(
+  { length: CATASTROPHE_DURATION_MAX - CATASTROPHE_DURATION_MIN + 1 },
+  (_, i) => String(CATASTROPHE_DURATION_MIN + i),
 );
 
 export type PlanEntryDialogMode = "add" | "edit";
@@ -111,13 +119,20 @@ type RoidTarget = {
   occupiedRoids: OccupiedRoid[];
 };
 
+type CatastropheTarget = {
+  kind: "catastrophe";
+  defaultTick: number;
+  defaultDuration: number;
+};
+
 export type PlanEntryDialogTarget =
   | TechTarget
   | CountableTarget
   | EconomyTarget
   | CustomTarget
   | TradeTarget
-  | RoidTarget;
+  | RoidTarget
+  | CatastropheTarget;
 
 export type PlanEntryDialogSubmit = {
   startTick: number;
@@ -224,6 +239,15 @@ export function PlanEntryDialog({
         );
         return;
       }
+      if (entry.kind === "catastrophe") {
+        setDuration(
+          Math.min(
+            CATASTROPHE_DURATION_MAX,
+            Math.max(CATASTROPHE_DURATION_MIN, entry.duration),
+          ),
+        );
+        return;
+      }
       if ("count" in entry) setCount(entry.count);
       return;
     }
@@ -243,6 +267,13 @@ export function PlanEntryDialog({
       setGive(target.defaultGive);
       setGiveAmount(Math.max(0, target.defaultGiveAmount));
       setReceiveAmount(Math.max(0, target.defaultReceiveAmount));
+    } else if (target.kind === "catastrophe") {
+      setDuration(
+        Math.min(
+          CATASTROPHE_DURATION_MAX,
+          Math.max(CATASTROPHE_DURATION_MIN, target.defaultDuration),
+        ),
+      );
     } else if (target.kind === "roid") {
       setTargetMet(Math.max(0, target.defaultTargetMet));
       setTargetKris(Math.max(0, target.defaultTargetKris));
@@ -265,8 +296,11 @@ export function PlanEntryDialog({
   }, [target, startTick, resolveMaxCount]);
 
   const liveEconomy = useMemo(() => {
-    if (!target || target.kind !== "economy") return null;
+    if (!target || (target.kind !== "economy" && target.kind !== "catastrophe")) return null;
     if (resolveEconomyAtTick) return resolveEconomyAtTick(startTick);
+    if (target.kind === "catastrophe") {
+      return { freeSlots: 0, asteroids: 0, alreadyBuilt: 0, met: 0, kris: 0 };
+    }
     return {
       freeSlots: target.freeSlots,
       asteroids: target.asteroidsOwned,
@@ -332,7 +366,7 @@ export function PlanEntryDialog({
     if (target.kind === "unit" || target.kind === "recon") return target.name;
     if (target.kind === "custom") return label.trim() || "Custom-Ausgabe";
     if (target.kind === "trade") {
-      return giveAmount > 0 && receiveAmount > 0
+      return giveAmount > 0 || receiveAmount > 0
         ? formatTradePlanLabel(give, giveAmount, receiveAmount)
         : "Trade";
     }
@@ -340,6 +374,9 @@ export function PlanEntryDialog({
       return targetMet > 0 || targetKris > 0
         ? formatRoidPlanLabel(targetMet, targetKris)
         : "Roid";
+    }
+    if (target.kind === "catastrophe") {
+      return formatCatastrophePlanLabel(duration);
     }
     return "Asteroiden & Extraktoren";
   })();
@@ -363,7 +400,7 @@ export function PlanEntryDialog({
       return label.trim().length > 0 && met >= 0 && kris >= 0;
     }
     if (target.kind === "trade") {
-      return giveAmount > 0 && receiveAmount > 0;
+      return giveAmount > 0 || receiveAmount > 0;
     }
     if (target.kind === "roid") {
       if (targetMet <= 0 && targetKris <= 0) return false;
@@ -372,6 +409,9 @@ export function PlanEntryDialog({
         roidsOverlap(startTick, duration, r.startTick, r.duration),
       );
       return !overlaps;
+    }
+    if (target.kind === "catastrophe") {
+      return duration >= CATASTROPHE_DURATION_MIN && duration <= CATASTROPHE_DURATION_MAX;
     }
     return false;
   })();
@@ -414,6 +454,8 @@ export function PlanEntryDialog({
         targetKris: Math.max(0, targetKris),
         duration,
       });
+    } else if (target.kind === "catastrophe") {
+      onSubmit({ startTick, duration });
     } else {
       onSubmit({ startTick, count: Math.max(1, count) });
     }
@@ -526,6 +568,15 @@ export function PlanEntryDialog({
                 onChange={(e) => setLabel(e.target.value)}
               />
             </Field>
+          )}
+
+          {target.kind === "catastrophe" && (
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+              <p>
+                Pro Tick 10% der restlichen eigenen Extraktoren (immer abgerundet).
+                Bestand bei Tick {startTick}: {liveEconomy?.alreadyBuilt ?? "—"} Extraktoren.
+              </p>
+            </div>
           )}
 
           {target.kind === "roid" && (
@@ -709,6 +760,34 @@ export function PlanEntryDialog({
               </>
             )}
 
+            {target.kind === "catastrophe" && (
+              <Field className="w-32">
+                <FieldLabel>Angriffslänge</FieldLabel>
+                <Combobox
+                  items={CATASTROPHE_DURATION_ITEMS}
+                  value={String(duration)}
+                  onValueChange={(value) => {
+                    if (value == null) return;
+                    const n = Number(value);
+                    if (n >= CATASTROPHE_DURATION_MIN && n <= CATASTROPHE_DURATION_MAX) {
+                      setDuration(n);
+                    }
+                  }}
+                >
+                  <ComboboxInput showTrigger className="w-32" />
+                  <ComboboxContent>
+                    <ComboboxList>
+                      {CATASTROPHE_DURATION_ITEMS.map((item) => (
+                        <ComboboxItem key={item} value={item}>
+                          {item} {item === "1" ? "Tick" : "Ticks"}
+                        </ComboboxItem>
+                      ))}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
+              </Field>
+            )}
+
             {target.kind === "roid" && (
               <>
                 <Field className="w-28">
@@ -885,7 +964,7 @@ export function techDialogTarget(
 }
 
 export function shipDialogTarget(
-  ship: Ship,
+  ship: Ship | Defense,
   defaultTick: number,
   defaultCount: number,
   maxCount: number,

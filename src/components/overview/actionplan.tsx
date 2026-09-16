@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/shadcn/table";
 import {
+  formatCatastropheLossLabel,
   formatRes,
   formatRoidLootLabel,
   type JobKind,
@@ -41,6 +42,7 @@ export function jobTypeClass(type: JobKind) {
   if (type === "custom") return "text-silver-500";
   if (type === "trade") return "text-zinc-400";
   if (type === "roid") return "text-blue-400";
+  if (type === "catastrophe") return "text-red-400";
   return "text-sky-500";
 }
 
@@ -127,36 +129,51 @@ export function ExtraEvents({
 }) {
   const hasQuests = tick.quests.length > 0;
   const hasRoids = tick.roidLoot.length > 0;
+  const hasCatastrophe = tick.catastropheLoss.length > 0;
   const hasCustom = customs.length > 0;
-  if (!hasQuests && !hasRoids && !hasCustom) return null;
+  if (!hasQuests && !hasRoids && !hasCatastrophe && !hasCustom) return null;
+
+  const parts: ReactNode[] = [];
+  if (hasCustom) parts.push(<JobList key="custom" items={customs} />);
+  if (hasQuests) {
+    parts.push(
+      <span key="quests" className="text-green-500">
+        {tick.quests.map((q, i) => (
+          <span key={q.id}>
+            {i > 0 && <span className="text-muted-foreground">, </span>}
+            {q.label}
+          </span>
+        ))}
+      </span>,
+    );
+  }
+  tick.roidLoot.forEach((loot, i) => {
+    const label = formatRoidLootLabel(loot);
+    if (!label) return;
+    parts.push(
+      <span key={`${loot.planEntryId}-${i}`} className="text-blue-400">
+        {label}
+      </span>,
+    );
+  });
+  tick.catastropheLoss.forEach((loss, i) => {
+    const label = formatCatastropheLossLabel(loss);
+    if (!label) return;
+    parts.push(
+      <span key={`cat-${loss.planEntryId}-${i}`} className="text-red-400">
+        {label}
+      </span>,
+    );
+  });
 
   return (
     <span className="inline">
-      {hasCustom ? <JobList items={customs} /> : null}
-      {hasCustom && (hasQuests || hasRoids) && (
-        <span className="text-muted-foreground">, </span>
-      )}
-      {hasQuests ? (
-        <span className="text-green-500">
-          {tick.quests.map((q, i) => (
-            <span key={q.id}>
-              {i > 0 && <span className="text-muted-foreground">, </span>}
-              {q.label}
-            </span>
-          ))}
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && <span className="text-muted-foreground">, </span>}
+          {part}
         </span>
-      ) : null}
-      {hasQuests && hasRoids && <span className="text-muted-foreground">, </span>}
-      {tick.roidLoot.map((loot, i) => {
-        const label = formatRoidLootLabel(loot);
-        if (!label) return null;
-        return (
-          <span key={`${loot.planEntryId}-${i}`} className="text-blue-400">
-            {i > 0 && <span className="text-muted-foreground">, </span>}
-            {label}
-          </span>
-        );
-      })}
+      ))}
     </span>
   );
 }

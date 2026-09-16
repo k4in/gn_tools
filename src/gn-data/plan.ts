@@ -24,7 +24,7 @@ export type PlanEntry =
       label: string;
       cost: { met: number; kris: number };
     }
-  /** Rohstoffe tauschen (Handelsplatz, instant). */
+  /** Rohstoffe tauschen (Interstellarer Handel, instant). */
   | {
       id: string;
       kind: "trade";
@@ -46,6 +46,14 @@ export type PlanEntry =
       /** Opfer-Bestand Kristall-Exen zu Angriffsbeginn. */
       targetKris: number;
       /** Anzahl Angriffs-Ticks (1–10). */
+      duration: number;
+    }
+  /** Eigene Extraktoren verlieren (Katastrophe): 10% der eigenen Exen pro Tick. */
+  | {
+      id: string;
+      kind: "catastrophe";
+      startTick: number;
+      /** Anzahl Angriffs-Ticks (1–25). */
       duration: number;
     }
   /** @deprecated migrated to economy */

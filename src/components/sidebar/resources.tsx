@@ -17,6 +17,7 @@ export type ResourcesProps = {
     extractorsKris?: number;
   }) => void;
   onAddRoid: () => void;
+  onAddCatastrophe: () => void;
 };
 
 export function Resources({
@@ -25,6 +26,7 @@ export function Resources({
   roidBlocked = false,
   onAddEconomy,
   onAddRoid,
+  onAddCatastrophe,
 }: ResourcesProps) {
   const economyBlocked = !hasObservatorium && !hasExtraktorTech;
 
@@ -73,7 +75,27 @@ export function Resources({
               {roidBlocked ? <StatusDot kind="blocked" /> : null}
             </CardTitle>
             <CardDescription>
-              Extraktoren erbeuten — 10% der Ziel-Exen pro Tick, kostenlos.
+              Extraktoren bei einem Angriff in 1-10 Ticks erbeuten
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <Card
+          size="sm"
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer bg-destructive/10 text-destructive ring-destructive/40 transition-colors hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40 dark:bg-destructive/20 dark:hover:bg-destructive/30"
+          onClick={() => onAddCatastrophe()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onAddCatastrophe();
+            }
+          }}
+        >
+          <CardHeader>
+            <CardTitle>Katastrophe</CardTitle>
+            <CardDescription className="text-destructive/70">
+              Extraktorenverlust bei Angriff
             </CardDescription>
           </CardHeader>
         </Card>

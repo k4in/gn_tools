@@ -36,13 +36,25 @@ type ExtractorEventRow = {
   met: number;
   kris: number;
   asteroids: number;
-  source: "Bau" | "Roid" | "Quest";
+  source: "Bau" | "Roid" | "Katastrophe" | "Quest";
 };
 
 function sourceClass(source: ExtractorEventRow["source"]) {
   if (source === "Bau") return "text-sky-500";
   if (source === "Roid") return "text-blue-400";
+  if (source === "Katastrophe") return "text-red-400";
   return "text-green-500";
+}
+
+function formatExDelta(n: number) {
+  if (!n) return "—";
+  return n > 0 ? `+${n}` : String(n);
+}
+
+function exDeltaClass(n: number) {
+  if (n > 0) return "text-green-500";
+  if (n < 0) return "text-red-400";
+  return undefined;
 }
 
 function snapshotAtTick(plan: PlanResult, currentTick: number) {
@@ -175,7 +187,45 @@ function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[]
     });
   }
 
-  const sourceOrder = { Bau: 0, Roid: 1, Quest: 2 };
+  const catastrophes = new Map<
+    string,
+    { start: number; end: number; met: number; kris: number; clock: string }
+  >();
+  for (const tick of plan.ticks) {
+    for (const loss of tick.catastropheLoss) {
+      const current = catastrophes.get(loss.planEntryId);
+      if (!current) {
+        catastrophes.set(loss.planEntryId, {
+          start: tick.tick,
+          end: tick.tick,
+          met: -loss.met,
+          kris: -loss.kris,
+          clock: tick.clockLabel,
+        });
+      } else {
+        current.end = tick.tick;
+        current.met -= loss.met;
+        current.kris -= loss.kris;
+      }
+    }
+  }
+  for (const entry of startCfg.plan) {
+    if (entry.kind !== "catastrophe") continue;
+    const loss = catastrophes.get(entry.id);
+    const start = loss?.start ?? entry.startTick;
+    const end = loss?.end ?? entry.startTick + Math.max(0, entry.duration - 1);
+    rows.push({
+      sortTick: start,
+      tickLabel: start === end ? String(start) : `${start}–${end}`,
+      clockLabel: loss?.clock ?? clockLabel(startCfg, start),
+      met: loss?.met ?? 0,
+      kris: loss?.kris ?? 0,
+      asteroids: 0,
+      source: "Katastrophe",
+    });
+  }
+
+  const sourceOrder = { Bau: 0, Roid: 1, Katastrophe: 2, Quest: 3 };
   return rows.sort(
     (a, b) => a.sortTick - b.sortTick || sourceOrder[a.source] - sourceOrder[b.source],
   );
@@ -259,14 +309,14 @@ export function ExtractorsDialog({
                 <TableRow key={`${row.source}-${row.tickLabel}-${i}`}>
                   <TableCell className="tabular-nums">{row.tickLabel}</TableCell>
                   <TableCell className="tabular-nums">{row.clockLabel}</TableCell>
-                  <TableCell className={cn("text-right tabular-nums", row.met > 0 && "text-green-500")}>
-                    {row.met ? `+${row.met}` : "—"}
+                  <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.met))}>
+                    {formatExDelta(row.met)}
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", row.kris > 0 && "text-green-500")}>
-                    {row.kris ? `+${row.kris}` : "—"}
+                  <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.kris))}>
+                    {formatExDelta(row.kris)}
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", row.asteroids > 0 && "text-green-500")}>
-                    {row.asteroids ? `+${row.asteroids}` : "—"}
+                  <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.asteroids))}>
+                    {formatExDelta(row.asteroids)}
                   </TableCell>
                   <TableCell className={sourceClass(row.source)}>{row.source}</TableCell>
                 </TableRow>

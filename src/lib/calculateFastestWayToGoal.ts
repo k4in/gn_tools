@@ -9,6 +9,7 @@ import {
   type QuestDef,
   type QuestReward,
 } from "@/gn-data/quests";
+import { defenses, type Defense } from "@/gn-data/defense";
 import { ships, type Ship } from "@/gn-data/ships";
 import { techtree, type TechTreeEntry } from "@/gn-data/techtree";
 import { utilities, type Utility } from "@/gn-data/utility";
@@ -144,7 +145,7 @@ function maxTicksOf(startCfg: StartConfig) {
 
 export type Res = { met: number; kris: number };
 
-export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid" | "trade";
+export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid" | "catastrophe" | "trade";
 
 export type Job = {
   name: string;
@@ -198,6 +199,8 @@ export type TickSnapshot = {
   quests: QuestEvent[];
   /** Roid-Beute in diesem Tick (kostenlose Exen). */
   roidLoot: RoidLootEvent[];
+  /** Extraktorenverlust durch Katastrophe in diesem Tick. */
+  catastropheLoss: RoidLootEvent[];
   asteroids: number;
   extractorsMet: number;
   extractorsKris: number;
@@ -254,6 +257,14 @@ export function shipByName(name: string): Ship | undefined {
   return ships.find((s) => s.name === name);
 }
 
+export function defenseByName(name: string): Defense | undefined {
+  return defenses.find((d) => d.name === name);
+}
+
+export function unitByName(name: string): Ship | Defense | undefined {
+  return shipByName(name) ?? defenseByName(name);
+}
+
 export function reconByName(name: string): Utility | undefined {
   return utilities.find((u) => u.name === name && u.name !== "Asteroid");
 }
@@ -264,6 +275,10 @@ export function getReconItems(): Utility[] {
 
 export function getShips(): Ship[] {
   return ships;
+}
+
+export function getDefenses(): Defense[] {
+  return defenses;
 }
 
 // ---------------------------------------------------------------------------
@@ -487,6 +502,8 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return formatTradePlanLabel(entry.give, entry.giveAmount, entry.receiveAmount);
     case "roid":
       return formatRoidPlanLabel(entry.targetMet, entry.targetKris);
+    case "catastrophe":
+      return formatCatastrophePlanLabel(entry.duration);
   }
 }
 
@@ -503,20 +520,41 @@ export function formatTradePlanLabel(
 export const ROID_STEAL_RATE = 0.1;
 export const ROID_DURATION_MIN = 1;
 export const ROID_DURATION_MAX = 10;
+export const CATASTROPHE_DURATION_MIN = 1;
+export const CATASTROPHE_DURATION_MAX = 25;
 
 export function clampRoidDuration(n: number): number {
   if (!Number.isFinite(n)) return ROID_DURATION_MIN;
   return Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, Math.floor(n)));
 }
 
+export function clampCatastropheDuration(n: number): number {
+  if (!Number.isFinite(n)) return CATASTROPHE_DURATION_MIN;
+  return Math.min(
+    CATASTROPHE_DURATION_MAX,
+    Math.max(CATASTROPHE_DURATION_MIN, Math.floor(n)),
+  );
+}
+
 export function formatRoidPlanLabel(targetMet: number, targetKris: number): string {
   return `Roid ${targetMet}/${targetKris}`;
+}
+
+export function formatCatastrophePlanLabel(duration: number): string {
+  return `Katastrophe ${clampCatastropheDuration(duration)} T`;
 }
 
 export function formatRoidLootLabel(loot: { met: number; kris: number }): string {
   const parts: string[] = [];
   if (loot.met > 0) parts.push(`+${loot.met} M-Exen`);
   if (loot.kris > 0) parts.push(`+${loot.kris} K-Exen`);
+  return parts.join(", ");
+}
+
+export function formatCatastropheLossLabel(loss: { met: number; kris: number }): string {
+  const parts: string[] = [];
+  if (loss.met > 0) parts.push(`−${loss.met} M-Exen`);
+  if (loss.kris > 0) parts.push(`−${loss.kris} K-Exen`);
   return parts.join(", ");
 }
 
@@ -704,7 +742,7 @@ export function missingRequiredTechs(plan: PlanEntry[]): Set<string> {
   for (const e of plan) {
     if (e.kind === "tech") addName(e.name);
     else if (e.kind === "unit") {
-      for (const d of shipByName(e.name)?.dependencies ?? []) addName(d);
+      for (const d of unitByName(e.name)?.dependencies ?? []) addName(d);
     } else if (e.kind === "recon") {
       for (const d of reconByName(e.name)?.dependencies ?? []) addName(d);
     } else if (e.kind === "economy") {
@@ -712,7 +750,7 @@ export function missingRequiredTechs(plan: PlanEntry[]): Set<string> {
       if (e.extractorsMet > 0 || e.extractorsKris > 0) addName("Extraktor");
     } else if (e.kind === "asteroids") addName("Observatorium");
     else if (e.kind === "extractors") addName("Extraktor");
-    else if (e.kind === "trade") addName("Handelsplatz");
+    else if (e.kind === "trade") addName("Interstellarer Handel");
     else if (e.kind === "roid") {
       addName("Marineakademie");
       addName("Kaperschiff");
@@ -777,8 +815,8 @@ export function removePlanEntryCascade(plan: PlanEntry[], id: string): PlanEntry
           changed = true;
         }
       } else if (entry.kind === "unit") {
-        const ship = shipByName(entry.name);
-        if (ship?.dependencies.some((d) => removedTechNames.has(d))) {
+        const unit = unitByName(entry.name);
+        if (unit?.dependencies.some((d) => removedTechNames.has(d))) {
           toRemove.add(entry.id);
           changed = true;
         }
@@ -808,7 +846,7 @@ export function removePlanEntryCascade(plan: PlanEntry[], id: string): PlanEntry
           changed = true;
         }
       } else if (entry.kind === "trade") {
-        if (removedTechNames.has("Handelsplatz")) {
+        if (removedTechNames.has("Interstellarer Handel")) {
           toRemove.add(entry.id);
           changed = true;
         }
@@ -869,6 +907,27 @@ type PendingRoid = {
   ticksDone: number;
 };
 
+type PendingCatastrophe = {
+  entryId: string;
+  desiredTick: number;
+  duration: number;
+  ticksDone: number;
+};
+
+function removeQueuedExtractors(
+  queue: Array<"met" | "kris">,
+  resource: "met" | "kris",
+  count: number,
+) {
+  let left = count;
+  for (let i = queue.length - 1; i >= 0 && left > 0; i--) {
+    if (queue[i] === resource) {
+      queue.splice(i, 1);
+      left -= 1;
+    }
+  }
+}
+
 /**
  * Plan-getriebene Simulation:
  * - Jeder Plan-Eintrag hat desired startTick (User-Input)
@@ -926,17 +985,18 @@ function simulatePlan(
   const pendingCustom: PendingCustom[] = [];
   const pendingTrades: PendingTrade[] = [];
   const pendingRoids: PendingRoid[] = [];
+  const pendingCatastrophes: PendingCatastrophe[] = [];
 
   for (const e of plan) {
     if (e.kind === "unit") {
-      const ship = shipByName(e.name);
-      if (!ship) throw new Error(`Unbekanntes Schiff: ${e.name}`);
+      const unit = unitByName(e.name);
+      if (!unit) throw new Error(`Unbekannte Einheit: ${e.name}`);
       pendingUnits.push({
         entryId: e.id,
         name: e.name,
         type: "unit",
-        duration: ship.ticks,
-        unitCost: { met: ship.cost.met, kris: ship.cost.kris },
+        duration: unit.ticks,
+        unitCost: { met: unit.cost.met, kris: unit.cost.kris },
         remaining: Math.max(1, e.count),
         desiredTick: e.startTick,
       });
@@ -996,7 +1056,7 @@ function simulatePlan(
     } else if (e.kind === "trade") {
       const giveAmount = Math.max(0, Math.floor(e.giveAmount));
       const receiveAmount = Math.max(0, Math.floor(e.receiveAmount));
-      if (giveAmount <= 0 || receiveAmount <= 0) continue;
+      if (giveAmount <= 0 && receiveAmount <= 0) continue;
       pendingTrades.push({
         entryId: e.id,
         give: e.give === "kris" ? "kris" : "met",
@@ -1016,6 +1076,13 @@ function simulatePlan(
         remainingKris: targetKris,
         desiredTick: e.startTick,
         duration: clampRoidDuration(e.duration),
+        ticksDone: 0,
+      });
+    } else if (e.kind === "catastrophe") {
+      pendingCatastrophes.push({
+        entryId: e.id,
+        desiredTick: e.startTick,
+        duration: clampCatastropheDuration(e.duration),
         ticksDone: 0,
       });
     }
@@ -1049,6 +1116,7 @@ function simulatePlan(
     if (pendingCustom.some((c) => !c.done)) return false;
     if (pendingTrades.some((c) => !c.done)) return false;
     if (pendingRoids.some((r) => r.ticksDone < r.duration)) return false;
+    if (pendingCatastrophes.some((r) => r.ticksDone < r.duration)) return false;
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
     return true;
@@ -1067,6 +1135,7 @@ function simulatePlan(
     const startedJobs: NamedJob[] = [];
     const finishedJobs: NamedJob[] = [];
     const roidLoot: RoidLootEvent[] = [];
+    const catastropheLoss: RoidLootEvent[] = [];
     let spent: Res = { met: 0, kris: 0 };
 
     // Earlier desired startTick first; same tick keeps plan order.
@@ -1117,7 +1186,7 @@ function simulatePlan(
         // deps: for units/recon check tech deps completed
         const deps =
           entry.kind === "unit"
-            ? shipByName(entry.name)?.dependencies ?? []
+            ? unitByName(entry.name)?.dependencies ?? []
             : reconByName(entry.name)?.dependencies ?? [];
 
         const count = pending.remaining;
@@ -1296,7 +1365,7 @@ function simulatePlan(
           endTick: tick,
           cost,
           planEntryId: entry.id,
-          blocked: !completed.has("Handelsplatz"),
+          blocked: !completed.has("Interstellarer Handel"),
           delayed: tick > pending.desiredTick,
         };
         steps.push(job);
@@ -1400,9 +1469,55 @@ function simulatePlan(
           markEntryFinish(entry.id, tick);
         }
       }
+
+      if (entry.kind === "catastrophe") {
+        const pending = pendingCatastrophes.find((p) => p.entryId === entry.id);
+        if (!pending || pending.ticksDone >= pending.duration) continue;
+        if (tick < pending.desiredTick) continue;
+        if (tick !== pending.desiredTick + pending.ticksDone) continue;
+
+        if (pending.ticksDone === 0) {
+          const name = formatCatastrophePlanLabel(pending.duration);
+          steps.push({
+            name,
+            type: "catastrophe",
+            startTick: pending.desiredTick,
+            endTick: pending.desiredTick + pending.duration,
+            cost: { met: 0, kris: 0 },
+            planEntryId: entry.id,
+            delayed: tick > pending.desiredTick,
+          });
+          startedJobs.push({
+            name,
+            type: "catastrophe",
+            planEntryId: entry.id,
+            delayed: tick > pending.desiredTick,
+          });
+          markEntryStart(entry.id, tick);
+        }
+
+        const stealMet = Math.floor(extractorsMet * ROID_STEAL_RATE);
+        const stealKris = Math.floor(extractorsKris * ROID_STEAL_RATE);
+        if (stealMet > 0) {
+          extractorsMet -= stealMet;
+          removeQueuedExtractors(extractorQueue, "met", stealMet);
+        }
+        if (stealKris > 0) {
+          extractorsKris -= stealKris;
+          removeQueuedExtractors(extractorQueue, "kris", stealKris);
+        }
+        if (stealMet > 0 || stealKris > 0) {
+          catastropheLoss.push({ planEntryId: entry.id, met: stealMet, kris: stealKris });
+        }
+
+        pending.ticksDone += 1;
+        if (pending.ticksDone >= pending.duration) {
+          markEntryFinish(entry.id, tick);
+        }
+      }
     }
 
-    return { startedJobs, finishedJobs, spent, roidLoot };
+    return { startedJobs, finishedJobs, spent, roidLoot, catastropheLoss };
   };
 
   const applyQuestRewards = (quests: QuestDef[]): QuestEvent[] => {
@@ -1463,6 +1578,7 @@ function simulatePlan(
     delta: Res,
     quests: QuestEvent[] = [],
     roidLoot: RoidLootEvent[] = [],
+    catastropheLoss: RoidLootEvent[] = [],
   ): TickSnapshot => {
     const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
     return {
@@ -1485,6 +1601,7 @@ function simulatePlan(
     finished,
     quests,
     roidLoot,
+    catastropheLoss,
     asteroids,
     extractorsMet,
     extractorsKris,
@@ -1525,9 +1642,17 @@ function simulatePlan(
 
   // t = 0
   {
-    const { startedJobs, finishedJobs, spent, roidLoot } = tryStart(0);
+    const { startedJobs, finishedJobs, spent, roidLoot, catastropheLoss } = tryStart(0);
     ticks.push(
-      snapshot(0, startedJobs, finishedJobs, { met: -spent.met, kris: -spent.kris }, [], roidLoot),
+      snapshot(
+        0,
+        startedJobs,
+        finishedJobs,
+        { met: -spent.met, kris: -spent.kris },
+        [],
+        roidLoot,
+        catastropheLoss,
+      ),
     );
     if (allDone()) return resultAt(0);
   }
@@ -1596,7 +1721,7 @@ function simulatePlan(
     // (asteroid + extractors) are re-checked after tryStart same tick.
     const questEventsEarly = claimReadyQuests(t);
 
-    const { startedJobs, finishedJobs: instantFinished, spent, roidLoot } = tryStart(t);
+    const { startedJobs, finishedJobs: instantFinished, spent, roidLoot, catastropheLoss } = tryStart(t);
     noteFinishedRecon(instantFinished);
     noteFinishedUnits(instantFinished);
     const allFinished = [...finishedJobs, ...instantFinished];
@@ -1618,7 +1743,8 @@ function simulatePlan(
       !allDone() &&
       startedJobs.length === 0 &&
       active.length === 0 &&
-      roidLoot.length === 0;
+      roidLoot.length === 0 &&
+      catastropheLoss.length === 0;
 
     if (waiting) {
       waitStreak += 1;
@@ -1631,7 +1757,7 @@ function simulatePlan(
       met: income.met + questRes.met - spent.met,
       kris: income.kris + questRes.kris - spent.kris,
     };
-    ticks.push(snapshot(t, startedJobs, allFinished, delta, questEvents, roidLoot));
+    ticks.push(snapshot(t, startedJobs, allFinished, delta, questEvents, roidLoot, catastropheLoss));
 
     if (allDone()) {
       const finishTick = Math.max(
@@ -1816,7 +1942,7 @@ export function getEarliestBuildStartTick(
   kind: "unit" | "recon",
   name: string,
 ): number {
-  const item = kind === "unit" ? shipByName(name) : reconByName(name);
+  const item = kind === "unit" ? unitByName(name) : reconByName(name);
   if (!item) return 0;
 
   let plan: PlanResult;
@@ -1861,7 +1987,7 @@ export function getMaxBuildCountAtTick(
   name: string,
   tick: number,
 ): number {
-  const item = kind === "unit" ? shipByName(name) : reconByName(name);
+  const item = kind === "unit" ? unitByName(name) : reconByName(name);
   if (!item) return 0;
   const cost = item.cost;
   if (cost.met <= 0 && cost.kris <= 0) return 99;

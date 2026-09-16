@@ -13,8 +13,7 @@ export type Defense = {
   dependencies: TechName[];
 };
 
-// TODO: ticks/time für raumgeschütze
-
+/** ticks bei 15-Minuten-Ticklänge; time = ticks * 15 (Referenzminuten). */
 export const defenses: Defense[] = [
   {
     name: "Rubium",
@@ -25,22 +24,22 @@ export const defenses: Defense[] = [
   },
   {
     name: "Pulsar",
-    ticks: 0,
-    time: 0,
+    ticks: 28,
+    time: 420,
     cost: { met: 20000, kris: 10000 },
     dependencies: ["Leichtes Raumgeschütz"],
   },
   {
     name: "Coon",
-    ticks: 0,
-    time: 0,
+    ticks: 52,
+    time: 780,
     cost: { met: 60000, kris: 100000 },
     dependencies: ["Mittleres Raumgeschütz"],
   },
   {
     name: "Centurion",
-    ticks: 0,
-    time: 0,
+    ticks: 80,
+    time: 1200,
     cost: { met: 200000, kris: 300000 },
     dependencies: ["Schweres Raumgeschütz"],
   },
@@ -53,8 +52,8 @@ export const defenses: Defense[] = [
   },
   {
     name: "Zitadelle",
-    ticks: 0,
-    time: 0,
+    ticks: 128,
+    time: 1920,
     cost: { met: 500000, kris: 300000 },
     dependencies: ["Raumbasis"],
   },

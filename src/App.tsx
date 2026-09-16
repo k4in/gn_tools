@@ -28,6 +28,7 @@ import {
   getMaxBuildCountAtTick,
   extractorBatchCost,
   getMaxExtractorsAtTick,
+  getDefenses,
   getReconItems,
   getResourcesAtTick,
   getShips,
@@ -37,7 +38,7 @@ import {
   normalizeTaxes,
   reconByName,
   removePlanEntryCascade,
-  shipByName,
+  unitByName,
   type PlanEntry,
   type StartConfig,
   type TaxSegment,
@@ -130,7 +131,7 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       const receiveAmt = Math.max(0, Math.floor(receiveAmount));
       o.giveAmount = giveAmt;
       o.receiveAmount = receiveAmt;
-      return giveAmt > 0 && receiveAmt > 0;
+      return giveAmt > 0 || receiveAmt > 0;
     }
     case "roid": {
       const targetMet = o.targetMet;
@@ -145,6 +146,12 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       o.targetKris = kris;
       o.duration = Math.min(10, Math.max(1, Math.floor(duration)));
       return met > 0 || kris > 0;
+    }
+    case "catastrophe": {
+      const duration = o.duration;
+      if (typeof duration !== "number" || !Number.isFinite(duration)) return false;
+      o.duration = Math.min(25, Math.max(1, Math.floor(duration)));
+      return true;
     }
     default:
       return false;
@@ -277,6 +284,15 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
         targetMet: Math.max(0, Math.floor(e.targetMet)),
         targetKris: Math.max(0, Math.floor(e.targetKris)),
         duration: Math.min(10, Math.max(1, Math.floor(e.duration))),
+      });
+      continue;
+    }
+    if (e.kind === "catastrophe") {
+      out.push({
+        id: e.id,
+        kind: "catastrophe",
+        startTick: Math.max(0, Math.floor(e.startTick)),
+        duration: Math.min(25, Math.max(1, Math.floor(e.duration))),
       });
       continue;
     }
@@ -633,11 +649,12 @@ export default function App() {
     [viewCfg.plan],
   );
   const allShips = useMemo(() => getShips(), []);
+  const allDefenses = useMemo(() => getDefenses(), []);
   const allRecon = useMemo(() => getReconItems(), []);
 
   const hasObservatorium = hasTechInPlan(viewCfg.plan, "Observatorium");
   const hasExtraktorTech = hasTechInPlan(viewCfg.plan, "Extraktor");
-  const hasHandelsplatz = hasTechInPlan(viewCfg.plan, "Handelsplatz");
+  const hasInterstellarerHandel = hasTechInPlan(viewCfg.plan, "Interstellarer Handel");
   const roidBlocked =
     !hasTechInPlan(viewCfg.plan, "Marineakademie") ||
     !viewCfg.plan.some((e) => e.kind === "unit" && e.name === "Cleptor");
@@ -689,8 +706,8 @@ export default function App() {
 
   const openAddUnit = (name: string) => {
     if (!viewingOwnPlan) return;
-    const ship = shipByName(name);
-    if (!ship) return;
+    const unit = unitByName(name);
+    if (!unit) return;
     const defaultTick = defaultAddTick(
       inspectTick,
       currentTick,
@@ -704,10 +721,10 @@ export default function App() {
     setEditingEntry(null);
     setDialogTarget({
       kind: "unit",
-      name: ship.name,
-      ticks: ship.ticks,
-      cost: ship.cost,
-      dependencies: ship.dependencies,
+      name: unit.name,
+      ticks: unit.ticks,
+      cost: unit.cost,
+      dependencies: unit.dependencies,
       defaultTick,
       defaultCount: maxCount,
       maxCount,
@@ -791,7 +808,7 @@ export default function App() {
 
   const openAddTrade = () => {
     if (!viewingOwnPlan) return;
-    const doneTick = plan?.steps.find((s) => s.name === "Handelsplatz")?.endTick ?? 0;
+    const doneTick = plan?.steps.find((s) => s.name === "Interstellarer Handel")?.endTick ?? 0;
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -832,6 +849,18 @@ export default function App() {
     setDialogOpen(true);
   };
 
+  const openAddCatastrophe = () => {
+    if (!viewingOwnPlan) return;
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "catastrophe",
+      defaultTick: defaultAddTick(inspectTick, currentTick),
+      defaultDuration: 1,
+    });
+    setDialogOpen(true);
+  };
+
   const openEditEntry = (id: string) => {
     if (!viewingOwnPlan) return;
     const entry = startCfg.plan.find((e) => e.id === id);
@@ -848,8 +877,8 @@ export default function App() {
         defaultTick: entry.startTick,
       });
     } else if (entry.kind === "unit") {
-      const ship = shipByName(entry.name) ?? {
-        name: entry.name as never,
+      const unit = unitByName(entry.name) ?? {
+        name: entry.name,
         ticks: 0,
         time: 0,
         cost: { met: 0, kris: 0 },
@@ -862,9 +891,9 @@ export default function App() {
       setDialogTarget({
         kind: "unit",
         name: entry.name,
-        ticks: ship.ticks,
-        cost: ship.cost,
-        dependencies: ship.dependencies,
+        ticks: unit.ticks,
+        cost: unit.cost,
+        dependencies: unit.dependencies,
         defaultTick: entry.startTick,
         defaultCount: entry.count,
         maxCount,
@@ -959,6 +988,12 @@ export default function App() {
         defaultDuration: entry.duration,
         occupiedRoids: occupiedRoids(entry.id),
       });
+    } else if (entry.kind === "catastrophe") {
+      setDialogTarget({
+        kind: "catastrophe",
+        defaultTick: entry.startTick,
+        defaultDuration: entry.duration,
+      });
     }
     setDialogOpen(true);
   };
@@ -1032,6 +1067,13 @@ export default function App() {
               targetMet: Math.max(0, values.targetMet ?? e.targetMet),
               targetKris: Math.max(0, values.targetKris ?? e.targetKris),
               duration: Math.min(10, Math.max(1, values.duration ?? e.duration)),
+            };
+          }
+          if (e.kind === "catastrophe") {
+            return {
+              ...e,
+              startTick: values.startTick,
+              duration: Math.min(25, Math.max(1, values.duration ?? e.duration)),
             };
           }
           return {
@@ -1122,7 +1164,7 @@ export default function App() {
       const give = values.give === "kris" ? "kris" : "met";
       const giveAmount = Math.max(0, values.giveAmount ?? 0);
       const receiveAmount = Math.max(0, values.receiveAmount ?? 0);
-      if (giveAmount <= 0 || receiveAmount <= 0) return;
+      if (giveAmount <= 0 && receiveAmount <= 0) return;
       const entry: PlanEntry = {
         id: newPlanEntryId("trade"),
         kind: "trade",
@@ -1146,6 +1188,18 @@ export default function App() {
         startTick: values.startTick,
         targetMet,
         targetKris,
+        duration,
+      };
+      updateCurrentPlan((plan) => [...plan, entry]);
+      return;
+    }
+
+    if (dialogTarget.kind === "catastrophe") {
+      const duration = Math.min(25, Math.max(1, values.duration ?? 1));
+      const entry: PlanEntry = {
+        id: newPlanEntryId("cat"),
+        kind: "catastrophe",
+        startTick: values.startTick,
         duration,
       };
       updateCurrentPlan((plan) => [...plan, entry]);
@@ -1211,6 +1265,7 @@ export default function App() {
               neededTechs={neededTechs}
               plannedTechs={plannedTechs}
               ships={allShips}
+              defenses={allDefenses}
               recon={allRecon}
               hasObservatorium={hasObservatorium}
               hasExtraktorTech={hasExtraktorTech}
@@ -1220,9 +1275,10 @@ export default function App() {
               onAddRecon={openAddRecon}
               onAddEconomy={openAddEconomy}
               onAddRoid={openAddRoid}
+              onAddCatastrophe={openAddCatastrophe}
               onAddCustom={openAddCustom}
               onAddTrade={openAddTrade}
-              hasHandelsplatz={hasHandelsplatz}
+              hasInterstellarerHandel={hasInterstellarerHandel}
             />
           )}
           <Overview

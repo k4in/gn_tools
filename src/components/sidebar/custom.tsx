@@ -10,10 +10,10 @@ import { StatusDot } from "@/components/sidebar/status-dot";
 export type CustomProps = {
   onAddCustom: () => void;
   onAddTrade: () => void;
-  hasHandelsplatz: boolean;
+  hasInterstellarerHandel: boolean;
 };
 
-export function Custom({ onAddCustom, onAddTrade, hasHandelsplatz }: CustomProps) {
+export function Custom({ onAddCustom, onAddTrade, hasInterstellarerHandel }: CustomProps) {
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="flex flex-col gap-3 p-3">
@@ -53,10 +53,10 @@ export function Custom({ onAddCustom, onAddTrade, hasHandelsplatz }: CustomProps
           <CardHeader>
             <CardTitle>
               Trade
-              {hasHandelsplatz ? null : <StatusDot kind="blocked" />}
+              {hasInterstellarerHandel ? null : <StatusDot kind="blocked" />}
             </CardTitle>
             <CardDescription>
-              Rohstoffe über den Handelsplatz tauschen — Von, Rohstoff und Nach.
+              Rohstoffe mit Spielern oder Galaxie tauschen
             </CardDescription>
           </CardHeader>
         </Card>

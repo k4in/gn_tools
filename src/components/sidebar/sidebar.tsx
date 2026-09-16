@@ -9,6 +9,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/shadcn/tabs";
+import type { Defense } from "@/gn-data/defense";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 import type { Ship } from "@/gn-data/ships";
 import type { Utility } from "@/gn-data/utility";
@@ -18,6 +19,7 @@ export type SidebarProps = {
   neededTechs: Set<string>;
   plannedTechs: Set<string>;
   ships: Ship[];
+  defenses: Defense[];
   recon: Utility[];
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
@@ -31,9 +33,10 @@ export type SidebarProps = {
     extractorsKris?: number;
   }) => void;
   onAddRoid: () => void;
+  onAddCatastrophe: () => void;
   onAddCustom: () => void;
   onAddTrade: () => void;
-  hasHandelsplatz: boolean;
+  hasInterstellarerHandel: boolean;
 };
 
 export function Sidebar({
@@ -41,6 +44,7 @@ export function Sidebar({
   neededTechs,
   plannedTechs,
   ships,
+  defenses,
   recon,
   hasObservatorium,
   hasExtraktorTech,
@@ -50,9 +54,10 @@ export function Sidebar({
   onAddRecon,
   onAddEconomy,
   onAddRoid,
+  onAddCatastrophe,
   onAddCustom,
   onAddTrade,
-  hasHandelsplatz,
+  hasInterstellarerHandel,
 }: SidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border">
@@ -84,6 +89,7 @@ export function Sidebar({
             roidBlocked={roidBlocked}
             onAddEconomy={onAddEconomy}
             onAddRoid={onAddRoid}
+            onAddCatastrophe={onAddCatastrophe}
           />
         </TabsContent>
 
@@ -91,7 +97,7 @@ export function Sidebar({
           value="units"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Units ships={ships} planned={plannedTechs} onAdd={onAddUnit} />
+          <Units ships={ships} defenses={defenses} planned={plannedTechs} onAdd={onAddUnit} />
         </TabsContent>
 
         <TabsContent
@@ -105,7 +111,7 @@ export function Sidebar({
           value="custom"
           className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden"
         >
-          <Custom onAddCustom={onAddCustom} onAddTrade={onAddTrade} hasHandelsplatz={hasHandelsplatz} />
+          <Custom onAddCustom={onAddCustom} onAddTrade={onAddTrade} hasInterstellarerHandel={hasInterstellarerHandel} />
         </TabsContent>
       </Tabs>
     </aside>
