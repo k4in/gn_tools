@@ -19,6 +19,17 @@ import {
 } from "@/components/shadcn/field";
 import { Input } from "@/components/shadcn/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/shadcn/combobox";
+import {
+  HISTORY_WINDOW_TICKS,
+  type HistoryWindow,
+} from "@/lib/history-window";
 
 export type AppliedSettings = {
   start_date: string;
@@ -26,11 +37,17 @@ export type AppliedSettings = {
   tick_minutes: number;
 };
 
+const HISTORY_LABEL_RECENT = `−${HISTORY_WINDOW_TICKS} Ticks`;
+const HISTORY_LABEL_ALL = "Alles anzeigen";
+const HISTORY_WINDOW_ITEMS = [HISTORY_LABEL_RECENT, HISTORY_LABEL_ALL];
+
 export type SettingsDialogProps = {
   startDate: string;
   startTime: string;
   tickMinutes: number;
   onApplyStart: (next: AppliedSettings) => void;
+  historyWindow: HistoryWindow;
+  onHistoryWindowChange: (next: HistoryWindow) => void;
 };
 
 function normalizeTime(value: string): string | null {
@@ -60,6 +77,8 @@ export function SettingsDialog({
   startTime,
   tickMinutes: savedTickMinutes,
   onApplyStart,
+  historyWindow,
+  onHistoryWindowChange,
 }: SettingsDialogProps) {
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(startDate);
@@ -149,6 +168,31 @@ export function SettingsDialog({
               >
                 Übernehmen
               </Button>
+            </Field>
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend>Anzeige</FieldLegend>
+            <FieldDescription>
+              Vergangenheit in Timeline und Tabellen. Die Zukunft bleibt immer sichtbar.
+            </FieldDescription>
+            <Field>
+              <FieldLabel>Verlauf</FieldLabel>
+              <Combobox
+                items={HISTORY_WINDOW_ITEMS}
+                value={historyWindow === "all" ? HISTORY_LABEL_ALL : HISTORY_LABEL_RECENT}
+                onValueChange={(value) => {
+                  if (value === HISTORY_LABEL_ALL) onHistoryWindowChange("all");
+                  else if (value === HISTORY_LABEL_RECENT) onHistoryWindowChange("recent");
+                }}
+              >
+                <ComboboxInput showTrigger className="w-full" />
+                <ComboboxContent>
+                  <ComboboxList>
+                    <ComboboxItem value={HISTORY_LABEL_RECENT}>{HISTORY_LABEL_RECENT}</ComboboxItem>
+                    <ComboboxItem value={HISTORY_LABEL_ALL}>{HISTORY_LABEL_ALL}</ComboboxItem>
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </Field>
           </FieldSet>
         </FieldGroup>

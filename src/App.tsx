@@ -46,6 +46,10 @@ import {
 import { TooltipProvider } from "@/components/shadcn/tooltip";
 import { byName } from "@/lib/calculateFastestWayToGoal";
 import { ASTEROID_COST } from "@/lib/calculateFastestWayToGoal";
+import {
+  parseHistoryWindow,
+  type HistoryWindow,
+} from "@/lib/history-window";
 
 // Redeploy
 const STORAGE_KEY = "gn_tool.plan";
@@ -433,7 +437,7 @@ function normalizeConfig(raw: unknown): StartConfig {
       ? obj.tick_minutes
       : base.tick_minutes;
   const max_ticks =
-    typeof obj.max_ticks === "number" && obj.max_ticks > 0
+    typeof obj.max_ticks === "number" && obj.max_ticks > base.max_ticks
       ? obj.max_ticks
       : base.max_ticks;
 
@@ -465,6 +469,8 @@ type PersistedAppState = {
   activePlanId: PlanSlotId;
   /** Kosmetisch: welcher Slot gerade gespielt wird. Fehlt in alten Saves. */
   livePlanId: PlanSlotId | null;
+  /** Anzeige: Vergangenheit kürzen. Fehlt in alten Saves → recent. */
+  historyWindow: HistoryWindow;
   plans: Record<PlanSlotId, StoredPlan>;
 };
 
@@ -529,6 +535,7 @@ function createDefaultState(plan1?: PlanEntry[], shared?: StartConfig): Persiste
     ...sharedFromConfig(cfg),
     activePlanId: 1,
     livePlanId: null,
+    historyWindow: "recent",
     plans: {
       1: {
         plan: clonePlanEntries(plan1 ?? cfg.plan),
@@ -570,6 +577,7 @@ function loadStoredState(): PersistedAppState {
         ...sharedFromConfig(cfg),
         activePlanId: isPlanSlotId(obj.activePlanId) ? obj.activePlanId : 1,
         livePlanId: isPlanSlotId(obj.livePlanId) ? obj.livePlanId : null,
+        historyWindow: parseHistoryWindow(obj.historyWindow),
         plans: {
           1: slot1,
           2: normalizeStoredPlan(obj.plans?.[2], fallbackTaxes),
@@ -1247,6 +1255,10 @@ export default function App() {
           onApplyStart={({ start_date, start_time, tick_minutes }) => {
             setAppState((prev) => ({ ...prev, start_date, start_time, tick_minutes }));
           }}
+          historyWindow={appState.historyWindow}
+          onHistoryWindowChange={(historyWindow) => {
+            setAppState((prev) => ({ ...prev, historyWindow }));
+          }}
         />
         <PlanSwitcher
           viewId={viewId}
@@ -1287,6 +1299,7 @@ export default function App() {
             steps={plan?.steps ?? []}
             maxTick={maxTick}
             currentTick={currentTick}
+            historyWindow={appState.historyWindow}
             inspectTick={inspectTick}
             onInspectTick={setInspectTick}
             hasPlan={!!plan}

@@ -2,6 +2,7 @@ import { ExtractorsDialog } from "@/components/extractors-dialog";
 import { InfoDialog } from "@/components/info-dialog";
 import { JobList } from "@/components/overview/actionplan";
 import { SettingsDialog } from "@/components/settings-dialog";
+import type { HistoryWindow } from "@/lib/history-window";
 import { Badge } from "@/components/shadcn/badge";
 import { Separator } from "@/components/shadcn/separator";
 import {
@@ -21,6 +22,8 @@ export type HeaderProps = {
   plan: PlanResult | null;
   nextAction: TickSnapshot | null;
   onApplyStart: (next: { start_date: string; start_time: string; tick_minutes: number }) => void;
+  historyWindow: HistoryWindow;
+  onHistoryWindowChange: (next: HistoryWindow) => void;
 };
 
 function resourcesAtCurrentTick(
@@ -48,7 +51,16 @@ function resourcesAtCurrentTick(
   return { met: best.met, kris: best.kris };
 }
 
-export function Header({ now, currentTick, startCfg, plan, nextAction, onApplyStart }: HeaderProps) {
+export function Header({
+  now,
+  currentTick,
+  startCfg,
+  plan,
+  nextAction,
+  onApplyStart,
+  historyWindow,
+  onHistoryWindowChange,
+}: HeaderProps) {
   const extractorJob = plan?.steps.find((s) => s.name === "Extraktor");
   const extractorTick = extractorJob?.endTick;
   const nextJobs = nextAction?.started.filter((job) => job.type !== "custom" && job.type !== "trade") ?? [];
@@ -73,6 +85,8 @@ export function Header({ now, currentTick, startCfg, plan, nextAction, onApplySt
               startTime={startCfg.start_time}
               tickMinutes={startCfg.tick_minutes}
               onApplyStart={onApplyStart}
+              historyWindow={historyWindow}
+              onHistoryWindowChange={onHistoryWindowChange}
             />
           </div>
           <Separator orientation="vertical" />

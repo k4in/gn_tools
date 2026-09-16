@@ -15,6 +15,8 @@ export type TimelineProps = {
   steps: Job[];
   ticks?: TickSnapshot[];
   maxTick: number;
+  /** Erstes sichtbares Tick (Vergangenheit davor wird nicht gezeichnet). */
+  historyStartTick?: number;
   currentTick: number;
   inspectTick?: number | null;
   hasPlan: boolean;
@@ -33,11 +35,16 @@ function snapshotAtOrBefore(ticks: TickSnapshot[] | undefined, tick: number) {
   return best;
 }
 
-function tickFromClick(el: HTMLElement, clientX: number, totalTicks: number) {
+function tickFromClick(
+  el: HTMLElement,
+  clientX: number,
+  rangeStart: number,
+  domainLength: number,
+) {
   const rect = el.getBoundingClientRect();
-  if (rect.width <= 0) return 0;
+  if (rect.width <= 0) return rangeStart;
   const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-  return Math.round(ratio * totalTicks);
+  return Math.round(rangeStart + ratio * domainLength);
 }
 
 type TimelineLane = "tech" | "fleet" | "econ";
@@ -76,6 +83,7 @@ export function Timeline({
   steps,
   ticks,
   maxTick,
+  historyStartTick = 0,
   currentTick,
   inspectTick = null,
   hasPlan,
@@ -84,11 +92,14 @@ export function Timeline({
   onInspectTick,
 }: TimelineProps) {
   const xScrollRef = useRef<HTMLDivElement>(null);
+  const rangeStart = Math.max(0, historyStartTick);
+  const domainLength = Math.max(maxTick - rangeStart, TIMELINE_VIEWPORT_TICKS);
+  const domainEnd = rangeStart + domainLength;
 
   useEffect(() => {
     if (!isActive) return;
-    const total = Math.max(maxTick, TIMELINE_VIEWPORT_TICKS);
-    const tick = Math.min(Math.max(currentTick, 0), total);
+    const total = domainLength;
+    const tick = Math.min(Math.max(currentTick - rangeStart, 0), total);
     const id = requestAnimationFrame(() => {
       const scroller = xScrollRef.current;
       if (!scroller) return;
@@ -100,14 +111,13 @@ export function Timeline({
       );
     });
     return () => cancelAnimationFrame(id);
-    // Nur beim Öffnen des Tabs; currentTick stammt aus genau diesem Render.
+    // Nur beim Öffnen des Tabs / Wechsel des Verlaufsfensters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive]);
+  }, [isActive, historyStartTick]);
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
 
-  const totalTicks = Math.max(maxTick, TIMELINE_VIEWPORT_TICKS);
   // Group multi-unit/economy micro-jobs that share planEntryId into one bar
   const grouped = new Map<string, Job>();
   const economyParts = new Map<
@@ -165,6 +175,8 @@ export function Timeline({
 
   const byLane: Record<TimelineLane, Job[]> = { tech: [], fleet: [], econ: [] };
   for (const job of grouped.values()) {
+    const displayEnd = job.endTick === job.startTick ? job.startTick + 0.5 : job.endTick;
+    if (displayEnd <= rangeStart || job.startTick >= domainEnd) continue;
     byLane[laneOf(job.type)].push(job);
   }
   const laneRows = ([
@@ -190,20 +202,24 @@ export function Timeline({
   });
   const trackHeight = Math.max(cursor + 4, rowHeight + 8);
   const step = 10;
-  const markers: number[] = [];
-  for (let t = 0; t <= totalTicks; t += step) markers.push(t);
-  if (markers[markers.length - 1] !== totalTicks) markers.push(totalTicks);
+  const markers: number[] = [rangeStart];
+  const firstStep = Math.ceil((rangeStart + 1) / step) * step;
+  for (let t = firstStep; t < domainEnd; t += step) markers.push(t);
+  if (markers[markers.length - 1] !== domainEnd) markers.push(domainEnd);
+  const xPct = (tick: number) => ((tick - rangeStart) / domainLength) * 100;
 
   return (
     <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
       <div
             className="relative cursor-crosshair"
             style={{
-              width: `calc(100% * ${totalTicks} / ${TIMELINE_VIEWPORT_TICKS})`,
+              width: `calc(100% * ${domainLength} / ${TIMELINE_VIEWPORT_TICKS})`,
             }}
             onClick={(event) => {
               if (!onInspectTick) return;
-              onInspectTick(tickFromClick(event.currentTarget, event.clientX, totalTicks));
+              onInspectTick(
+                tickFromClick(event.currentTarget, event.clientX, rangeStart, domainLength),
+              );
             }}
           >
             <div
@@ -214,21 +230,21 @@ export function Timeline({
                 <div
                   key={`grid-${t}`}
                   className="absolute inset-y-0 w-px bg-border/60"
-                  style={{ left: `${(t / totalTicks) * 100}%` }}
+                  style={{ left: `${xPct(t)}%` }}
                 />
               ))}
-              {currentTick >= 0 && currentTick <= totalTicks && (
+              {currentTick >= rangeStart && currentTick <= domainEnd && (
                 <div
                   title={`Aktueller Tick ${currentTick}`}
                   className="absolute inset-y-0 z-10 w-0.5 bg-green-500"
-                  style={{ left: `${(currentTick / totalTicks) * 100}%` }}
+                  style={{ left: `${xPct(currentTick)}%` }}
                 />
               )}
-              {inspectTick != null && inspectTick >= 0 && inspectTick <= totalTicks && (
+              {inspectTick != null && inspectTick >= rangeStart && inspectTick <= domainEnd && (
                 <div
                   title={`Inspektion Tick ${inspectTick}`}
                   className="absolute inset-y-0 z-10 w-0.5 bg-primary"
-                  style={{ left: `${(inspectTick / totalTicks) * 100}%` }}
+                  style={{ left: `${xPct(inspectTick)}%` }}
                 />
               )}
               {separators.map((top) => (
@@ -243,11 +259,11 @@ export function Timeline({
             <div className="relative" style={{ height: trackHeight }}>
               {packedRows.map((row) =>
                 row.jobs.map((s) => {
-                  const start = Math.max(0, Math.min(s.startTick, totalTicks));
+                  const start = Math.max(rangeStart, Math.min(s.startTick, domainEnd));
                   const displayEnd = s.endTick === s.startTick ? s.startTick + 0.5 : s.endTick;
-                  const endClamped = Math.max(start, Math.min(displayEnd, totalTicks));
-                  const left = (start / totalTicks) * 100;
-                  const widthPct = Math.max(((endClamped - start) / totalTicks) * 100, 0.25);
+                  const endClamped = Math.max(start, Math.min(displayEnd, domainEnd));
+                  const left = xPct(start);
+                  const widthPct = Math.max(((endClamped - start) / domainLength) * 100, 0.25);
                   const isBuilding = s.type === "building";
                   const isResearch = s.type === "research";
                   const top = row.top;
@@ -344,11 +360,11 @@ export function Timeline({
                   key={t}
                   className="absolute text-[10px] text-muted-foreground tabular-nums"
                   style={{
-                    left: `${(t / totalTicks) * 100}%`,
+                    left: `${xPct(t)}%`,
                     transform:
-                      t === 0
+                      t === rangeStart
                         ? "none"
-                        : t === totalTicks
+                        : t === domainEnd
                           ? "translateX(-100%)"
                           : "translateX(-50%)",
                   }}
@@ -356,15 +372,15 @@ export function Timeline({
                   {t}
                 </span>
               ))}
-              {currentTick >= 0 && currentTick <= totalTicks && (
+              {currentTick >= rangeStart && currentTick <= domainEnd && (
                 <span
                   className="absolute z-10 text-[10px] text-green-500 tabular-nums"
                   style={{
-                    left: `${(currentTick / totalTicks) * 100}%`,
+                    left: `${xPct(currentTick)}%`,
                     transform:
-                      currentTick === 0
+                      currentTick === rangeStart
                         ? "none"
-                        : currentTick === totalTicks
+                        : currentTick === domainEnd
                           ? "translateX(-100%)"
                           : "translateX(-50%)",
                   }}
@@ -372,15 +388,15 @@ export function Timeline({
                   {currentTick}
                 </span>
               )}
-              {inspectTick != null && inspectTick >= 0 && inspectTick <= totalTicks && (
+              {inspectTick != null && inspectTick >= rangeStart && inspectTick <= domainEnd && (
                 <span
                   className="absolute z-10 text-[10px] text-primary tabular-nums"
                   style={{
-                    left: `${(inspectTick / totalTicks) * 100}%`,
+                    left: `${xPct(inspectTick)}%`,
                     transform:
-                      inspectTick === 0
+                      inspectTick === rangeStart
                         ? "none"
-                        : inspectTick === totalTicks
+                        : inspectTick === domainEnd
                           ? "translateX(-100%)"
                           : "translateX(-50%)",
                   }}

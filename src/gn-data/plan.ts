@@ -104,7 +104,7 @@ export const defaults: {
   start_time: "19:30",
   start_date: "2026-08-28",
   tick_minutes: 15,
-  max_ticks: 5000,
+  max_ticks: 80 * 96,
   starting_resources: {
     metall: 10500,
     kristall: 10500,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ExportPlanDialog } from "@/components/export-plan-dialog";
 import { ImportPlanDialog } from "@/components/import-plan-dialog";
 import { ResetPlanDialog, type ResetPlanSource } from "@/components/reset-plan-dialog";
@@ -20,6 +20,7 @@ import type {
   TaxSegment,
   TickSnapshot,
 } from "@/lib/calculateFastestWayToGoal";
+import { historyRangeStart, type HistoryWindow } from "@/lib/history-window";
 
 type OverviewTab = "compact" | "detailed";
 
@@ -29,6 +30,7 @@ export type OverviewProps = {
   steps: Job[];
   maxTick: number;
   currentTick: number;
+  historyWindow?: HistoryWindow;
   hasPlan: boolean;
   exportJson?: string;
   exportPlanSlot?: number;
@@ -54,6 +56,7 @@ export function Overview({
   steps,
   maxTick,
   currentTick,
+  historyWindow = "recent",
   hasPlan,
   exportJson,
   exportPlanSlot,
@@ -71,6 +74,11 @@ export function Overview({
   onInspectTick,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("compact");
+  const historyStart = historyRangeStart(currentTick, historyWindow);
+  const visibleLogTicks = useMemo(
+    () => (historyStart <= 0 ? logTicks : logTicks.filter((t) => t.tick >= historyStart)),
+    [logTicks, historyStart],
+  );
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -137,6 +145,7 @@ export function Overview({
             steps={steps}
             ticks={logTicks}
             maxTick={maxTick}
+            historyStartTick={historyStart}
             currentTick={currentTick}
             inspectTick={inspectTick}
             hasPlan={hasPlan}
@@ -163,13 +172,15 @@ export function Overview({
           value="detailed"
           className="min-h-0 flex-1 overflow-hidden data-hidden:hidden"
         >
-          <Protocol
-            ticks={logTicks}
-            currentTick={currentTick}
-            inspectTick={inspectTick}
-            hasPlan={hasPlan}
-            isActive={tab === "detailed"}
-          />
+          {tab === "detailed" ? (
+            <Protocol
+              ticks={visibleLogTicks}
+              currentTick={currentTick}
+              inspectTick={inspectTick}
+              hasPlan={hasPlan}
+              isActive
+            />
+          ) : null}
         </TabsContent>
       </Tabs>
     </section>
