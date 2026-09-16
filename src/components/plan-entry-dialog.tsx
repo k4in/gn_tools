@@ -29,6 +29,7 @@ import {
   formatCatastrophePlanLabel,
   formatRes,
   formatRoidPlanLabel,
+  formatSnapshotPlanLabel,
   formatTradePlanLabel,
   maxAffordableExtractors,
   ROID_DURATION_MAX,
@@ -125,6 +126,16 @@ type CatastropheTarget = {
   defaultDuration: number;
 };
 
+type SnapshotTarget = {
+  kind: "snapshot";
+  defaultTick: number;
+  defaultMet: number;
+  defaultKris: number;
+  defaultExtractorsMet: number;
+  defaultExtractorsKris: number;
+  defaultAsteroids: number;
+};
+
 export type PlanEntryDialogTarget =
   | TechTarget
   | CountableTarget
@@ -132,7 +143,8 @@ export type PlanEntryDialogTarget =
   | CustomTarget
   | TradeTarget
   | RoidTarget
-  | CatastropheTarget;
+  | CatastropheTarget
+  | SnapshotTarget;
 
 export type PlanEntryDialogSubmit = {
   startTick: number;
@@ -248,6 +260,14 @@ export function PlanEntryDialog({
         );
         return;
       }
+      if (entry.kind === "snapshot") {
+        setMet(Math.max(0, entry.met));
+        setKris(Math.max(0, entry.kris));
+        setExtractorMetCount(Math.max(0, entry.extractorsMet));
+        setExtractorKrisCount(Math.max(0, entry.extractorsKris));
+        setAsteroidCount(Math.max(0, entry.asteroids));
+        return;
+      }
       if ("count" in entry) setCount(entry.count);
       return;
     }
@@ -267,6 +287,12 @@ export function PlanEntryDialog({
       setGive(target.defaultGive);
       setGiveAmount(Math.max(0, target.defaultGiveAmount));
       setReceiveAmount(Math.max(0, target.defaultReceiveAmount));
+    } else if (target.kind === "snapshot") {
+      setMet(Math.max(0, target.defaultMet));
+      setKris(Math.max(0, target.defaultKris));
+      setExtractorMetCount(Math.max(0, target.defaultExtractorsMet));
+      setExtractorKrisCount(Math.max(0, target.defaultExtractorsKris));
+      setAsteroidCount(Math.max(0, target.defaultAsteroids));
     } else if (target.kind === "catastrophe") {
       setDuration(
         Math.min(
@@ -378,6 +404,15 @@ export function PlanEntryDialog({
     if (target.kind === "catastrophe") {
       return formatCatastrophePlanLabel(duration);
     }
+    if (target.kind === "snapshot") {
+      return formatSnapshotPlanLabel({
+        met,
+        kris,
+        extractorsMet: extractorMetCount,
+        extractorsKris: extractorKrisCount,
+        asteroids: asteroidCount,
+      });
+    }
     return "Asteroiden & Extraktoren";
   })();
 
@@ -412,6 +447,9 @@ export function PlanEntryDialog({
     }
     if (target.kind === "catastrophe") {
       return duration >= CATASTROPHE_DURATION_MIN && duration <= CATASTROPHE_DURATION_MAX;
+    }
+    if (target.kind === "snapshot") {
+      return met >= 0 && kris >= 0 && extractorMetCount >= 0 && extractorKrisCount >= 0 && asteroidCount >= 0;
     }
     return false;
   })();
@@ -456,6 +494,14 @@ export function PlanEntryDialog({
       });
     } else if (target.kind === "catastrophe") {
       onSubmit({ startTick, duration });
+    } else if (target.kind === "snapshot") {
+      onSubmit({
+        startTick,
+        cost: { met: Math.max(0, met), kris: Math.max(0, kris) },
+        extractorsMet: Math.max(0, extractorMetCount),
+        extractorsKris: Math.max(0, extractorKrisCount),
+        asteroids: Math.max(0, asteroidCount),
+      });
     } else {
       onSubmit({ startTick, count: Math.max(1, count) });
     }
@@ -570,6 +616,13 @@ export function PlanEntryDialog({
             </Field>
           )}
 
+          {target.kind === "snapshot" && (
+            <p className="text-xs text-muted-foreground">
+              Ab diesem Tick gelten diese Werte statt der berechneten Rohstoffe und Extraktoren.
+              Einkommen der neuen Exen startet im nächsten Tick.
+            </p>
+          )}
+
           {target.kind === "catastrophe" && (
             <div className="flex flex-col gap-2 text-xs text-muted-foreground">
               <p>
@@ -598,7 +651,7 @@ export function PlanEntryDialog({
             </div>
           )}
 
-          <div className={target.kind === "economy" || target.kind === "trade" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
+          <div className={target.kind === "economy" || target.kind === "trade" || target.kind === "snapshot" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
             {target.kind !== "trade" && (
             <Field className={target.kind === "economy" ? "w-full" : "w-28"}>
               <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
@@ -758,6 +811,96 @@ export function PlanEntryDialog({
                   </InputGroup>
                 </Field>
               </>
+            )}
+
+            {target.kind === "snapshot" && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor="plan-snap-met">Metall</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-snap-met"
+                      type="number"
+                      min={0}
+                      value={met}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setMet(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="plan-snap-met-ex">Met-Exen</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-snap-met-ex"
+                      type="number"
+                      min={0}
+                      value={extractorMetCount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setExtractorMetCount(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="plan-snap-kris">Kristall</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-snap-kris"
+                      type="number"
+                      min={0}
+                      value={kris}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setKris(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="plan-snap-kris-ex">Kris-Exen</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-snap-kris-ex"
+                      type="number"
+                      min={0}
+                      value={extractorKrisCount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setExtractorKrisCount(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+                <Field className="col-span-2">
+                  <FieldLabel htmlFor="plan-snap-ast">Asteroiden</FieldLabel>
+                  <InputGroup>
+                    <InputGroupInput
+                      id="plan-snap-ast"
+                      type="number"
+                      min={0}
+                      value={asteroidCount}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setAsteroidCount(Math.max(0, Math.floor(n)));
+                      }}
+                      className="tabular-nums"
+                    />
+                  </InputGroup>
+                </Field>
+              </div>
             )}
 
             {target.kind === "catastrophe" && (

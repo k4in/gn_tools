@@ -63,13 +63,14 @@ export function Header({
 }: HeaderProps) {
   const extractorJob = plan?.steps.find((s) => s.name === "Extraktor");
   const extractorTick = extractorJob?.endTick;
-  const nextJobs = nextAction?.started.filter((job) => job.type !== "custom" && job.type !== "trade") ?? [];
+  const isPlayableJob = (job: { type: string }) =>
+    job.type !== "custom" && job.type !== "trade" && job.type !== "snapshot";
+  const nextJobs = nextAction?.started.filter(isPlayableJob) ?? [];
   const followingAction =
     plan && nextAction
       ? plan.ticks.find(
           (tick) =>
-            tick.tick > nextAction.tick &&
-            tick.started.some((job) => job.type !== "custom" && job.type !== "trade"),
+            tick.tick > nextAction.tick && tick.started.some(isPlayableJob),
         ) ?? null
       : null;
   const resources = resourcesAtCurrentTick(plan, startCfg, currentTick);

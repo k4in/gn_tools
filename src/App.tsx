@@ -157,6 +157,30 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       o.duration = Math.min(25, Math.max(1, Math.floor(duration)));
       return true;
     }
+    case "snapshot": {
+      const num = (v: unknown) =>
+        typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : null;
+      const met = num(o.met);
+      const kris = num(o.kris);
+      const extractorsMet = num(o.extractorsMet);
+      const extractorsKris = num(o.extractorsKris);
+      const asteroids = num(o.asteroids);
+      if (
+        met === null ||
+        kris === null ||
+        extractorsMet === null ||
+        extractorsKris === null ||
+        asteroids === null
+      ) {
+        return false;
+      }
+      o.met = met;
+      o.kris = kris;
+      o.extractorsMet = extractorsMet;
+      o.extractorsKris = extractorsKris;
+      o.asteroids = asteroids;
+      return true;
+    }
     default:
       return false;
   }
@@ -297,6 +321,19 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
         kind: "catastrophe",
         startTick: Math.max(0, Math.floor(e.startTick)),
         duration: Math.min(25, Math.max(1, Math.floor(e.duration))),
+      });
+      continue;
+    }
+    if (e.kind === "snapshot") {
+      out.push({
+        id: e.id,
+        kind: "snapshot",
+        startTick: Math.max(0, Math.floor(e.startTick)),
+        met: Math.max(0, Math.floor(e.met)),
+        kris: Math.max(0, Math.floor(e.kris)),
+        extractorsMet: Math.max(0, Math.floor(e.extractorsMet)),
+        extractorsKris: Math.max(0, Math.floor(e.extractorsKris)),
+        asteroids: Math.max(0, Math.floor(e.asteroids)),
       });
       continue;
     }
@@ -682,7 +719,9 @@ export default function App() {
   const currentTick = computeCurrentTick(startCfg, now);
   const nextAction = useMemo(() => {
     const ticks = actionTicks.filter((t) =>
-      t.started.some((job) => job.type !== "custom" && job.type !== "trade"),
+      t.started.some(
+        (job) => job.type !== "custom" && job.type !== "trade" && job.type !== "snapshot",
+      ),
     );
     return ticks.find((t) => t.tick >= currentTick) ?? null;
   }, [actionTicks, currentTick]);
@@ -869,6 +908,24 @@ export default function App() {
     setDialogOpen(true);
   };
 
+  const openAddSnapshot = () => {
+    if (!viewingOwnPlan) return;
+    const defaultTick = currentTick > 0 ? currentTick : 1;
+    const snap = getResourcesAtTick(startCfg, defaultTick);
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "snapshot",
+      defaultTick,
+      defaultMet: snap.met,
+      defaultKris: snap.kris,
+      defaultExtractorsMet: snap.extractorsMet,
+      defaultExtractorsKris: snap.extractorsKris,
+      defaultAsteroids: snap.asteroids,
+    });
+    setDialogOpen(true);
+  };
+
   const openEditEntry = (id: string) => {
     if (!viewingOwnPlan) return;
     const entry = startCfg.plan.find((e) => e.id === id);
@@ -1002,6 +1059,16 @@ export default function App() {
         defaultTick: entry.startTick,
         defaultDuration: entry.duration,
       });
+    } else if (entry.kind === "snapshot") {
+      setDialogTarget({
+        kind: "snapshot",
+        defaultTick: entry.startTick,
+        defaultMet: entry.met,
+        defaultKris: entry.kris,
+        defaultExtractorsMet: entry.extractorsMet,
+        defaultExtractorsKris: entry.extractorsKris,
+        defaultAsteroids: entry.asteroids,
+      });
     }
     setDialogOpen(true);
   };
@@ -1082,6 +1149,17 @@ export default function App() {
               ...e,
               startTick: values.startTick,
               duration: Math.min(25, Math.max(1, values.duration ?? e.duration)),
+            };
+          }
+          if (e.kind === "snapshot") {
+            return {
+              ...e,
+              startTick: values.startTick,
+              met: Math.max(0, values.cost?.met ?? e.met),
+              kris: Math.max(0, values.cost?.kris ?? e.kris),
+              extractorsMet: Math.max(0, values.extractorsMet ?? e.extractorsMet),
+              extractorsKris: Math.max(0, values.extractorsKris ?? e.extractorsKris),
+              asteroids: Math.max(0, values.asteroids ?? e.asteroids),
             };
           }
           return {
@@ -1209,6 +1287,21 @@ export default function App() {
         kind: "catastrophe",
         startTick: values.startTick,
         duration,
+      };
+      updateCurrentPlan((plan) => [...plan, entry]);
+      return;
+    }
+
+    if (dialogTarget.kind === "snapshot") {
+      const entry: PlanEntry = {
+        id: newPlanEntryId("snap"),
+        kind: "snapshot",
+        startTick: values.startTick,
+        met: Math.max(0, values.cost?.met ?? 0),
+        kris: Math.max(0, values.cost?.kris ?? 0),
+        extractorsMet: Math.max(0, values.extractorsMet ?? 0),
+        extractorsKris: Math.max(0, values.extractorsKris ?? 0),
+        asteroids: Math.max(0, values.asteroids ?? 0),
       };
       updateCurrentPlan((plan) => [...plan, entry]);
     }
@@ -1343,6 +1436,7 @@ export default function App() {
             }
             onResetPlan={viewingOwnPlan ? resetPlan : undefined}
             taxes={viewCfg.taxes}
+            onAddSnapshot={viewingOwnPlan ? openAddSnapshot : undefined}
             onApplyTaxes={
               viewingOwnPlan
                 ? (next) => {

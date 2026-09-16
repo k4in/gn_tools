@@ -56,6 +56,17 @@ export type PlanEntry =
       /** Anzahl Angriffs-Ticks (1–25). */
       duration: number;
     }
+  /** Manueller Ressourcen-/Exen-Stand ab diesem Tick. */
+  | {
+      id: string;
+      kind: "snapshot";
+      startTick: number;
+      met: number;
+      kris: number;
+      extractorsMet: number;
+      extractorsKris: number;
+      asteroids: number;
+    }
   /** @deprecated migrated to economy */
   | {
       id: string;

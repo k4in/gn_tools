@@ -145,7 +145,16 @@ function maxTicksOf(startCfg: StartConfig) {
 
 export type Res = { met: number; kris: number };
 
-export type JobKind = TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid" | "catastrophe" | "trade";
+export type JobKind =
+  | TechTreeEntry["type"]
+  | "economy"
+  | "unit"
+  | "recon"
+  | "custom"
+  | "roid"
+  | "catastrophe"
+  | "trade"
+  | "snapshot";
 
 export type Job = {
   name: string;
@@ -504,6 +513,8 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return formatRoidPlanLabel(entry.targetMet, entry.targetKris);
     case "catastrophe":
       return formatCatastrophePlanLabel(entry.duration);
+    case "snapshot":
+      return formatSnapshotPlanLabel(entry);
   }
 }
 
@@ -556,6 +567,16 @@ export function formatCatastropheLossLabel(loss: { met: number; kris: number }):
   if (loss.met > 0) parts.push(`−${loss.met} M-Exen`);
   if (loss.kris > 0) parts.push(`−${loss.kris} K-Exen`);
   return parts.join(", ");
+}
+
+export function formatSnapshotPlanLabel(entry: {
+  met: number;
+  kris: number;
+  extractorsMet: number;
+  extractorsKris: number;
+  asteroids: number;
+}): string {
+  return `Stand ${formatRes(entry.met)} M · ${formatRes(entry.kris)} K · ${entry.extractorsMet}/${entry.extractorsKris} Ex · ${entry.asteroids} Ast`;
 }
 
 export function roidEndTick(startTick: number, duration: number): number {
@@ -914,6 +935,17 @@ type PendingCatastrophe = {
   ticksDone: number;
 };
 
+type PendingSnapshot = {
+  entryId: string;
+  desiredTick: number;
+  met: number;
+  kris: number;
+  extractorsMet: number;
+  extractorsKris: number;
+  asteroids: number;
+  done: boolean;
+};
+
 function removeQueuedExtractors(
   queue: Array<"met" | "kris">,
   resource: "met" | "kris",
@@ -986,6 +1018,7 @@ function simulatePlan(
   const pendingTrades: PendingTrade[] = [];
   const pendingRoids: PendingRoid[] = [];
   const pendingCatastrophes: PendingCatastrophe[] = [];
+  const pendingSnapshots: PendingSnapshot[] = [];
 
   for (const e of plan) {
     if (e.kind === "unit") {
@@ -1085,6 +1118,17 @@ function simulatePlan(
         duration: clampCatastropheDuration(e.duration),
         ticksDone: 0,
       });
+    } else if (e.kind === "snapshot") {
+      pendingSnapshots.push({
+        entryId: e.id,
+        desiredTick: e.startTick,
+        met: Math.max(0, Math.floor(e.met)),
+        kris: Math.max(0, Math.floor(e.kris)),
+        extractorsMet: Math.max(0, Math.floor(e.extractorsMet)),
+        extractorsKris: Math.max(0, Math.floor(e.extractorsKris)),
+        asteroids: Math.max(0, Math.floor(e.asteroids)),
+        done: false,
+      });
     }
   }
 
@@ -1117,6 +1161,7 @@ function simulatePlan(
     if (pendingTrades.some((c) => !c.done)) return false;
     if (pendingRoids.some((r) => r.ticksDone < r.duration)) return false;
     if (pendingCatastrophes.some((r) => r.ticksDone < r.duration)) return false;
+    if (pendingSnapshots.some((s) => !s.done)) return false;
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
     return true;
@@ -1129,6 +1174,36 @@ function simulatePlan(
   const markEntryFinish = (id: string, tick: number) => {
     entryFinishTicks[id] = tick;
     entryDone.add(id);
+  };
+
+  const applyManualSnapshots = (tick: number): NamedJob[] => {
+    const started: NamedJob[] = [];
+    for (const pending of pendingSnapshots) {
+      if (pending.done || pending.desiredTick !== tick) continue;
+      res = { met: pending.met, kris: pending.kris };
+      extractorsMet = pending.extractorsMet;
+      extractorsKris = pending.extractorsKris;
+      asteroids = pending.asteroids;
+      extractorSlots = asteroids * EXTRACTOR_SLOT_PER_ASTEROID;
+      extractorQueue.length = 0;
+      for (let i = 0; i < extractorsMet; i++) extractorQueue.push("met");
+      for (let i = 0; i < extractorsKris; i++) extractorQueue.push("kris");
+      const name = formatSnapshotPlanLabel(pending);
+      const job: Job = {
+        name,
+        type: "snapshot",
+        startTick: tick,
+        endTick: tick,
+        cost: { met: 0, kris: 0 },
+        planEntryId: pending.entryId,
+      };
+      steps.push(job);
+      started.push({ name, type: "snapshot", planEntryId: pending.entryId });
+      markEntryStart(pending.entryId, tick);
+      markEntryFinish(pending.entryId, tick);
+      pending.done = true;
+    }
+    return started;
   };
 
   const tryStart = (tick: number) => {
@@ -1642,11 +1717,12 @@ function simulatePlan(
 
   // t = 0
   {
+    const snapshotJobs = applyManualSnapshots(0);
     const { startedJobs, finishedJobs, spent, roidLoot, catastropheLoss } = tryStart(0);
     ticks.push(
       snapshot(
         0,
-        startedJobs,
+        [...snapshotJobs, ...startedJobs],
         finishedJobs,
         { met: -spent.met, kris: -spent.kris },
         [],
@@ -1721,7 +1797,9 @@ function simulatePlan(
     // (asteroid + extractors) are re-checked after tryStart same tick.
     const questEventsEarly = claimReadyQuests(t);
 
+    const snapshotJobs = applyManualSnapshots(t);
     const { startedJobs, finishedJobs: instantFinished, spent, roidLoot, catastropheLoss } = tryStart(t);
+    startedJobs.unshift(...snapshotJobs);
     noteFinishedRecon(instantFinished);
     noteFinishedUnits(instantFinished);
     const allFinished = [...finishedJobs, ...instantFinished];

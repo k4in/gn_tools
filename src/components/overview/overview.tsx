@@ -43,6 +43,7 @@ export type OverviewProps = {
   resetSources?: ResetPlanSource[];
   onResetPlan?: (sourceId: string) => void;
   taxes?: TaxSegment[];
+  onAddSnapshot?: () => void;
   onApplyTaxes?: (taxes: TaxSegment[]) => void;
   isLivePlan?: boolean;
   onSetLivePlan?: () => void;
@@ -67,6 +68,7 @@ export function Overview({
   resetSources,
   onResetPlan,
   taxes = [],
+  onAddSnapshot,
   onApplyTaxes,
   isLivePlan = false,
   onSetLivePlan,
@@ -97,6 +99,11 @@ export function Overview({
             </TabsList>
             {onApplyTaxes && (
               <TaxesDialog taxes={taxes} currentTick={currentTick} onApply={onApplyTaxes} />
+            )}
+            {onAddSnapshot && (
+              <Button type="button" variant="destructive" onClick={onAddSnapshot}>
+                Stand setzen
+              </Button>
             )}
             {slotShortage && (
               <p role="alert" className="min-w-0 truncate text-xs text-destructive">

@@ -43,6 +43,7 @@ export function jobTypeClass(type: JobKind) {
   if (type === "trade") return "text-zinc-400";
   if (type === "roid") return "text-blue-400";
   if (type === "catastrophe") return "text-red-400";
+  if (type === "snapshot") return "text-destructive";
   return "text-sky-500";
 }
 
@@ -113,11 +114,15 @@ export function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
 }
 
 function withoutCustom(items: DisplayJob[]) {
-  return items.filter((item) => item.type !== "custom" && item.type !== "trade");
+  return items.filter(
+    (item) => item.type !== "custom" && item.type !== "trade" && item.type !== "snapshot",
+  );
 }
 
 function onlyCustom(items: DisplayJob[]) {
-  return items.filter((item) => item.type === "custom" || item.type === "trade");
+  return items.filter(
+    (item) => item.type === "custom" || item.type === "trade" || item.type === "snapshot",
+  );
 }
 
 export function ExtraEvents({

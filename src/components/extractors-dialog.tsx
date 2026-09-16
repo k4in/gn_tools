@@ -36,13 +36,14 @@ type ExtractorEventRow = {
   met: number;
   kris: number;
   asteroids: number;
-  source: "Bau" | "Roid" | "Katastrophe" | "Quest";
+  source: "Bau" | "Roid" | "Katastrophe" | "Stand" | "Quest";
 };
 
 function sourceClass(source: ExtractorEventRow["source"]) {
   if (source === "Bau") return "text-sky-500";
   if (source === "Roid") return "text-blue-400";
   if (source === "Katastrophe") return "text-red-400";
+  if (source === "Stand") return "text-destructive";
   return "text-green-500";
 }
 
@@ -225,7 +226,20 @@ function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[]
     });
   }
 
-  const sourceOrder = { Bau: 0, Roid: 1, Katastrophe: 2, Quest: 3 };
+  for (const entry of startCfg.plan) {
+    if (entry.kind !== "snapshot") continue;
+    rows.push({
+      sortTick: entry.startTick,
+      tickLabel: String(entry.startTick),
+      clockLabel: clockLabel(startCfg, entry.startTick),
+      met: entry.extractorsMet,
+      kris: entry.extractorsKris,
+      asteroids: entry.asteroids,
+      source: "Stand",
+    });
+  }
+
+  const sourceOrder = { Bau: 0, Roid: 1, Katastrophe: 2, Stand: 3, Quest: 4 };
   return rows.sort(
     (a, b) => a.sortTick - b.sortTick || sourceOrder[a.source] - sourceOrder[b.source],
   );

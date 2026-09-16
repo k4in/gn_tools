@@ -292,6 +292,7 @@ export function Timeline({
                               s.type === "economy" && "bg-cyan-500/20 text-cyan-300",
                               s.type === "roid" && "bg-blue-800/35 text-blue-400",
                               s.type === "catastrophe" && "bg-red-800/35 text-red-400",
+                              s.type === "snapshot" && "bg-destructive/20 text-destructive",
                               s.type === "custom" && "bg-silver-500/20 text-silver-500",
                               s.type === "trade" && "bg-zinc-500/20 text-zinc-400",
                               s.blocked
@@ -305,6 +306,7 @@ export function Timeline({
                                     s.type === "economy" && "ring-cyan-500/40",
                                     s.type === "roid" && "ring-blue-700/50",
                                     s.type === "catastrophe" && "ring-red-700/50",
+                                    s.type === "snapshot" && "ring-destructive/50",
                                     s.type === "custom" && "ring-silver-500/40",
                                     s.type === "trade" && "ring-zinc-500/40",
                                   ),
