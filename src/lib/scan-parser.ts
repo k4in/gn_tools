@@ -28,7 +28,7 @@ import type { ShipName } from "@/gn-data/ships";
  * vorigen Marke). Eine Marke gilt für alle Scans darunter bis zur nächsten.
  */
 
-export type ScanKind = "sector" | "units" | "defense";
+export type ScanKind = "sector" | "units" | "defense" | "news";
 
 export type ScanTarget = {
   player: string;
@@ -71,7 +71,26 @@ export type PointsScan = ScanBase & {
   asteroids: number;
 };
 
-export type Scan = SectorScan | UnitScan | DefenseScan | PointsScan;
+export type NewsEntryType = "defense" | "attack" | "retreat";
+
+/** Ein Eintrag im Newsscan, z. B. „Angriff: [23/09-2026 15:25:11] 2:7 k4in Flotte 1“. */
+export type NewsEntry = {
+  type: NewsEntryType;
+  /** Abflug- bzw. Rückzugszeit (ms seit Epoch). */
+  time: number;
+  galaxy: number;
+  planet: number;
+  player: string;
+  /** Flottennummer; fehlt z. B. bei „Rückzug“. */
+  fleet: number | null;
+};
+
+export type NewsScan = ScanBase & {
+  kind: "news";
+  entries: NewsEntry[];
+};
+
+export type Scan = SectorScan | UnitScan | DefenseScan | PointsScan | NewsScan;
 
 export type ScanParseResult = {
   scans: Scan[];
@@ -116,12 +135,20 @@ const SCAN_TYPES: Record<string, ScanKind | null> = {
   Sektor: "sector",
   Einheiten: "units",
   Geschütz: "defense",
-  News: null,
+  News: "news",
   Militär: null,
 };
 
-const HEADER_RE = /^[_*]*Galaxy-Network\s+(\S+?)Scan\s*\((\d+)\s*%\)\s+(.+?)\s+(\d+):(\d+)[_*]*$/i;
-const FOOTER_RE = /^[_*]*Scan aus der Datenbank/i;
+// Koordinaten stehen je nach Scan mit oder ohne Klammern: „Barrett 14:5“ / „Barrett (14:5)“.
+const HEADER_RE = /^[_*]*Galaxy-Network\s+(\S+?)Scan\s*\((\d+)\s*%\)\s+(.+?)\s+\(?(\d+):(\d+)\)?[_*]*$/i;
+const FOOTER_RE = /^[_*]*(Scan aus der Datenbank|Gescannt von)/i;
+const NEWS_ENTRY_RE =
+  /^(Verteidigung|Angriff|Rückzug):\s*\[(\d{1,2})\/(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\]\s+(\d+):(\d+)\s+(.+?)(?:\s+Flotte\s+(\d+))?$/;
+const NEWS_TYPES: Record<string, NewsEntryType> = {
+  Verteidigung: "defense",
+  Angriff: "attack",
+  Rückzug: "retreat",
+};
 const POINTS_RE = /^(\d+):(\d+)\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*)\s+(\d+)$/;
 const MARKER_RE = /^@\s*(?:(\d{1,2})\.(\d{1,2})\.(\d{4})?\s+)?(\d{1,2}):(\d{2})$/;
 
@@ -259,6 +286,28 @@ export function parseDefenseScan(base: ScanBase, lines: string[], warnings: stri
   return { ...base, kind: "defense", units };
 }
 
+/** Datum im Newsscan ist „Tag/Monat-Jahr Stunde:Minute:Sekunde“, lokale Zeit. */
+export function parseNewsScan(base: ScanBase, lines: string[], warnings: string[]): NewsScan {
+  const entries: NewsEntry[] = [];
+  for (const line of lines) {
+    const match = NEWS_ENTRY_RE.exec(line);
+    if (!match) {
+      warnings.push(`Newsscan-Eintrag nicht erkannt: „${line}“`);
+      continue;
+    }
+    const [, type, day, month, year, h, m, sec, galaxy, planet, player, fleet] = match;
+    entries.push({
+      type: NEWS_TYPES[type],
+      time: new Date(Number(year), Number(month) - 1, Number(day), Number(h), Number(m), Number(sec)).getTime(),
+      galaxy: Number(galaxy),
+      planet: Number(planet),
+      player,
+      fleet: fleet !== undefined ? Number(fleet) : null,
+    });
+  }
+  return { ...base, kind: "news", entries };
+}
+
 /** Zerlegt einen eingefügten Text in einzelne Scans und parst jeden davon. */
 export function parseScans(text: string, now = new Date()): ScanParseResult {
   const result: ScanParseResult = { scans: [], skipped: [], warnings: [] };
@@ -271,6 +320,7 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
     if (kind === "sector") result.scans.push(parseSectorScan(current.base, current.lines, result.warnings));
     else if (kind === "units") result.scans.push(parseUnitScan(current.base, current.lines, result.warnings));
     else if (kind === "defense") result.scans.push(parseDefenseScan(current.base, current.lines, result.warnings));
+    else if (kind === "news") result.scans.push(parseNewsScan(current.base, current.lines, result.warnings));
     else result.skipped.push({ type: current.type, target: current.base.target });
     current = null;
   };
@@ -325,12 +375,28 @@ export function targetKey(target: ScanTarget) {
   return `${target.galaxy}:${target.planet}`;
 }
 
+export type ScanMode = "resources" | "news";
+
 /**
- * Es wird immer nur ein Spieler ausgewertet: der mit dem ersten Sektorscan im
- * Text. Ohne Sektorscan gilt vorerst der Spieler des ersten Scans.
+ * Der erste Scan im Text bestimmt die Auswertung: ein Newsscan führt zur
+ * Flotten-Auswertung, alles andere zur Rohstoff-Auswertung.
+ */
+export function scanMode(scans: Scan[]): ScanMode {
+  return scans[0]?.kind === "news" ? "news" : "resources";
+}
+
+/** Scans, die in der jeweiligen Auswertung zählen. */
+export function scansForMode(scans: Scan[], mode: ScanMode): Scan[] {
+  return scans.filter((s) => (mode === "news") === (s.kind === "news"));
+}
+
+/**
+ * Es wird immer nur ein Spieler ausgewertet: in der Rohstoff-Auswertung der mit
+ * dem ersten Sektorscan (ohne Sektorscan vorerst der des ersten Scans), in der
+ * News-Auswertung der des ersten Newsscans.
  */
 export function primaryTargetKey(scans: Scan[]): string | null {
-  const first = scans.find((s) => s.kind === "sector") ?? scans[0];
+  const first = scans.find((s) => s.kind === "sector" || s.kind === "news") ?? scans[0];
   return first ? targetKey(first.target) : null;
 }
 
@@ -339,6 +405,8 @@ export type TargetScans = {
   sector?: SectorScan;
   units?: UnitScan;
   defense?: DefenseScan;
+  /** Letzter Newsscan. */
+  news?: NewsScan;
   /** Alle Sektorscans mit Zeitmarke, zeitlich sortiert, doppelte entfernt. */
   sectorHistory: SectorScan[];
   /** Alle Punktzeilen mit Zeitmarke, zeitlich sortiert, doppelte entfernt. */
@@ -366,7 +434,8 @@ export function groupScansByTarget(scans: Scan[]): TargetScans[] {
         (s) => s.time === scan.time && s.points === scan.points,
       );
       if (scan.time !== undefined && !duplicate) entry.pointsHistory.push(scan);
-    } else if (scan.kind === "units") entry.units = scan;
+    } else if (scan.kind === "news") entry.news = scan;
+    else if (scan.kind === "units") entry.units = scan;
     else entry.defense = scan;
     byTarget.set(key, entry);
   }
