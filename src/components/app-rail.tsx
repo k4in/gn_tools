@@ -13,8 +13,8 @@ type RailTool = {
 };
 
 const TOOLS: RailTool[] = [
-  { label: "Startplan", icon: CalendarClock, to: "/" },
-  { label: "Kampfwerte", icon: Swords, to: "/kampfwerte" },
+  { label: "Planer", icon: CalendarClock, to: "/" },
+  { label: "Kampfwerte-Matrix", icon: Swords, to: "/kampfwerte" },
   { label: "Ressourcenrechner", icon: Calculator },
   { label: "Scan-Parser", icon: ScanText },
 ];
