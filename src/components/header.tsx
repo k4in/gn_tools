@@ -1,7 +1,7 @@
 import { ExtractorsDialog } from "@/components/extractors-dialog";
-import { InfoDialog } from "@/components/info-dialog";
 import { JobList } from "@/components/overview/actionplan";
 import { SettingsDialog } from "@/components/settings-dialog";
+import type { ReactNode } from "react";
 import type { HistoryWindow } from "@/lib/history-window";
 import { Badge } from "@/components/shadcn/badge";
 import { Separator } from "@/components/shadcn/separator";
@@ -24,6 +24,7 @@ export type HeaderProps = {
   onApplyStart: (next: { start_date: string; start_time: string; tick_minutes: number }) => void;
   historyWindow: HistoryWindow;
   onHistoryWindowChange: (next: HistoryWindow) => void;
+  planSwitcher?: ReactNode;
 };
 
 function resourcesAtCurrentTick(
@@ -60,6 +61,7 @@ export function Header({
   onApplyStart,
   historyWindow,
   onHistoryWindowChange,
+  planSwitcher,
 }: HeaderProps) {
   const extractorJob = plan?.steps.find((s) => s.name === "Extraktor");
   const extractorTick = extractorJob?.endTick;
@@ -78,9 +80,9 @@ export function Header({
   return (
     <header className="shrink-0 border-b border-border">
       <div className="flex items-stretch gap-0 px-4">
-        <div className="flex items-center gap-6 py-3 pr-6">
+        <div className="flex shrink-0 items-center gap-5 py-3 pr-5">
           <div className="flex items-center gap-2">
-            <InfoDialog />
+            {planSwitcher}
             <SettingsDialog
               startDate={startCfg.start_date}
               startTime={startCfg.start_time}
@@ -93,7 +95,12 @@ export function Header({
           <Separator orientation="vertical" />
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Uhrzeit</span>
-            <span className="font-heading text-xl font-semibold tracking-tight tabular-nums">{formatWallClock(now)}</span>
+            <span className="flex items-baseline gap-1.5 tabular-nums">
+              <span className="font-heading text-xl font-semibold tracking-tight">
+                {formatWallClock(now).split(" ")[1]}
+              </span>
+              <span className="text-xs text-muted-foreground">{formatWallClock(now).split(" ")[0]}</span>
+            </span>
           </div>
           <Separator orientation="vertical" />
           <div className="flex flex-col gap-0.5">
@@ -112,15 +119,18 @@ export function Header({
 
         <Separator orientation="vertical" className="my-2" />
 
-        <div className="flex min-w-0 flex-1 items-stretch gap-8 overflow-x-auto px-6 py-2">
+        <div className="flex min-w-0 flex-1 items-stretch gap-6 overflow-x-auto px-5 py-2">
           <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Aktuelle Aktion</span>
+            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Nächste Aktion</span>
             {nextAction && nextJobs.length > 0 ? (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <div className="flex items-baseline gap-2">
+                <div className="flex shrink-0 items-baseline gap-2">
                   <span className="text-sm font-medium tabular-nums">T{nextAction.tick}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {nextAction.clockLabel} · {formatTimeUntilTick(startCfg, nextAction.tick, now)}
+                  <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                    {nextAction.clockLabel} ·{" "}
+                    <span className="text-foreground">
+                      {formatTimeUntilTick(startCfg, nextAction.tick, now)}
+                    </span>
                   </span>
                 </div>
                 <JobList items={nextJobs} />
@@ -132,7 +142,7 @@ export function Header({
 
           <div className="flex shrink-0 flex-col justify-center gap-0.5">
             <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Nächste Aktion
+              Danach
             </span>
             {followingAction ? (
               <span className="text-xs text-muted-foreground tabular-nums">

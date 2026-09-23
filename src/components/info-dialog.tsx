@@ -12,7 +12,7 @@ import {
 export function InfoDialog() {
   return (
     <Dialog>
-      <DialogTrigger render={<Button type="button" variant="outline" size="icon-lg" aria-label="Info" />}>
+      <DialogTrigger render={<Button type="button" variant="ghost" size="icon-lg" aria-label="Info" className="size-10 text-muted-foreground" />}>
         <Info />
       </DialogTrigger>
       <DialogContent>

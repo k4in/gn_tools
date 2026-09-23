@@ -43,7 +43,7 @@ export function ResetPlanDialog({ sources, onReset }: ResetPlanDialogProps) {
         if (next) setSource(sources[0] ?? null);
       }}
     >
-      <DialogTrigger render={<Button type="button" variant="destructive" />}>
+      <DialogTrigger render={<Button type="button" variant="ghost" className="hover:bg-destructive/15 hover:text-destructive" />}>
         <ListRestart data-icon="inline-start" />
         Zurücksetzen
       </DialogTrigger>

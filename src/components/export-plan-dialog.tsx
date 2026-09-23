@@ -54,7 +54,7 @@ export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
         if (!open) setCopied(false);
       }}
     >
-      <DialogTrigger render={<Button type="button" variant="outline" />}>
+      <DialogTrigger render={<Button type="button" variant="ghost" />}>
         <FileJson data-icon="inline-start" />
         Exportieren
       </DialogTrigger>

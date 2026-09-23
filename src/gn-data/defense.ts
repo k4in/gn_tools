@@ -1,6 +1,6 @@
 import type { TechName } from "./techtree";
 
-type DefenseName = "Horus" | "Rubium" | "Pulsar" | "Coon" | "Centurion" | "Zitadelle";
+export type DefenseName = "Horus" | "Rubium" | "Pulsar" | "Coon" | "Centurion" | "Zitadelle";
 
 export type Defense = {
   name: DefenseName;

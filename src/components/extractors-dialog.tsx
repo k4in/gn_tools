@@ -43,7 +43,7 @@ function sourceClass(source: ExtractorEventRow["source"]) {
   if (source === "Bau") return "text-sky-500";
   if (source === "Roid") return "text-blue-400";
   if (source === "Katastrophe") return "text-red-400";
-  if (source === "Stand") return "text-destructive";
+  if (source === "Stand") return "text-foreground";
   return "text-green-500";
 }
 
@@ -264,7 +264,7 @@ export function ExtractorsDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <button
         type="button"
-        className="-my-2 -mr-6 flex min-w-28 cursor-pointer flex-col justify-center gap-0.5 self-stretch py-2 pr-6 pl-2 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+        className="-my-2 -mr-5 flex min-w-28 cursor-pointer flex-col justify-center gap-0.5 self-stretch py-2 pr-5 pl-2 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen(true)}
       >
         {children}

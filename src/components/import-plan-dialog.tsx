@@ -54,7 +54,7 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
         if (!next) reset();
       }}
     >
-      <DialogTrigger render={<Button type="button" variant="outline" />}>
+      <DialogTrigger render={<Button type="button" variant="ghost" />}>
         <Import data-icon="inline-start" />
         Importieren
       </DialogTrigger>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Percent, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import {
   Dialog,
@@ -110,6 +110,7 @@ export function TaxesDialog({ taxes, currentTick, onApply }: TaxesDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button type="button" variant="outline" />}>
+        <Percent data-icon="inline-start" />
         Steuern
         {hasTaxes ? (
           <span className="font-normal text-muted-foreground tabular-nums">

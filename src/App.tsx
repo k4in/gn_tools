@@ -1319,7 +1319,7 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <main className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
         <Header
           now={now}
           currentTick={currentTick}
@@ -1333,16 +1333,18 @@ export default function App() {
           onHistoryWindowChange={(historyWindow) => {
             setAppState((prev) => ({ ...prev, historyWindow }));
           }}
+          planSwitcher={
+            <PlanSwitcher
+              viewId={viewId}
+              livePlanId={appState.livePlanId}
+              onViewChange={(id) => {
+                setViewId(id);
+                setAppState((prev) => ({ ...prev, activePlanId: id }));
+              }}
+            />
+          }
         />
-        <PlanSwitcher
-          viewId={viewId}
-          livePlanId={appState.livePlanId}
-          onViewChange={(id) => {
-            setViewId(id);
-            setAppState((prev) => ({ ...prev, activePlanId: id }));
-          }}
-        />
-        <div className="grid min-h-0 flex-1 grid-cols-[26.4rem_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)]">
           <Sidebar
               techs={addableTechs}
               neededTechs={neededTechs}

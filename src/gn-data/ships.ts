@@ -1,6 +1,6 @@
 import type { TechName } from "./techtree";
 
-type ShipName = "Leo" | "Aquilae" | "Fornax" | "Draco" | "Goron" | "Pentalin" | "Zenit" | "Sculptor" | "Cleptor" | "Cancri";
+export type ShipName = "Leo" | "Aquilae" | "Fornax" | "Draco" | "Goron" | "Pentalin" | "Zenit" | "Sculptor" | "Cleptor" | "Cancri";
 
 export type Ship = {
   name: ShipName;

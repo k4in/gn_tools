@@ -7,7 +7,9 @@ import type { PlanEntry } from "@/gn-data/plan";
 import { ActionPlan } from "@/components/overview/actionplan";
 import { Protocol } from "@/components/overview/protocol";
 import { Timeline } from "@/components/overview/timeline";
+import { CircleDot, Crosshair } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
+import { Separator } from "@/components/shadcn/separator";
 import {
   Tabs,
   TabsContent,
@@ -91,7 +93,7 @@ export function Overview({
         }}
         className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <TabsList>
               <TabsTrigger value="compact">Kompakt</TabsTrigger>
@@ -101,7 +103,8 @@ export function Overview({
               <TaxesDialog taxes={taxes} currentTick={currentTick} onApply={onApplyTaxes} />
             )}
             {onAddSnapshot && (
-              <Button type="button" variant="destructive" onClick={onAddSnapshot}>
+              <Button type="button" variant="outline" onClick={onAddSnapshot}>
+                <Crosshair data-icon="inline-start" />
                 Stand setzen
               </Button>
             )}
@@ -124,18 +127,20 @@ export function Overview({
             )}
           </div>
           {exportJson !== undefined && (
-            <div className="flex shrink-0 gap-2">
-              {onSetLivePlan && (
-                <Button
-                  type="button"
-                  variant={isLivePlan ? "default" : "outline"}
-                  disabled={isLivePlan}
-                  className={isLivePlan ? "disabled:opacity-100" : undefined}
-                  onClick={onSetLivePlan}
-                >
-                  {isLivePlan ? "Aktiv" : "Als aktiv setzen"}
-                </Button>
-              )}
+            <div className="flex shrink-0 items-center gap-1">
+              {onSetLivePlan &&
+                (isLivePlan ? (
+                  <span className="inline-flex h-7 items-center gap-1.5 px-2 text-xs font-medium text-green-500">
+                    <span className="size-1.5 rounded-full bg-green-500" />
+                    Aktiver Plan
+                  </span>
+                ) : (
+                  <Button type="button" variant="ghost" onClick={onSetLivePlan}>
+                    <CircleDot data-icon="inline-start" />
+                    Als aktiv setzen
+                  </Button>
+                ))}
+              <Separator orientation="vertical" className="mx-1 my-2" />
               {parseImportPlan && onImportPlan && (
                 <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />
               )}
