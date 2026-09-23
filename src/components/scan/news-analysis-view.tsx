@@ -158,9 +158,10 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
   return (
     <div className="mt-2 flex flex-col">
       {fleets.map((f) => {
-        // Balken nur innerhalb des Kampfes; die Puffer-Ticks bleiben leer.
-        const from = Math.max(f.firstCombat, firstTick);
-        const to = Math.min(f.lastCombat + NEWS_TICK_MS, endTick);
+        // Über den ganzen sichtbaren Bereich: Verteidiger, die schon vor den Angreifern im
+        // Orbit sind oder danach bleiben, erscheinen auch in den Ticks davor bzw. danach.
+        const from = Math.max(f.firstCombat, start);
+        const to = Math.min(f.lastCombat + NEWS_TICK_MS, end);
         const visible = to > from;
         return (
           <div key={f.id} className="flex items-stretch">
