@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { CalendarClock, Calculator, ScanText, Swords } from "lucide-react";
+import { CalendarClock, ScanText, Swords } from "lucide-react";
 import { InfoDialog } from "@/components/info-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
 import { cn } from "@/lib/utils/cn";
@@ -8,15 +8,13 @@ import { cn } from "@/lib/utils/cn";
 type RailTool = {
   label: string;
   icon: ComponentType<{ className?: string }>;
-  /** Ohne Route: Tool ist geplant und nur als Platzhalter sichtbar. */
-  to?: LinkProps["to"];
+  to: LinkProps["to"];
 };
 
 const TOOLS: RailTool[] = [
   { label: "Planer", icon: CalendarClock, to: "/" },
+  { label: "Scan-Auswertung", icon: ScanText, to: "/scan" },
   { label: "Kampfwerte-Matrix", icon: Swords, to: "/kampfwerte" },
-  { label: "Ressourcenrechner", icon: Calculator },
-  { label: "Scan-Parser", icon: ScanText },
 ];
 
 const ITEM_CLASS =
@@ -35,34 +33,22 @@ export function AppRail() {
           <Tooltip key={tool.label}>
             <TooltipTrigger
               render={
-                tool.to ? (
-                  <Link
-                    to={tool.to}
-                    aria-label={tool.label}
-                    activeOptions={{ exact: true }}
-                    className={cn(
-                      ITEM_CLASS,
-                      "hover:bg-muted/60 hover:text-foreground",
-                      "data-[status=active]:bg-muted data-[status=active]:text-foreground",
-                      "data-[status=active]:before:absolute data-[status=active]:before:top-2 data-[status=active]:before:bottom-2 data-[status=active]:before:-left-2 data-[status=active]:before:w-0.5 data-[status=active]:before:rounded-full data-[status=active]:before:bg-primary",
-                    )}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    aria-label={tool.label}
-                    aria-disabled
-                    className={cn(ITEM_CLASS, "cursor-default opacity-40")}
-                  />
-                )
+                <Link
+                  to={tool.to}
+                  aria-label={tool.label}
+                  activeOptions={{ exact: true }}
+                  className={cn(
+                    ITEM_CLASS,
+                    "hover:bg-muted/60 hover:text-foreground",
+                    "data-[status=active]:bg-muted data-[status=active]:text-foreground",
+                    "data-[status=active]:before:absolute data-[status=active]:before:top-2 data-[status=active]:before:bottom-2 data-[status=active]:before:-left-2 data-[status=active]:before:w-0.5 data-[status=active]:before:rounded-full data-[status=active]:before:bg-primary",
+                  )}
+                />
               }
             >
               <Icon className="size-5" />
             </TooltipTrigger>
-            <TooltipContent side="right">
-              {tool.label}
-              {tool.to ? null : <span className="text-muted-foreground"> · geplant</span>}
-            </TooltipContent>
+            <TooltipContent side="right">{tool.label}</TooltipContent>
           </Tooltip>
         );
       })}

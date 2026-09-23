@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import App from "@/App";
 import { AppShell } from "@/components/app-shell";
 import { KampfwertePage } from "@/components/kampfwerte/kampfwerte-page";
+import { ScanPage } from "@/components/scan/scan-page";
 
 const rootRoute = createRootRoute({ component: AppShell });
 
@@ -18,7 +19,13 @@ const kampfwerteRoute = createRoute({
   component: KampfwertePage,
 });
 
-const routeTree = rootRoute.addChildren([startplanRoute, kampfwerteRoute]);
+const scanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scan",
+  component: ScanPage,
+});
+
+const routeTree = rootRoute.addChildren([startplanRoute, kampfwerteRoute, scanRoute]);
 
 export const router = createRouter({ routeTree });
 
