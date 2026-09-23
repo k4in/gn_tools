@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { Minus, Plus } from "lucide-react";
+import { useEffect, useRef } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -9,15 +8,8 @@ import { StatusDot } from "@/components/sidebar/status-dot";
 import { type Job, type JobKind, type TickSnapshot } from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
-/** Zoomstufen: sichtbare Breite der Timeline in Ticks (Viewport). */
-const TIMELINE_ZOOM_LEVELS = [48, 96, 192, 384] as const;
-const DEFAULT_ZOOM_INDEX = 2;
-
-const LANE_LABELS: Record<TimelineLane, string> = {
-  tech: "Tech",
-  fleet: "Flotte",
-  econ: "Wirtschaft",
-};
+/** Sichtbare Breite der Timeline in Ticks (Viewport): 2 Tage bei 15-Minuten-Ticks. */
+const TIMELINE_VIEWPORT_TICKS = 192;
 
 export type TimelineProps = {
   steps: Job[];
@@ -100,10 +92,8 @@ export function Timeline({
   onInspectTick,
 }: TimelineProps) {
   const xScrollRef = useRef<HTMLDivElement>(null);
-  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
-  const viewportTicks = TIMELINE_ZOOM_LEVELS[zoomIndex];
   const rangeStart = Math.max(0, historyStartTick);
-  const domainLength = Math.max(maxTick - rangeStart, viewportTicks);
+  const domainLength = Math.max(maxTick - rangeStart, TIMELINE_VIEWPORT_TICKS);
   const domainEnd = rangeStart + domainLength;
 
   useEffect(() => {
@@ -121,9 +111,9 @@ export function Timeline({
       );
     });
     return () => cancelAnimationFrame(id);
-    // Nur beim Öffnen des Tabs / Wechsel des Verlaufsfensters / Zoom.
+    // Nur beim Öffnen des Tabs / Wechsel des Verlaufsfensters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, historyStartTick, viewportTicks]);
+  }, [isActive, historyStartTick]);
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
@@ -193,30 +183,25 @@ export function Timeline({
     "tech",
     "fleet",
     "econ",
-  ] as const)
-    .map((lane) => ({ lane, rows: packRows(byLane[lane]) }))
-    .filter(({ rows }) => rows.length > 0);
+  ] as const).map((lane) => packRows(byLane[lane])).filter((rows) => rows.length > 0);
 
   const rowHeight = 32;
   const laneGap = 10;
   const packedRows: { jobs: Job[]; top: number }[] = [];
   const separators: number[] = [];
-  const laneBlocks: { lane: TimelineLane; top: number; height: number }[] = [];
   let cursor = 4;
-  laneRows.forEach(({ lane, rows }, laneIndex) => {
+  laneRows.forEach((rows, laneIndex) => {
     if (laneIndex > 0) {
       separators.push(cursor - 4 + laneGap / 2);
       cursor += laneGap;
     }
-    const laneTop = cursor;
     for (const jobs of rows) {
       packedRows.push({ jobs, top: cursor });
       cursor += rowHeight;
     }
-    laneBlocks.push({ lane, top: laneTop, height: cursor - laneTop - 8 });
   });
   const trackHeight = Math.max(cursor + 4, rowHeight + 8);
-  const step = viewportTicks <= 96 ? 5 : viewportTicks >= 384 ? 20 : 10;
+  const step = 10;
   // Randmarken nicht direkt neben eine Rastermarke setzen, sonst überlappen die Zahlen.
   const minGap = step / 2;
   const markers: number[] = [rangeStart];
@@ -233,47 +218,11 @@ export function Timeline({
   const xPct = (tick: number) => ((tick - rangeStart) / domainLength) * 100;
 
   return (
-    <div className="flex">
-      <div className="relative flex w-20 shrink-0 flex-col border-r border-border/60 pt-3 pb-2">
-        <div className="relative" style={{ height: trackHeight }}>
-          {laneBlocks.map((block) => (
-            <span
-              key={block.lane}
-              className="absolute inset-x-0 flex items-center px-3 text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
-              style={{ top: block.top, height: block.height }}
-            >
-              {LANE_LABELS[block.lane]}
-            </span>
-          ))}
-        </div>
-        <div className="mt-1 flex h-4 items-center gap-0.5 px-2">
-          <button
-            type="button"
-            aria-label="Timeline verkleinern"
-            title="Verkleinern"
-            disabled={zoomIndex === TIMELINE_ZOOM_LEVELS.length - 1}
-            onClick={() => setZoomIndex((i) => Math.min(i + 1, TIMELINE_ZOOM_LEVELS.length - 1))}
-            className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-          >
-            <Minus className="size-3" />
-          </button>
-          <button
-            type="button"
-            aria-label="Timeline vergrößern"
-            title="Vergrößern"
-            disabled={zoomIndex === 0}
-            onClick={() => setZoomIndex((i) => Math.max(i - 1, 0))}
-            className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-          >
-            <Plus className="size-3" />
-          </button>
-        </div>
-      </div>
-    <div ref={xScrollRef} className="min-w-0 flex-1 overflow-x-auto px-3 pt-3 pb-2">
+    <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
       <div
             className="relative cursor-crosshair"
             style={{
-              width: `calc(100% * ${domainLength} / ${viewportTicks})`,
+              width: `calc(100% * ${domainLength} / ${TIMELINE_VIEWPORT_TICKS})`,
             }}
             onClick={(event) => {
               if (!onInspectTick) return;
@@ -468,7 +417,6 @@ export function Timeline({
               )}
             </div>
           </div>
-    </div>
     </div>
   );
 }
