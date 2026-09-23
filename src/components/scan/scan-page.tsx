@@ -17,6 +17,9 @@ import {
   containsScan,
   formatTimeMarker,
   groupScansByTarget,
+  isUnknownTarget,
+  needsTimeMarker,
+  resolveRelativeDates,
   parseScans,
   primaryTargetKey,
   scanMode,
@@ -91,14 +94,17 @@ export function ScanPage() {
 
   /** Eingefügte Scans bekommen eine Zeitmarke mit der aktuellen Uhrzeit. */
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const pasted = event.clipboardData.getData("text");
+    // „heute um …“ wird zum festen Datum, damit gespeicherte Scans auch morgen noch stimmen.
+    const pasted = resolveRelativeDates(event.clipboardData.getData("text"));
     if (!containsScan(pasted)) return;
     event.preventDefault();
     const el = event.currentTarget;
     const before = text.slice(0, el.selectionStart);
     const after = text.slice(el.selectionEnd);
     const separator = before.trim() === "" ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
-    const insert = `${separator}${formatTimeMarker(new Date())}\n${pasted.trim()}\n`;
+    // Scans mit eigenem Zeitpunkt („Daten wurden per Scan erfasst …“) brauchen keine Zeitmarke.
+    const marker = needsTimeMarker(pasted) ? `${formatTimeMarker(new Date())}\n` : "";
+    const insert = `${separator}${marker}${pasted.trim()}\n`;
     const next = before + insert + after;
     const cursor = before.length + insert.length;
     setText(next);
@@ -131,6 +137,18 @@ export function ScanPage() {
             . Mehrere auf einmal gehen auch. Militärscans werden ignoriert.
           </p>
           <p>
+            Sektor-, Einheiten- und Geschützscans gehen auch im Format{" "}
+            <code className="rounded-sm bg-muted px-1 py-0.5 text-[11px] whitespace-nowrap text-foreground">
+              Daten wurden per Scan erfasst …
+            </code>
+            , auch als ganzer Block ab{" "}
+            <code className="rounded-sm bg-muted px-1 py-0.5 text-[11px] whitespace-nowrap text-foreground">
+              Scans von …
+            </code>
+            . Sie enthalten ihren Zeitpunkt selbst; „heute“ wird beim Einfügen zum festen Datum. Fehlt die
+            „Scans von“-Zeile, werden sie dem ausgewerteten Spieler zugeordnet.
+          </p>
+          <p>
             Der erste Scan im Feld bestimmt die Auswertung: Steht ein <span className="text-foreground">Newsscan</span> vorne, zeigt die
             rechte Seite, wann welche Flotte kämpft. Steht ein <span className="text-foreground">Sektorscan</span> vorne,
             werden Rohstoffe und Punkteverlauf ausgewertet.
@@ -147,7 +165,9 @@ export function ScanPage() {
 
       <section className="flex min-h-0 flex-col">
         <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-6">
-          {primary ? (
+          {primary && isUnknownTarget(primary.target) ? (
+            <h2 className="font-heading text-base font-semibold text-muted-foreground">Spieler unbekannt</h2>
+          ) : primary ? (
             <h2 className="flex items-baseline gap-2">
               <span className="font-heading text-base font-semibold tracking-tight">{primary.target.player}</span>
               <span className="text-sm text-muted-foreground tabular-nums">

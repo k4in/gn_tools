@@ -4,7 +4,8 @@ import type { ShipName } from "@/gn-data/ships";
 /**
  * Parser für aus Galaxy-Network kopierte Scans.
  *
- * Aufbau eines Scans (die Unterstriche gehören zum kopierten Text):
+ * Aufbau eines Scans (die Unterstriche gehören zum kopierten Text, siehe
+ * normalizeLine):
  *
  *   _Galaxy-Network SektorScan (100%) Barrett 14:5_
  *   Punkte: 37.208.688
@@ -23,7 +24,23 @@ import type { ShipName } from "@/gn-data/ships";
  * (Koordinaten, Rang-Symbol, Name, Punkte, Asteroiden). Sie aktualisiert nur
  * den Punktestand und setzt einen früheren Sektorscan voraus.
  *
- * Der Scan-Zeitpunkt steht nicht im Scan. Dafür gibt es Zeitmarken als eigene
+ * Sektor-, Einheiten- und Geschützscans gibt es zusätzlich in einem Format mit
+ * Zeitpunkt (siehe parseTimestampedScan), meist als Block aller drei Scans:
+ *
+ *   Scans von 14:5 Barrett | Angriff simulieren auf 14:5
+ *   Sektorscan Geschützscan Einheitenscan Militärscan Newsscan
+ *   Daten wurden per Scan erfasst
+ *   heute um 21:41:49
+ *   100%
+ *   Punktzahl: 37.288.298
+ *   ...
+ *   - keine Daten -        (fehlender Scan)
+ *
+ * Datum und „Daten wurden …“ können auch in einer Zeile stehen, Leerzeilen
+ * variieren. Ohne „Scans von“-Zeile gehören die Scans zum ausgewerteten
+ * Spieler (erster Sektor- bzw. Newsscan mit Namen).
+ *
+ * Im klassischen Format steht der Scan-Zeitpunkt nicht im Scan. Dafür gibt es Zeitmarken als eigene
  * Zeile („@ 23.09. 14:30“, „@ 23.09.2026 14:30“ oder „@ 14:30“ für den Tag der
  * vorigen Marke). Eine Marke gilt für alle Scans darunter bis zur nächsten.
  */
@@ -40,9 +57,18 @@ type ScanBase = {
   target: ScanTarget;
   /** Genauigkeit in Prozent. */
   accuracy: number;
-  /** Zeitpunkt aus der letzten Zeitmarke davor (ms seit Epoch), falls vorhanden. */
+  /** Zeitpunkt aus dem Scan selbst oder der letzten Zeitmarke davor (ms seit Epoch). */
   time?: number;
+  /** Scan ohne Spieler/Koordinaten; das Ziel wird dem ausgewerteten Spieler zugeordnet. */
+  anonymous?: boolean;
 };
+
+/** Ziel, wenn es nur Scans ohne Spieler und Koordinaten gibt. */
+export const UNKNOWN_TARGET: ScanTarget = { player: "", galaxy: 0, planet: 0 };
+
+export function isUnknownTarget(target: ScanTarget) {
+  return target.galaxy === 0 && target.planet === 0;
+}
 
 export type SectorScan = ScanBase & {
   kind: "sector";
@@ -53,6 +79,8 @@ export type SectorScan = ScanBase & {
   extractorsKris: number;
   asteroids: number;
 };
+
+type SectorField = "points" | "ships" | "defense" | "extractorsMet" | "extractorsKris" | "asteroids";
 
 export type UnitScan = ScanBase & {
   kind: "units";
@@ -139,9 +167,74 @@ const SCAN_TYPES: Record<string, ScanKind | null> = {
   Militär: null,
 };
 
+/**
+ * Kopierte Scans enthalten je nach Quelle Formatierungszeichen für Fett/Kursiv
+ * (WhatsApp): mal `_`, mal `*`, mal gar nichts. Beide werden gleich behandelt.
+ * Entfernt wird eine Markierung am Zeilenanfang samt ihrem Gegenstück: direkt
+ * am ersten Doppelpunkt („_Angriff:_ […]“, „*Punkte*: …“) oder am Zeilenende
+ * („_Galaxy-Network …_“). Zeichen mitten in Namen bleiben erhalten.
+ */
+export function normalizeLine(raw: string): string {
+  const line = raw.trim();
+  const opening = /^[_*]+/.exec(line);
+  if (!opening) return line;
+  const rest = line.slice(opening[0].length);
+  // Gegenstück am ersten Doppelpunkt: „Angriff:_ […]“ bzw. „Punkte*: …“.
+  const labelClose = /^([^:[\]]*?)(?:[_*]+:|:[_*]+)/.exec(rest);
+  if (labelClose) return `${labelClose[1]}:${rest.slice(labelClose[0].length)}`.trim();
+  return rest.replace(/[_*]+$/, "").trim();
+}
+
+/** Markierungen um ein Label innerhalb einer Zeile, z. B. „*Coon:* 38“ → „Coon: 38“. */
+function stripLabelMarkers(part: string) {
+  return part.replace(/^[_*]+/, "").replace(/^([^:]*?)[_*]+:/, "$1:").replace(/^([^:]*:)[_*]+/, "$1");
+}
+
 // Koordinaten stehen je nach Scan mit oder ohne Klammern: „Barrett 14:5“ / „Barrett (14:5)“.
-const HEADER_RE = /^[_*]*Galaxy-Network\s+(\S+?)Scan\s*\((\d+)\s*%\)\s+(.+?)\s+\(?(\d+):(\d+)\)?[_*]*$/i;
-const FOOTER_RE = /^[_*]*(Scan aus der Datenbank|Gescannt von)/i;
+const HEADER_RE = /^Galaxy-Network\s+(\S+?)Scan\s*\((\d+)\s*%\)\s+(.+?)\s+\(?(\d+):(\d+)\)?$/i;
+const FOOTER_RE = /^(Scan aus der Datenbank|Gescannt von)/i;
+const TIMESTAMPED_HEADER_RE = /^Daten wurden per Scan erfasst(?:\s+(.+))?$/i;
+const SCAN_DATE_RE =
+  /^(?:(heute|gestern)|(\d{1,2})\.\s*(\p{L}+)\s+(\d{4}))\s+um\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/iu;
+const SCANS_FROM_RE = /^Scans von\s+(\d+):(\d+)\s+(.+?)(?:\s*\|.*)?$/i;
+/** Reiterzeile „Sektorscan Geschützscan Einheitenscan Militärscan Newsscan“. */
+const SCAN_TABS_RE = /^(?:(?:Sektor|Geschütz|Einheiten|Militär|News)scan\s*)+$/i;
+const NO_DATA_RE = /^-?\s*keine Daten\s*-?$/i;
+const ACCURACY_RE = /^(\d{1,3})\s*%$/;
+const MONTHS = [
+  "januar",
+  "februar",
+  "märz",
+  "april",
+  "mai",
+  "juni",
+  "juli",
+  "august",
+  "september",
+  "oktober",
+  "november",
+  "dezember",
+];
+
+/** Bezeichnungen im Format „Daten wurden per Scan erfasst …“. */
+const TIMESTAMPED_SECTOR_FIELDS: Record<string, SectorField> = {
+  Punktzahl: "points",
+  Schiffe: "ships",
+  Defensiveinheiten: "defense",
+  "Metall-Extraktoren": "extractorsMet",
+  "Kristall-Extraktoren": "extractorsKris",
+  Asteroiden: "asteroids",
+};
+
+/** Geschütze stehen dort mit ihrem Technamen. */
+const DEFENSE_TECH_LABELS: Record<string, DefenseName> = {
+  "Leichtes Orbitalgeschütz": "Rubium",
+  "Leichtes Raumgeschütz": "Pulsar",
+  "Mittleres Raumgeschütz": "Coon",
+  "Schweres Raumgeschütz": "Centurion",
+  Abfangjäger: "Horus",
+  Raumbasis: "Zitadelle",
+};
 const NEWS_ENTRY_RE =
   /^(Verteidigung|Angriff|Rückzug):\s*\[(\d{1,2})\/(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\]\s+(\d+):(\d+)\s+(.+?)(?:\s+Flotte\s+(\d+))?$/;
 const NEWS_TYPES: Record<string, NewsEntryType> = {
@@ -155,9 +248,123 @@ const MARKER_RE = /^@\s*(?:(\d{1,2})\.(\d{1,2})\.(\d{4})?\s+)?(\d{1,2}):(\d{2})$
 /** Prüft, ob ein Text mindestens einen Scan oder eine Punktzeile enthält. */
 export function containsScan(text: string) {
   return text.split(/\r?\n/).some((raw) => {
-    const line = raw.trim();
+    const line = normalizeLine(raw);
+    return (
+      HEADER_RE.test(line) ||
+      POINTS_RE.test(line) ||
+      TIMESTAMPED_HEADER_RE.test(line) ||
+      SCANS_FROM_RE.test(line)
+    );
+  });
+}
+
+/**
+ * Braucht der Text eine Zeitmarke? Nur für Scans ohne eigenen Zeitpunkt, also
+ * klassische Scans und Punktzeilen.
+ */
+export function needsTimeMarker(text: string) {
+  return text.split(/\r?\n/).some((raw) => {
+    const line = normalizeLine(raw);
     return HEADER_RE.test(line) || POINTS_RE.test(line);
   });
+}
+
+/** „18. September 2026 um 22:48:42“, „heute um 21:41:49“ oder „gestern um …“. */
+function parseScanDate(text: string, now: Date): number | null {
+  const match = SCAN_DATE_RE.exec(text.trim());
+  if (!match) return null;
+  const [, relative, day, monthName, year, h, m, sec] = match;
+  let date: Date;
+  if (relative) {
+    date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (relative.toLowerCase() === "gestern") date.setDate(date.getDate() - 1);
+  } else {
+    const month = MONTHS.indexOf(monthName.toLowerCase());
+    if (month < 0) return null;
+    date = new Date(Number(year), month, Number(day));
+  }
+  date.setHours(Number(h), Number(m), Number(sec ?? 0), 0);
+  return date.getTime();
+}
+
+/**
+ * Ersetzt „heute“/„gestern“ vor „um …“ durch das Datum, z. B. „23. September
+ * 2026 um 21:41:49“. Beim Einfügen aufgerufen, damit gespeicherte Scans auch
+ * am nächsten Tag noch den richtigen Zeitpunkt haben.
+ */
+export function resolveRelativeDates(text: string, now = new Date()) {
+  const format = (d: Date) => {
+    const month = MONTHS[d.getMonth()];
+    return `${d.getDate()}. ${month[0].toUpperCase()}${month.slice(1)} ${d.getFullYear()}`;
+  };
+  return text.replace(/\b(heute|gestern)(?=\s+um\s+\d{1,2}:\d{2})/gi, (word) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (word.toLowerCase() === "gestern") d.setDate(d.getDate() - 1);
+    return format(d);
+  });
+}
+
+/**
+ * Scan im Format „Daten wurden per Scan erfasst …“. Die Scan-Art steht nicht
+ * drin, sie ergibt sich aus den Bezeichnungen: Sektorscan (Punktzahl, …),
+ * Geschützscan (Technamen wie „Leichtes Orbitalgeschütz“) oder Einheitenscan
+ * („Jäger“, …). Einheiten mit Anzahl 0 werden weggelassen.
+ */
+export function parseTimestampedScan(base: ScanBase, lines: string[], warnings: string[]): Scan | null {
+  const fields: [string, number][] = [];
+  for (const line of lines) {
+    const match = /^(.+?):?\s+(\d{1,3}(?:\.\d{3})+|\d+)$/.exec(stripLabelMarkers(line));
+    if (!match) {
+      warnings.push(`Nicht erkannt: „${line}“`);
+      continue;
+    }
+    fields.push([match[1].trim(), parseNumber(match[2])!]);
+  }
+  const count = (labels: Record<string, unknown>) => fields.filter(([label]) => label in labels).length;
+  const sectorHits = count(TIMESTAMPED_SECTOR_FIELDS);
+  const defenseHits = count(DEFENSE_TECH_LABELS);
+  const shipHits = count(SHIP_LABELS);
+  const best = Math.max(sectorHits, defenseHits, shipHits);
+  if (best === 0) {
+    warnings.push("Scan ohne erkennbare Werte (Daten wurden per Scan erfasst …).");
+    return null;
+  }
+
+  const unknown = (label: string) => warnings.push(`Unbekanntes Feld: „${label}“`);
+  if (best === sectorHits) {
+    const scan: SectorScan = {
+      ...base,
+      kind: "sector",
+      points: 0,
+      ships: 0,
+      defense: 0,
+      extractorsMet: 0,
+      extractorsKris: 0,
+      asteroids: 0,
+    };
+    for (const [label, value] of fields) {
+      const key = TIMESTAMPED_SECTOR_FIELDS[label];
+      if (key) scan[key] = value;
+      else unknown(label);
+    }
+    return scan;
+  }
+  if (best === defenseHits) {
+    const units: DefenseScan["units"] = {};
+    for (const [label, value] of fields) {
+      const name = DEFENSE_TECH_LABELS[label];
+      if (!name) unknown(label);
+      else if (value > 0) units[name] = value;
+    }
+    return { ...base, kind: "defense", units };
+  }
+  const units: UnitScan["units"] = {};
+  for (const [label, value] of fields) {
+    const name = SHIP_LABELS[label];
+    if (!name) unknown(label);
+    else if (value > 0) units[name] = value;
+  }
+  return { ...base, kind: "units", units };
 }
 
 /**
@@ -225,8 +432,9 @@ function parseNumber(raw: string): number | null {
 function parseFields(lines: string[], warnings: string[]): [string, number][] {
   const fields: [string, number][] = [];
   for (const line of lines) {
-    for (const part of line.split(/\s+-\s+/)) {
-      const match = /^(.+?):\s*(.+)$/.exec(part.trim());
+    for (const rawPart of line.split(/\s+-\s+/)) {
+      const part = stripLabelMarkers(rawPart.trim());
+      const match = /^(.+?):\s*(.+)$/.exec(part);
       const value = match ? parseNumber(match[2]) : null;
       if (!match || value === null) {
         warnings.push(`Nicht erkannt: „${part.trim()}“`);
@@ -238,7 +446,7 @@ function parseFields(lines: string[], warnings: string[]): [string, number][] {
   return fields;
 }
 
-const SECTOR_FIELDS: Record<string, keyof Omit<SectorScan, "kind" | "target" | "accuracy">> = {
+const SECTOR_FIELDS: Record<string, SectorField> = {
   Punkte: "points",
   Schiffe: "ships",
   Verteidigung: "defense",
@@ -311,11 +519,27 @@ export function parseNewsScan(base: ScanBase, lines: string[], warnings: string[
 /** Zerlegt einen eingefügten Text in einzelne Scans und parst jeden davon. */
 export function parseScans(text: string, now = new Date()): ScanParseResult {
   const result: ScanParseResult = { scans: [], skipped: [], warnings: [] };
-  let current: { type: string; base: ScanBase; lines: string[] } | null = null;
+  let current: {
+    type: string;
+    base: ScanBase;
+    lines: string[];
+    /** Format „Daten wurden per Scan erfasst …“. */
+    timestamped?: boolean;
+    /** Datum steht in der nächsten Zeile. */
+    awaitingDate?: boolean;
+  } | null = null;
   let time: number | undefined;
+  /** Spieler aus der letzten „Scans von …“-Zeile, gilt für die folgenden Scans mit Zeitpunkt. */
+  let blockTarget: ScanTarget | null = null;
 
   const flush = () => {
     if (!current) return;
+    if (current.timestamped) {
+      const scan = parseTimestampedScan(current.base, current.lines, result.warnings);
+      if (scan) result.scans.push(scan);
+      current = null;
+      return;
+    }
     const kind = SCAN_TYPES[current.type];
     if (kind === "sector") result.scans.push(parseSectorScan(current.base, current.lines, result.warnings));
     else if (kind === "units") result.scans.push(parseUnitScan(current.base, current.lines, result.warnings));
@@ -326,8 +550,56 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
   };
 
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
+    const line = normalizeLine(rawLine);
+    // Leerzeilen variieren je nach Kopie und beenden keinen Scan.
     if (!line) continue;
+
+    const scansFrom = SCANS_FROM_RE.exec(line);
+    if (scansFrom) {
+      flush();
+      blockTarget = { player: scansFrom[3], galaxy: Number(scansFrom[1]), planet: Number(scansFrom[2]) };
+      continue;
+    }
+    if (SCAN_TABS_RE.test(line)) continue;
+    if (NO_DATA_RE.test(line)) {
+      flush();
+      continue;
+    }
+
+    const timestampedHeader = TIMESTAMPED_HEADER_RE.exec(line);
+    if (timestampedHeader) {
+      flush();
+      const dateText = timestampedHeader[1];
+      const scanTime = dateText ? parseScanDate(dateText, now) : null;
+      if (dateText && scanTime === null) result.warnings.push(`Datum nicht erkannt: „${dateText}“`);
+      current = {
+        type: "",
+        base: {
+          accuracy: 100,
+          target: blockTarget ?? UNKNOWN_TARGET,
+          time: scanTime ?? undefined,
+          anonymous: !blockTarget,
+        },
+        lines: [],
+        timestamped: true,
+        awaitingDate: !dateText,
+      };
+      continue;
+    }
+    if (current?.awaitingDate) {
+      current.awaitingDate = false;
+      const scanTime = parseScanDate(line, now);
+      if (scanTime !== null) {
+        current.base.time = scanTime;
+        continue;
+      }
+      result.warnings.push(`Datum nicht erkannt: „${line}“`);
+    }
+    const accuracy = ACCURACY_RE.exec(line);
+    if (accuracy && current?.timestamped && current.lines.length === 0) {
+      current.base.accuracy = Number(accuracy[1]);
+      continue;
+    }
 
     if (line.startsWith("@")) {
       flush();
@@ -347,6 +619,7 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
     const header = HEADER_RE.exec(line);
     if (header) {
       flush();
+      blockTarget = null;
       const [, type, accuracy, player, galaxy, planet] = header;
       if (!(type in SCAN_TYPES)) result.warnings.push(`Unbekannte Scan-Art: „${type}Scan“`);
       current = {
@@ -368,6 +641,14 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
     else result.warnings.push(`Zeile außerhalb eines Scans: „${line}“`);
   }
   flush();
+
+  // Scans ohne Spieler/Koordinaten gehören zum ausgewerteten Spieler.
+  const named =
+    result.scans.find((s) => !s.anonymous && (s.kind === "sector" || s.kind === "news")) ??
+    result.scans.find((s) => !s.anonymous);
+  for (const scan of result.scans) {
+    if (scan.anonymous) scan.target = named?.target ?? UNKNOWN_TARGET;
+  }
   return result;
 }
 
