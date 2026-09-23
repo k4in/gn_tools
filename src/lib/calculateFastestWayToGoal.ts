@@ -9,10 +9,17 @@ import {
   type QuestDef,
   type QuestReward,
 } from "@/gn-data/quests";
-import { defenses, type Defense } from "@/gn-data/defense";
-import { ships, type Ship } from "@/gn-data/ships";
+import { withUnitBuildBug } from "@/gn-data/build-time-bug";
+import { defenses as baseDefenses, type Defense } from "@/gn-data/defense";
+import { ships as baseShips, type Ship } from "@/gn-data/ships";
 import { techtree, type TechTreeEntry } from "@/gn-data/techtree";
-import { utilities, type Utility } from "@/gn-data/utility";
+import { utilities as baseUtilities, type Utility } from "@/gn-data/utility";
+
+// Spiel-Bug: Einheiten und Scan-Items bauen 1 Tick länger (siehe build-time-bug.ts).
+// Asteroiden sind sofort da und bleiben ausgenommen.
+const ships = baseShips.map(withUnitBuildBug);
+const defenses = baseDefenses.map(withUnitBuildBug);
+const utilities = baseUtilities.map((u) => (u.name === "Asteroid" ? u : withUnitBuildBug(u)));
 
 export type { PlanEntry };
 
