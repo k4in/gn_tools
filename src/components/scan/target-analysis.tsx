@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { TriangleAlert } from "lucide-react";
+import { Info, TriangleAlert } from "lucide-react";
 import { defenses } from "@/gn-data/defense";
 import { ships } from "@/gn-data/ships";
 import { formatRes } from "@/lib/calculateFastestWayToGoal";
@@ -10,6 +10,7 @@ import {
   earlyGameEstimate,
   estimateResources,
   latestPointsUpdate,
+  type HistoryPoint,
   type HistoryStep,
 } from "@/lib/scan-analysis";
 import { SHIP_SCAN_LABEL, type TargetScans } from "@/lib/scan-parser";
@@ -28,12 +29,35 @@ function formatTime(time: number | undefined) {
 }
 
 /** Uhrzeiten hervorgehoben, damit auf einen Blick klar ist, von wann ein Wert stammt. */
-function Timestamp({ time, short = false }: { time: number | undefined; short?: boolean }) {
+/**
+ * Uhrzeiten nach Quelle eingefärbt, in den Planer-Farben: gelb (wie Gebäude) für
+ * Sektor-, Einheiten- und Geschützscans, violett (wie Forschung) für Punktzeilen.
+ */
+function Timestamp({
+  time,
+  short = false,
+  source = "scan",
+}: {
+  time: number | undefined;
+  short?: boolean;
+  source?: "scan" | "points";
+}) {
   const label = formatTime(time);
   if (!label) return null;
   return (
-    <span className="font-medium text-blue-300 tabular-nums">{short ? label.slice(-5) : label}</span>
+    <span
+      className={cn(
+        "font-medium tabular-nums",
+        source === "points" ? "text-fuchsia-500" : "text-amber-500",
+      )}
+    >
+      {short ? label.slice(-5) : label}
+    </span>
   );
+}
+
+function pointSource(point: HistoryPoint) {
+  return point.source === "points" ? "points" : "scan";
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -96,7 +120,7 @@ function UnitList({ rows }: { rows: { name: string; label?: string; count: numbe
 
 function Notice({ children }: { children: ReactNode }) {
   return (
-    <div className="flex gap-2 rounded-md border border-yellow-300/30 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-200">
+    <div className="flex gap-2 rounded-md border border-yellow-300/30 bg-yellow-300/10 px-3 py-2 text-xs text-yellow-300">
       <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
       <div>{children}</div>
     </div>
@@ -125,10 +149,10 @@ function verdictLabel(step: Pick<HistoryStep, "verdict" | "shortfall">) {
 
 const VERDICT_CLASS: Record<HistoryStep["verdict"], string> = {
   "same-tick": "text-muted-foreground",
-  normal: "text-emerald-400",
+  normal: "text-green-500",
   suspicious: "text-yellow-300",
-  building: "text-red-400",
-  finished: "text-sky-400",
+  building: "text-destructive",
+  finished: "text-emerald-400",
 };
 
 /** Hinweis, ob der fortgeschriebene Rohstoffwert noch zum Einkommen passt. */
@@ -146,7 +170,7 @@ function CarryForwardHint({
   const sinceLabel = <Timestamp time={since} />;
   if (verdict === "normal") {
     return (
-      <p className="text-xs text-emerald-400">
+      <p className="text-xs text-green-500">
         Zuwachs seit {sinceLabel} passt zum Einkommen, vermutlich {tax} Steuern. Der Wert ist
         verlässlich.
       </p>
@@ -161,7 +185,7 @@ function CarryForwardHint({
     );
   }
   return (
-    <div className="flex gap-2 rounded-md border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs text-red-300">
+    <div className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
       <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
       <div>
         {verdict === "building"
@@ -173,8 +197,38 @@ function CarryForwardHint({
   );
 }
 
-function Resources({ entry }: { entry: TargetScans }) {
-  const estimate = estimateResources(entry);
+/** Early-Game ohne Geschützscan: Rohstoffe nur als Spanne. */
+function ResourceRange({ entry }: { entry: TargetScans }) {
+  const estimate = earlyGameEstimate(entry);
+  if (!estimate || !entry.sector) return null;
+  if (estimate.inconsistent) {
+    return (
+      <Missing>
+        Die Punkte reichen nicht einmal für lauter Horus. Die Early-Game-Annahme passt hier nicht.
+      </Missing>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <div className="flex items-baseline gap-2">
+        <span className="font-heading text-2xl font-semibold tabular-nums">
+          {formatRes(estimate.resourcesMin)} – {formatRes(estimate.resourcesMax)}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          Metall + Kristall · Stand <Timestamp time={entry.sector.time} />
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Spanne je nach Verhältnis von Rubium zu Horus: keine Rubium ergibt den Höchstwert, möglichst
+        viele den Mindestwert. Mit einem Geschützscan wird die Zahl exakt.
+      </p>
+    </div>
+  );
+}
+
+function Resources({ entry, earlyGame }: { entry: TargetScans; earlyGame: boolean }) {
+  const estimate = estimateResources(entry, earlyGame);
+  if (estimate === null && earlyGame && entry.sector) return <ResourceRange entry={entry} />;
   if (estimate === null) {
     const missing = [
       !entry.sector && "Sektorscan",
@@ -201,13 +255,14 @@ function Resources({ entry }: { entry: TargetScans }) {
             {formatRes(current.resources)}
           </span>
           <span className="text-xs text-muted-foreground">
-            Metall + Kristall · Stand <Timestamp time={current.point.time} />
+            Metall + Kristall · Stand{" "}
+            <Timestamp time={current.point.time} source={pointSource(current.point)} />
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
           Fortgeschrieben vom Sektorscan <Timestamp time={sector.time} /> (
           {formatRes(resources)} Rohstoffe) mit dem Punktestand von{" "}
-          <Timestamp time={current.point.time} />, unter der Annahme, dass keine Einheiten dazugekommen
+          <Timestamp time={current.point.time} source={pointSource(current.point)} />, unter der Annahme, dass keine Einheiten dazugekommen
           sind.
         </p>
         <CarryForwardHint
@@ -269,7 +324,7 @@ function EarlyGame({ entry }: { entry: TargetScans }) {
   return (
     <div className="mt-2 flex flex-col gap-2 text-xs">
       <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-        <div className="bg-emerald-400/70" style={{ width: `${share * 100}%` }} />
+        <div className="bg-green-500" style={{ width: `${share * 100}%` }} />
       </div>
       <p>
         Von {formatRes(estimate.defense)} Geschützen sind{" "}
@@ -277,8 +332,7 @@ function EarlyGame({ entry }: { entry: TargetScans }) {
         {Math.round(share * 100)} %), der Rest Horus. Das gilt, wenn keine Rohstoffe herumliegen.
       </p>
       <p className="text-muted-foreground">
-        Liegen Rohstoffe herum, sind es entsprechend weniger Rubium. Rohstoffe: zwischen{" "}
-        {formatRes(estimate.resourcesMin)} und {formatRes(estimate.resourcesMax)}.
+        Liegen Rohstoffe herum, sind es entsprechend weniger Rubium.
       </p>
     </div>
   );
@@ -308,7 +362,8 @@ function History({ steps }: { steps: HistoryStep[] }) {
         {steps.map((step) => (
           <tr key={`${step.from.time}-${step.to.time}`} className="border-b border-border/50 last:border-b-0">
             <td className="py-1.5 whitespace-nowrap">
-              <Timestamp time={step.from.time} /> → <Timestamp time={step.to.time} short />
+              <Timestamp time={step.from.time} source={pointSource(step.from)} /> →{" "}
+              <Timestamp time={step.to.time} source={pointSource(step.to)} short />
             </td>
             <td className="py-1.5 text-right">{step.ticks}</td>
             <td className="py-1.5 text-right">{formatSigned(step.pointsDelta)}</td>
@@ -365,6 +420,17 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
 
   return (
     <div className="flex flex-col gap-5">
+      {earlyGame ? (
+        <div className="flex gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs/relaxed text-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-green-500" />
+          <p>
+            <span className="font-medium">Early-Game-Modus:</span> Angenommen wird, dass es nur Horus,
+            Rubium, Cleptor und Cancri gibt. Cleptor und Cancri kosten beide 2.500, daher reicht ein
+            Sektorscan für die Auswertung. Ohne Geschützscan werden Rohstoffe und das Verhältnis von
+            Rubium zu Horus als Spanne geschätzt.
+          </p>
+        </div>
+      ) : null}
       <GroupHeading>Scan-Daten</GroupHeading>
       <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-muted/20">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-6 p-4">
@@ -391,7 +457,7 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
               Letzter Punktestand
               {latestPoints?.time !== undefined ? (
                 <span className="ml-1.5 normal-case tracking-normal">
-                  <Timestamp time={latestPoints.time} />
+                  <Timestamp time={latestPoints.time} source={pointsUpdate ? "points" : "scan"} />
                 </span>
               ) : null}
             </SectionLabel>
@@ -448,7 +514,7 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
 
       <section>
         <SectionLabel>Rohstoffe</SectionLabel>
-        <Resources entry={entry} />
+        <Resources entry={entry} earlyGame={earlyGame} />
       </section>
 
       {showEarlyGame ? (

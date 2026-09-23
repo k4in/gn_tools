@@ -106,10 +106,10 @@ export function ScanPage() {
           </p>
           <p>
             Beim Einfügen wird automatisch eine Zeitmarke mit der aktuellen Uhrzeit davorgesetzt, z. B.{" "}
-            <code className="rounded-sm bg-muted px-1 py-0.5 whitespace-nowrap text-[11px] text-blue-300">@ 23.09. 14:30</code>
+            <code className="rounded-sm bg-muted px-1 py-0.5 whitespace-nowrap text-[11px] text-amber-500">@ 23.09. 14:30</code>
             . Sie gilt für alle Scans darunter bis zur nächsten Zeitmarke. Stammt ein Scan von früher,
             etwa aus der Datenbank, pass die Uhrzeit einfach im Text an.{" "}
-            <code className="rounded-sm bg-muted px-1 py-0.5 whitespace-nowrap text-[11px] text-blue-300">@ 14:30</code>{" "}
+            <code className="rounded-sm bg-muted px-1 py-0.5 whitespace-nowrap text-[11px] text-amber-500">@ 14:30</code>{" "}
             reicht für denselben Tag wie die Zeitmarke davor.
           </p>
         </div>
@@ -138,14 +138,14 @@ export function ScanPage() {
               className={cn(
                 "inline-flex h-7 items-center gap-2 rounded-md border px-2 text-xs font-medium transition-colors",
                 earlyGame
-                  ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-300"
+                  ? "border-green-500/50 bg-green-500/15 text-foreground"
                   : "border-border text-muted-foreground hover:text-foreground",
               )}
             >
               <span
                 className={cn(
                   "relative h-3 w-5 rounded-full transition-colors",
-                  earlyGame ? "bg-emerald-400/70" : "bg-muted",
+                  earlyGame ? "bg-green-500" : "bg-muted",
                 )}
               >
                 <span

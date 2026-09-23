@@ -91,24 +91,28 @@ export type ResourceEstimate = {
 /**
  * Herumliegende Rohstoffe (Metall + Kristall zusammen). Braucht Sektorscan
  * plus Einheiten- und Geschützscan; ein fehlender Scan ist nur dann egal,
- * wenn der Sektorscan für diese Art 0 Einheiten zeigt.
+ * wenn der Sektorscan für diese Art 0 Einheiten zeigt. Im Early-Game kostet
+ * jedes Schiff 2.500, dann reicht der Sektorscan für die Schiffe.
  *
  * Gerechnet wird mit dem neuesten Sektorscan, dessen Schiffs- und
  * Geschützzahlen zu den anderen beiden Scans passen. Sonst würde ein neuer
  * Sektorscan mit alten Einheitenscans verrechnet.
  */
-export function estimateResources(entry: TargetScans): ResourceEstimate | null {
+export function estimateResources(entry: TargetScans, earlyGame = false): ResourceEstimate | null {
   const { sector, units, defense, sectorHistory } = entry;
   if (!sector) return null;
-  if (!units && sector.ships > 0) return null;
+  if (!units && sector.ships > 0 && !earlyGame) return null;
   if (!defense && sector.defense > 0) return null;
   const shipCount = units ? sumCounts(units.units) : 0;
   const defenseCount = defense ? sumCounts(defense.units) : 0;
+  const shipsMatch = (s: SectorScan) => (units || !earlyGame ? s.ships === shipCount : true);
+  const shipValue = (s: SectorScan) =>
+    units ? unitValue(units.units) : earlyGame ? s.ships * EARLY_GAME_SHIP_COST : 0;
   const candidates = [...sectorHistory].reverse();
   if (!candidates.includes(sector)) candidates.unshift(sector);
-  const matching = candidates.find((s) => s.ships === shipCount && s.defense === defenseCount);
+  const matching = candidates.find((s) => shipsMatch(s) && s.defense === defenseCount);
   const used = matching ?? sector;
-  const fleet = unitValue(units?.units ?? {}) + unitValue(defense?.units ?? {});
+  const fleet = shipValue(used) + unitValue(defense?.units ?? {});
   return {
     resources: (used.points - extractorPoints(used) - fleet) / RESOURCE_POINT_SHARE,
     sector: used,
