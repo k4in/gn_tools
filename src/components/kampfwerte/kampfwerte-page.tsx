@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import { KillMatrix } from "@/components/kampfwerte/kill-matrix";
-import { ratioHue } from "@/components/kampfwerte/format";
+import { ratioColor } from "@/components/kampfwerte/format";
+import { FleetBuilder } from "@/components/kampfwerte/fleet-builder";
 
 const HELPSYS_URL = "https://galaxy-network.de/helpsys";
 
@@ -54,7 +55,7 @@ export function KampfwertePage() {
               <span
                 className="h-2 w-40 rounded-full"
                 style={{
-                  background: `linear-gradient(to right, oklch(0.7 0.14 ${ratioHue(0.14)}), oklch(0.7 0.14 ${ratioHue(0.27)}), oklch(0.7 0.14 ${ratioHue(0.4)}))`,
+                  background: `linear-gradient(to right, ${ratioColor(0.14)}, ${ratioColor(0.27)}, ${ratioColor(0.4)})`,
                 }}
               />
               <span className="tabular-nums">0,14 ineffizient</span>
@@ -63,6 +64,8 @@ export function KampfwertePage() {
             </div>
           </div>
         </div>
+
+        <FleetBuilder />
       </div>
     </main>
   );

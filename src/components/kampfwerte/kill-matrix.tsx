@@ -1,5 +1,5 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
-import { formatNumber, formatRatio, formatShare, ratioHue } from "@/components/kampfwerte/format";
+import { formatNumber, formatRatio, formatShare, ratioStyle } from "@/components/kampfwerte/format";
 import { combatUnits, valueRatio, type CombatUnit } from "@/gn-data/kampfwerte";
 import { cn } from "@/lib/utils/cn";
 
@@ -28,13 +28,19 @@ export function KillMatrix() {
       <table className="w-full border-collapse text-xs tabular-nums">
         <thead>
           <tr>
-            <th colSpan={2} className="sticky left-0 z-10 bg-background" />
+            <th
+              colSpan={2}
+              rowSpan={2}
+              className="sticky left-0 z-10 border-b border-border bg-background pr-3 pb-2.5 pl-9 text-left align-bottom text-[10px] font-medium tracking-wider whitespace-nowrap text-muted-foreground uppercase"
+            >
+              Schütze ↓ · Ziel →
+            </th>
             {GROUPS.map((group, i) => (
               <th
                 key={group.kind}
                 colSpan={combatUnits.filter((u) => u.kind === group.kind).length}
                 className={cn(
-                  "px-2 pt-2.5 pb-1 text-center text-[10px] font-medium tracking-wider text-muted-foreground uppercase",
+                  "px-2 pt-3 pb-1.5 text-center text-[10px] font-medium tracking-wider text-muted-foreground uppercase",
                   i > 0 && DIVIDER_LEFT,
                 )}
               >
@@ -43,17 +49,11 @@ export function KillMatrix() {
             ))}
           </tr>
           <tr>
-            <th
-              colSpan={2}
-              className="sticky left-0 z-10 border-b border-border bg-background px-3 pb-2 text-left text-[10px] font-medium tracking-wider text-muted-foreground uppercase"
-            >
-              Schütze ↓ · Ziel →
-            </th>
             {combatUnits.map((target, i) => (
               <th
                 key={target.name}
                 className={cn(
-                  "border-b border-border px-1 pb-2 text-center text-[11px] font-medium",
+                  "border-b border-border px-1 pb-2.5 text-center text-[11px] font-medium",
                   startsGroup(combatUnits, i) && DIVIDER_LEFT,
                 )}
               >
@@ -92,7 +92,6 @@ export function KillMatrix() {
                     return <td key={target.name} className={cn("p-0.5", divider)} />;
                   }
                   const ratio = valueRatio(shooter, shot);
-                  const hue = ratioHue(ratio);
                   return (
                     <td key={target.name} className={cn("p-0.5", divider)}>
                       <Tooltip>
@@ -100,10 +99,7 @@ export function KillMatrix() {
                           render={
                             <div
                               className="flex min-w-14 cursor-default flex-col items-center rounded-sm px-1 py-1 leading-tight"
-                              style={{
-                                backgroundColor: `oklch(0.6 0.14 ${hue} / 0.22)`,
-                                color: `oklch(0.86 0.13 ${hue})`,
-                              }}
+                              style={ratioStyle(ratio)}
                             />
                           }
                         >
