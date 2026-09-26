@@ -1,8 +1,10 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
 import App from "@/App";
 import { AppShell } from "@/components/app-shell";
 import { KampfwertePage } from "@/components/kampfwerte/kampfwerte-page";
-import { ScanPage } from "@/components/scan/scan-page";
+import { NewsScanPage } from "@/components/scan/news-scan-page";
+import { PointsAnalysisPage } from "@/components/scan/points-analysis-page";
+import { ScanLayout } from "@/components/scan/scan-layout";
 
 const rootRoute = createRootRoute({ component: AppShell });
 
@@ -22,10 +24,35 @@ const kampfwerteRoute = createRoute({
 const scanRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/scan",
-  component: ScanPage,
+  component: ScanLayout,
 });
 
-const routeTree = rootRoute.addChildren([startplanRoute, kampfwerteRoute, scanRoute]);
+/** /scan öffnet die Newsscan-Analyse. */
+const scanIndexRoute = createRoute({
+  getParentRoute: () => scanRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/scan/news", replace: true });
+  },
+});
+
+const scanNewsRoute = createRoute({
+  getParentRoute: () => scanRoute,
+  path: "news",
+  component: NewsScanPage,
+});
+
+const scanSektorRoute = createRoute({
+  getParentRoute: () => scanRoute,
+  path: "sektor",
+  component: PointsAnalysisPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  startplanRoute,
+  kampfwerteRoute,
+  scanRoute.addChildren([scanIndexRoute, scanNewsRoute, scanSektorRoute]),
+]);
 
 export const router = createRouter({ routeTree });
 

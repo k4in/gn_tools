@@ -9,7 +9,7 @@ import type { NewsEntry, NewsScan } from "@/lib/scan-parser";
  * Flugzeit. Der erste Kampftick ist der Tick nach der Ankunft.
  */
 
-/** Einträge, die älter sind als das (gemessen an der Zeitmarke des Scans), zählen nicht. */
+/** Einträge, die älter sind als das (gemessen an „jetzt“), zählen nicht. */
 export const NEWS_WINDOW_MS = 10 * 60 * 60 * 1000;
 /** Flugzeit eines Angriffs in Ticks, ohne Ausnahme. */
 export const ATTACK_FLIGHT_TICKS = 30;
@@ -17,10 +17,9 @@ export const ATTACK_FLIGHT_TICKS = 30;
 export const DEFENSE_FLIGHT_TICKS_SAME_GALAXY = 18;
 export const DEFENSE_FLIGHT_TICKS_OTHER_GALAXY = 20;
 
-/** Höchstdauer im Orbit (Kampfticks): Angreifer je Flotte, Verteidiger aus gleicher bzw. anderer Galaxie. */
+/** Höchstdauer im Orbit (Kampfticks): Angreifer je Flotte, Verteidiger unabhängig von der Flugzeit. */
 export const MAX_ATTACK_COMBAT_TICKS = 5;
-export const MAX_DEFENSE_TICKS_SAME_GALAXY = 29;
-export const MAX_DEFENSE_TICKS_OTHER_GALAXY = 25;
+export const MAX_DEFENSE_COMBAT_TICKS = 20;
 
 /**
  * Artilleriebeschuss: Geschütze, die eine Angriffsflotte schon in den Ticks vor
@@ -55,7 +54,6 @@ export type Fleet = {
   /** Ticks im Orbit: vom Nutzer eingestellt, sonst das Maximum. */
   combatTicks: number;
   maxCombatTicks: number;
-  recalled: boolean;
 };
 
 export type Retreat = {
@@ -76,9 +74,10 @@ export type Retreat = {
 
 export type NewsAnalysis = {
   reference: number;
-  /** Einträge innerhalb der letzten 10 Stunden vor der Zeitmarke. */
+  /** Einträge innerhalb der letzten 10 Stunden vor „jetzt“. */
   entries: NewsEntry[];
   ignoredCount: number;
+  /** Flotten ohne die zurückgezogenen; die tauchen nur noch in `retreats` auf. */
   fleets: Fleet[];
   retreats: Retreat[];
 };
@@ -94,7 +93,8 @@ export function fleetLabel(fleet: Pick<Fleet, "player" | "fleet">) {
 /**
  * Wertet einen Newsscan aus. `fleetTicks` enthält je Flotten-ID die eingestellte
  * Dauer im Orbit, `retreatChoices` für Rückzüge mit mehreren möglichen Flotten
- * die vom Nutzer gewählten Flotten-IDs.
+ * die vom Nutzer gewählten Flotten-IDs. Bezugspunkt ist immer „jetzt“, eine
+ * Zeitmarke im Text spielt keine Rolle.
  */
 export function analyzeNews(
   news: NewsScan,
@@ -102,7 +102,7 @@ export function analyzeNews(
   retreatChoices: Record<string, string[]>,
   now = Date.now(),
 ): NewsAnalysis {
-  const reference = news.time ?? now;
+  const reference = now;
   const entries = news.entries
     .filter((e) => e.time >= reference - NEWS_WINDOW_MS && e.time <= reference)
     .sort((a, b) => a.time - b.time);
@@ -119,12 +119,7 @@ export function analyzeNews(
           : sameGalaxy
             ? DEFENSE_FLIGHT_TICKS_SAME_GALAXY
             : DEFENSE_FLIGHT_TICKS_OTHER_GALAXY;
-      const maxCombatTicks =
-        role === "attacker"
-          ? MAX_ATTACK_COMBAT_TICKS
-          : sameGalaxy
-            ? MAX_DEFENSE_TICKS_SAME_GALAXY
-            : MAX_DEFENSE_TICKS_OTHER_GALAXY;
+      const maxCombatTicks = role === "attacker" ? MAX_ATTACK_COMBAT_TICKS : MAX_DEFENSE_COMBAT_TICKS;
       const id = `${coordsKey(e)}#${e.fleet ?? "-"}@${e.time}`;
       const chosen = fleetTicks[id];
       const combatTicks =
@@ -146,7 +141,6 @@ export function analyzeNews(
         lastCombat: firstCombat + (combatTicks - 1) * TICK_MS,
         combatTicks,
         maxCombatTicks,
-        recalled: false,
       };
     });
 
@@ -187,32 +181,64 @@ export function analyzeNews(
     };
   });
 
-  for (const fleet of fleets) fleet.recalled = recalledIds.has(fleet.id);
-
   return {
     reference,
     entries,
     ignoredCount: news.entries.length - entries.length,
-    fleets,
+    fleets: fleets.filter((f) => !recalledIds.has(f.id)),
     retreats,
   };
 }
 
 /**
- * Ende des Kampfes: wenn die letzte (nicht zurückgerufene) Angriffsflotte den
+ * Ende des Kampfes: wenn die letzte Angriffsflotte den
  * Orbit verlässt. Verteidiger, die danach noch bleiben, spielen keine Rolle.
  */
 export function combatEnd(analysis: NewsAnalysis): number | null {
-  const attackers = analysis.fleets.filter((f) => f.role === "attacker" && !f.recalled);
+  const attackers = analysis.fleets.filter((f) => f.role === "attacker");
   if (attackers.length === 0) return null;
   return Math.max(...attackers.map((f) => f.lastCombat + TICK_MS));
 }
 
-/** Erster Kampftick: wenn die erste (nicht zurückgerufene) Angriffsflotte kämpft. */
+/** Erster Kampftick: wenn die erste Angriffsflotte kämpft. */
 export function combatStart(analysis: NewsAnalysis): number | null {
-  const attackers = analysis.fleets.filter((f) => f.role === "attacker" && !f.recalled);
+  const attackers = analysis.fleets.filter((f) => f.role === "attacker");
   if (attackers.length === 0) return null;
   return Math.min(...attackers.map((f) => f.firstCombat));
+}
+
+/**
+ * Rechtzeitig: kämpft ab dem ersten Kampftick der Angriffsflotte mit. Verspätet:
+ * verpasst mindestens deren ersten Tick, kämpft aber noch mit. Zu spät: kommt erst
+ * an, wenn die Angriffsflotte wieder weg ist.
+ */
+export type DefenseTiming = "onTime" | "late" | "tooLate";
+
+export type DefenseDeadline = {
+  flightTicks: number;
+  /** Wer vor diesem Tick abfliegt, kämpft ab dem ersten Kampftick der Flotte mit. */
+  onTimeBefore: number;
+  /** Wer vor diesem Tick abfliegt, kämpft wenigstens im letzten Kampftick der Flotte mit. */
+  lateBefore: number;
+  /** Was passiert, wenn man jetzt abfliegt. */
+  timing: DefenseTiming;
+};
+
+/**
+ * Bis wann ein Verteidiger mit der angegebenen Flugzeit abfliegen muss, um gegen
+ * eine Angriffsflotte zu kämpfen. Abflug zählt wie bei den Flotten ab dem letzten
+ * vollen Tick, erster Kampftick ist der Tick nach der Ankunft.
+ */
+export function defenseDeadline(
+  attacker: Pick<Fleet, "firstCombat" | "lastCombat">,
+  flightTicks: number,
+  now: number,
+): DefenseDeadline {
+  const onTimeBefore = attacker.firstCombat - flightTicks * TICK_MS;
+  const lateBefore = attacker.lastCombat - flightTicks * TICK_MS;
+  const timing: DefenseTiming =
+    now < onTimeBefore ? "onTime" : now < lateBefore ? "late" : "tooLate";
+  return { flightTicks, onTimeBefore, lateBefore, timing };
 }
 
 export const NEWS_TICK_MS = TICK_MS;

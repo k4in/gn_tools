@@ -1,19 +1,25 @@
 import type { ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Input } from "@/components/shadcn/input";
+import { Separator } from "@/components/shadcn/separator";
 import {
   ARTILLERY,
   ARTILLERY_TICKS,
+  DEFENSE_FLIGHT_TICKS_OTHER_GALAXY,
+  DEFENSE_FLIGHT_TICKS_SAME_GALAXY,
   NEWS_TICK_MS,
   analyzeNews,
   combatEnd,
   combatStart,
   coordsKey,
+  defenseDeadline,
   fleetLabel,
+  type DefenseTiming,
   type Fleet,
   type NewsAnalysis,
 } from "@/lib/news-analysis";
 import type { NewsScan } from "@/lib/scan-parser";
+import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils/cn";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -26,6 +32,14 @@ function formatClock(time: number) {
 function formatDateTime(time: number) {
   const d = new Date(time);
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** „1:05 h“ bzw. „22 min“, angefangene Minuten aufgerundet. */
+function formatDuration(ms: number) {
+  const total = Math.max(0, Math.ceil(ms / 60_000));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h > 0 ? `${h}:${pad(m)} h` : `${m} min`;
 }
 
 /** Rollenfarben: Angreifer grün, Verteidiger rot (destructive). */
@@ -62,7 +76,6 @@ function OrbitInput({ fleet, onChange }: { fleet: Fleet; onChange: (ticks: numbe
         min={1}
         max={fleet.maxCombatTicks}
         value={fleet.combatTicks}
-        disabled={fleet.recalled}
         aria-label={`Ticks im Orbit für ${fleetLabel(fleet)}`}
         onChange={(event) => {
           const n = Math.floor(Number(event.target.value));
@@ -75,12 +88,19 @@ function OrbitInput({ fleet, onChange }: { fleet: Fleet; onChange: (ticks: numbe
   );
 }
 
-/** Flotten mit Ankunft, Kampfzeit und einstellbarer Dauer im Orbit. */
+/**
+ * Flotten einer Seite mit Ankunft, Kampfzeit und einstellbarer Dauer im Orbit;
+ * bei Angreifern zusätzlich, bis wann sie deffbar sind.
+ */
 function FleetTable({
   fleets,
+  attackers,
+  now,
   onTicksChange,
 }: {
   fleets: Fleet[];
+  attackers: boolean;
+  now: number;
   onTicksChange: (fleetId: string, ticks: number) => void;
 }) {
   return (
@@ -91,21 +111,32 @@ function FleetTable({
           <th className="py-1 text-left font-normal">Ankunft</th>
           <th className="py-1 text-left font-normal">Kampf</th>
           <th className="py-1 text-left font-normal">Ticks im Orbit</th>
+          {attackers && DEFENSE_TYPES.map((d) => (
+            <th key={d.label} className="py-1 text-left font-normal" title={`Abflugfenster für ${d.label} (${d.flightTicks} Ticks Flugzeit)`}>
+              {d.header}
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody>
         {fleets.map((f) => (
           <tr key={f.id} className="border-b border-border/50 last:border-b-0">
-            <td className={cn("py-1.5", f.recalled && "opacity-40")}>
-              <FleetName fleet={f} className={cn(f.recalled && "line-through")} />
+            <td className="py-1.5">
+              <FleetName fleet={f} />
             </td>
-            <td className={cn("py-1.5", f.recalled && "opacity-40")}>{formatClock(f.arrival)}</td>
-            <td className={cn("py-1.5", f.recalled && "opacity-40")}>
-              {f.recalled ? "zurückgezogen" : `${formatClock(f.firstCombat)}–${formatClock(f.lastCombat)}`}
+            <td className="py-1.5">{formatClock(f.arrival)}</td>
+            <td className="py-1.5">
+              {formatClock(f.firstCombat)}–{formatClock(f.lastCombat)}
             </td>
             <td className="py-1.5">
               <OrbitInput fleet={f} onChange={(ticks) => onTicksChange(f.id, ticks)} />
             </td>
+            {attackers &&
+              DEFENSE_TYPES.map((d) => (
+                <td key={d.label} className="py-1.5">
+                  <DeadlineCell attacker={f} flightTicks={d.flightTicks} now={now} />
+                </td>
+              ))}
           </tr>
         ))}
       </tbody>
@@ -165,15 +196,12 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
         const visible = to > from;
         return (
           <div key={f.id} className="flex items-stretch">
-            <div
-              className={cn("flex w-56 shrink-0 items-center pr-3 text-[11px]", f.recalled && "opacity-40")}
-              title={fleetLabel(f)}
-            >
-              <FleetName fleet={f} className={cn("block min-w-0 truncate", f.recalled && "line-through")} />
+            <div className="flex w-56 shrink-0 items-center pr-3 text-[11px]" title={fleetLabel(f)}>
+              <FleetName fleet={f} className="block min-w-0 truncate" />
             </div>
-            <div className={cn("relative h-8 flex-1", f.recalled && "opacity-40")}>
+            <div className="relative h-8 flex-1">
               {background}
-              {f.role === "attacker" && !f.recalled
+              {f.role === "attacker"
                 ? ARTILLERY.map((a) => {
                     const t = f.firstCombat - a.ticksBefore * NEWS_TICK_MS;
                     return (
@@ -233,6 +261,78 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
   );
 }
 
+function Stat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <SectionLabel>{label}</SectionLabel>
+      <span className="text-sm font-medium tabular-nums">{children}</span>
+    </div>
+  );
+}
+
+/** Rot: noch rechtzeitig verteidigbar, gelb: nur noch verspätet, grün: nicht mehr. */
+const TIMING_CLASS: Record<DefenseTiming, string> = {
+  onTime: "text-destructive",
+  late: "text-yellow-300",
+  tooLate: "text-green-500",
+};
+
+const TIMING_HINT: Record<DefenseTiming, string> = {
+  onTime: "Bei Abflug jetzt noch rechtzeitig zum ersten Kampftick.",
+  late: "Bei Abflug jetzt verpasst die Verteidigung den ersten Kampftick, kämpft aber noch mit.",
+  tooLate: "Bei Abflug jetzt ist die Angriffsflotte schon weg.",
+};
+
+const DEFENSE_TYPES = [
+  { label: "Galaxie-Deff", header: "Deffbar bis (Galaxie)", flightTicks: DEFENSE_FLIGHT_TICKS_SAME_GALAXY },
+  { label: "Meta-Deff", header: "Deffbar bis (Meta)", flightTicks: DEFENSE_FLIGHT_TICKS_OTHER_GALAXY },
+] as const;
+
+/**
+ * Abflugfenster gegen eine Angriffsflotte: vom Beginn des letzten Ticks, der noch
+ * rechtzeitig ankommt, bis zum Ende des letzten Ticks, der noch mitkämpft. Ein
+ * Abflug zählt ab dem Tick, in dem er liegt; Tick-Ende ist dessen letzte Minute.
+ */
+function DeadlineCell({ attacker, flightTicks, now }: { attacker: Fleet; flightTicks: number; now: number }) {
+  const deadline = defenseDeadline(attacker, flightTicks, now);
+  const onTimeFrom = formatClock(deadline.onTimeBefore - NEWS_TICK_MS);
+  const onTimeTo = formatClock(deadline.onTimeBefore - 60_000);
+  const late = formatClock(deadline.lateBefore - 60_000);
+  return (
+    <span
+      className={TIMING_CLASS[deadline.timing]}
+      title={`Abflug bis ${onTimeTo} (letzter Tick ${onTimeFrom}–${onTimeTo}): ab dem ersten Kampftick dabei. Bis ${late}: kämpft noch mit. ${TIMING_HINT[deadline.timing]}`}
+    >
+      {onTimeFrom}–{late}
+    </span>
+  );
+}
+
+/** Aktuelle Uhrzeit, erster Kampftick und wie viele Ticks bzw. wie lange es bis dahin noch dauert. */
+function CombatClock({ now, start, end }: { now: number; start: number | null; end: number | null }) {
+  // Kampfbeginn liegt auf einem Tick; bis dahin sind es so viele Tickwechsel.
+  const ticksLeft = start !== null ? Math.ceil((start - now) / NEWS_TICK_MS) : 0;
+  const status =
+    start === null ? (
+      <span className="text-muted-foreground">kein Angriff</span>
+    ) : end !== null && now >= end ? (
+      <span className="text-muted-foreground">Kampf vorbei</span>
+    ) : (
+      <span className="text-destructive">Kampf läuft</span>
+    );
+  const upcoming = start !== null && now < start;
+  return (
+    <div className="flex flex-wrap justify-between gap-x-10 gap-y-3 rounded-md border border-border px-4 py-3">
+      <Stat label="Aktuelle Uhrzeit">{formatDateTime(now)}</Stat>
+      <Stat label="Erster Kampftick">
+        {start !== null ? formatDateTime(start) : <span className="text-muted-foreground">–</span>}
+      </Stat>
+      <Stat label="Ticks bis Kampfbeginn">{upcoming ? ticksLeft : status}</Stat>
+      <Stat label="Zeit bis Kampfbeginn">{upcoming ? formatDuration(start - now) : status}</Stat>
+    </div>
+  );
+}
+
 export type NewsViewState = {
   /** Ticks im Orbit je Flotten-ID; fehlt ein Eintrag, gilt das Maximum. */
   fleetTicks: Record<string, number>;
@@ -248,13 +348,16 @@ export function NewsAnalysisView({
   state: NewsViewState;
   onChange: (next: NewsViewState) => void;
 }) {
-  const analysis = analyzeNews(news, state.fleetTicks, state.retreatChoices);
+  const now = useNow().getTime();
+  const analysis = analyzeNews(news, state.fleetTicks, state.retreatChoices, now);
   const openRetreats = analysis.retreats.filter((r) => !r.automatic && r.candidates.length > 1);
   const start = combatStart(analysis);
   const end = combatEnd(analysis);
 
   return (
     <div className="flex flex-col gap-5">
+      <CombatClock now={now} start={start} end={end} />
+
       {openRetreats.map((r) => (
         <div
           key={r.id}
@@ -302,16 +405,6 @@ export function NewsAnalysisView({
       ) : (
         <>
           <section>
-            <SectionLabel>Flotten</SectionLabel>
-            <FleetTable
-              fleets={analysis.fleets}
-              onTicksChange={(fleetId, ticks) =>
-                onChange({ ...state, fleetTicks: { ...state.fleetTicks, [fleetId]: ticks } })
-              }
-            />
-          </section>
-
-          <section>
             <SectionLabel>
               Zeitleiste
               {start !== null && end !== null ? (
@@ -322,6 +415,27 @@ export function NewsAnalysisView({
             </SectionLabel>
             <Timeline analysis={analysis} />
           </section>
+
+          {/* Über die ganze Breite: hebt das p-6 des Auswertungsbereichs auf. */}
+          <Separator className="-mx-6 data-horizontal:w-auto" />
+
+          {(["attacker", "defender"] as const).map((role) => {
+            const fleets = analysis.fleets.filter((f) => f.role === role);
+            if (fleets.length === 0) return null;
+            return (
+              <section key={role}>
+                <SectionLabel>{role === "attacker" ? "Angreifende Flotten" : "Verteidigende Flotten"}</SectionLabel>
+                <FleetTable
+                  fleets={fleets}
+                  attackers={role === "attacker"}
+                  now={now}
+                  onTicksChange={(fleetId, ticks) =>
+                    onChange({ ...state, fleetTicks: { ...state.fleetTicks, [fleetId]: ticks } })
+                  }
+                />
+              </section>
+            );
+          })}
         </>
       )}
     </div>

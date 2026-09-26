@@ -656,25 +656,10 @@ export function targetKey(target: ScanTarget) {
   return `${target.galaxy}:${target.planet}`;
 }
 
-export type ScanMode = "resources" | "news";
-
 /**
- * Der erste Scan im Text bestimmt die Auswertung: ein Newsscan führt zur
- * Flotten-Auswertung, alles andere zur Rohstoff-Auswertung.
- */
-export function scanMode(scans: Scan[]): ScanMode {
-  return scans[0]?.kind === "news" ? "news" : "resources";
-}
-
-/** Scans, die in der jeweiligen Auswertung zählen. */
-export function scansForMode(scans: Scan[], mode: ScanMode): Scan[] {
-  return scans.filter((s) => (mode === "news") === (s.kind === "news"));
-}
-
-/**
- * Es wird immer nur ein Spieler ausgewertet: in der Rohstoff-Auswertung der mit
- * dem ersten Sektorscan (ohne Sektorscan vorerst der des ersten Scans), in der
- * News-Auswertung der des ersten Newsscans.
+ * Es wird immer nur ein Spieler ausgewertet: in der Punkteanalyse der mit dem
+ * ersten Sektorscan (ohne Sektorscan vorerst der des ersten Scans), in der
+ * Newsscan-Analyse der des ersten Newsscans.
  */
 export function primaryTargetKey(scans: Scan[]): string | null {
   const first = scans.find((s) => s.kind === "sector" || s.kind === "news") ?? scans[0];

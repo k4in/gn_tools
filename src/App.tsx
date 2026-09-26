@@ -46,6 +46,7 @@ import {
 import { TooltipProvider } from "@/components/shadcn/tooltip";
 import { byName } from "@/lib/calculateFastestWayToGoal";
 import { ASTEROID_COST } from "@/lib/calculateFastestWayToGoal";
+import { useNow } from "@/lib/use-now";
 import {
   parseHistoryWindow,
   type HistoryWindow,
@@ -701,11 +702,7 @@ export default function App() {
     [plan],
   );
 
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  const now = useNow();
 
   const currentTick = computeCurrentTick(startCfg, now);
   const nextAction = useMemo(() => {

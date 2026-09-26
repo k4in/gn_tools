@@ -36,7 +36,8 @@ export function AppRail() {
                 <Link
                   to={tool.to}
                   aria-label={tool.label}
-                  activeOptions={{ exact: true }}
+                  // Unterseiten (z. B. /scan/news) markieren ihr Tool mit; nur „/“ muss exakt passen.
+                  activeOptions={{ exact: tool.to === "/" }}
                   className={cn(
                     ITEM_CLASS,
                     "hover:bg-muted/60 hover:text-foreground",
