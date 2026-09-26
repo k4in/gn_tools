@@ -146,7 +146,7 @@ function tickMinutesOf(startCfg: StartConfig) {
   return startCfg.tick_minutes > 0 ? startCfg.tick_minutes : defaults.tick_minutes;
 }
 
-function maxTicksOf(startCfg: StartConfig) {
+export function maxTicksOf(startCfg: StartConfig) {
   return startCfg.max_ticks > 0 ? startCfg.max_ticks : defaults.max_ticks;
 }
 

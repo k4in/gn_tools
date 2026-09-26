@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/shadcn/button";
 import {
   Dialog,
@@ -37,6 +37,7 @@ import {
   roidsOverlap,
   type PlanEntry,
 } from "@/lib/calculateFastestWayToGoal";
+import type { PrerequisitePlan } from "@/lib/plan-prerequisites";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 import type { Defense } from "@/gn-data/defense";
 import type { Ship } from "@/gn-data/ships";
@@ -160,6 +161,8 @@ export type PlanEntryDialogSubmit = {
   targetMet?: number;
   targetKris?: number;
   duration?: number;
+  /** Rückwärts eingeplante Voraussetzungen, die vor dem Eintrag eingefügt werden. */
+  prerequisites?: PlanEntry[];
 };
 
 export type PlanEntryDialogProps = {
@@ -173,6 +176,10 @@ export type PlanEntryDialogProps = {
   onRemove?: () => void;
   /** Dynamic max/count when tick changes (units/recon). */
   resolveMaxCount?: (startTick: number) => number;
+  /** Fehlende Voraussetzungen eines Schiffs/Geschützes; leer, wenn nichts fehlt oder die Funktion nicht verfügbar ist. */
+  missingPrerequisites?: string[];
+  /** Plant die fehlenden Voraussetzungen rückwärts zum Start-Tick ein. */
+  resolvePrerequisites?: (startTick: number, count: number) => PrerequisitePlan;
   resolveEconomyAtTick?: (startTick: number) => {
     freeSlots: number;
     asteroids: number;
@@ -192,6 +199,8 @@ export function PlanEntryDialog({
   onSubmit,
   onRemove,
   resolveMaxCount,
+  missingPrerequisites = [],
+  resolvePrerequisites,
   resolveEconomyAtTick,
 }: PlanEntryDialogProps) {
   const [startTick, setStartTick] = useState(0);
@@ -208,6 +217,7 @@ export function PlanEntryDialog({
   const [targetMet, setTargetMet] = useState(0);
   const [targetKris, setTargetKris] = useState(0);
   const [duration, setDuration] = useState(ROID_DURATION_MIN);
+  const [withPrerequisites, setWithPrerequisites] = useState(loadWithPrerequisites);
 
   useEffect(() => {
     if (!open || !target) return;
@@ -385,6 +395,22 @@ export function PlanEntryDialog({
     };
   }, [target, liveEconomy, asteroidCount, extractorMetCount, extractorKrisCount]);
 
+  // Die Rückwärtsplanung simuliert viel; beim Tippen mit leichter Verzögerung rechnen.
+  const deferredTick = useDeferredValue(startTick);
+  const deferredCount = useDeferredValue(count);
+  const canPlanPrerequisites = missingPrerequisites.length > 0 && resolvePrerequisites !== undefined;
+  const prerequisitePlan = useMemo(
+    () =>
+      open && withPrerequisites && canPlanPrerequisites
+        ? resolvePrerequisites!(deferredTick, Math.max(1, deferredCount))
+        : null,
+    [open, withPrerequisites, canPlanPrerequisites, resolvePrerequisites, deferredTick, deferredCount],
+  );
+  const prerequisitesPending =
+    prerequisitePlan !== null && (deferredTick !== startTick || deferredCount !== count);
+  const prerequisitesBlocking =
+    withPrerequisites && canPlanPrerequisites && (prerequisitePlan?.status === "failed" || prerequisitesPending);
+
   if (!target) return null;
 
   const title = (() => {
@@ -462,10 +488,15 @@ export function PlanEntryDialog({
         ) ?? null
       : null;
 
+  const prerequisites =
+    withPrerequisites && canPlanPrerequisites && prerequisitePlan?.status === "ok"
+      ? prerequisitePlan.entries
+      : undefined;
+
   const handleSubmit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || prerequisitesBlocking) return;
     if (target.kind === "tech") {
-      onSubmit({ startTick });
+      onSubmit({ startTick, prerequisites });
     } else if (target.kind === "economy") {
       onSubmit({
         startTick,
@@ -504,7 +535,7 @@ export function PlanEntryDialog({
         asteroids: Math.max(0, asteroidCount),
       });
     } else {
-      onSubmit({ startTick, count: Math.max(1, count) });
+      onSubmit({ startTick, count: Math.max(1, count), prerequisites });
     }
     onOpenChange(false);
   };
@@ -1062,6 +1093,21 @@ export function PlanEntryDialog({
             </p>
           )}
 
+          {canPlanPrerequisites && target.kind === "unit" && (
+            <PrerequisitesSection
+              missing={missingPrerequisites}
+              checked={withPrerequisites}
+              onCheckedChange={(checked) => {
+                setWithPrerequisites(checked);
+                saveWithPrerequisites(checked);
+              }}
+              plan={prerequisitePlan}
+              pending={prerequisitesPending}
+              startTick={startTick}
+              onUseTick={setStartTick}
+            />
+          )}
+
           {target.kind === "economy" && economyCosts && (
             <p className="text-[11px] text-muted-foreground tabular-nums">
               Max. Extraktoren bei Tick {startTick} (Slots + Metall, nach Asteroiden-Kosten):{" "}
@@ -1089,13 +1135,119 @@ export function PlanEntryDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Abbrechen
             </Button>
-            <Button type="button" disabled={!canSubmit} onClick={handleSubmit}>
+            <Button type="button" disabled={!canSubmit || prerequisitesBlocking} onClick={handleSubmit}>
               {mode === "edit" ? "Speichern" : "Hinzufügen"}
             </Button>
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const PREREQUISITES_KEY = "gn_tool.prerequisites";
+
+/** Letzte Wahl der Checkbox „Techtree rückwärts einplanen“. */
+function loadWithPrerequisites(): boolean {
+  try {
+    return localStorage.getItem(PREREQUISITES_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveWithPrerequisites(checked: boolean) {
+  try {
+    localStorage.setItem(PREREQUISITES_KEY, checked ? "1" : "0");
+  } catch {
+    // ignorieren
+  }
+}
+
+const PREREQUISITE_FAILURE_LABEL: Record<Extract<PrerequisitePlan, { status: "failed" }>["reason"], string> = {
+  time: "Zu wenig Zeit",
+  resources: "Rohstoffe reichen nicht",
+  "existing-late": "Eintrag im Plan zu spät",
+};
+
+/** Checkbox plus Vorschau der rückwärts eingeplanten Voraussetzungen. */
+function PrerequisitesSection({
+  missing,
+  checked,
+  onCheckedChange,
+  plan,
+  pending,
+  startTick,
+  onUseTick,
+}: {
+  missing: string[];
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  plan: PrerequisitePlan | null;
+  pending: boolean;
+  startTick: number;
+  onUseTick: (tick: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-xs">
+      <label className="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onCheckedChange(e.target.checked)}
+          className="size-3.5 accent-primary"
+        />
+        <span className="font-medium">Techtree rückwärts einplanen</span>
+        <span className="text-muted-foreground">
+          ({missing.length} {missing.length === 1 ? "Voraussetzung fehlt" : "Voraussetzungen fehlen"})
+        </span>
+      </label>
+
+      {!checked ? null : pending || !plan ? (
+        <p className="text-muted-foreground">Wird berechnet …</p>
+      ) : plan.status === "failed" ? (
+        <div className="flex flex-col gap-2 text-amber-500">
+          <p>
+            <span className="font-medium">
+              {PREREQUISITE_FAILURE_LABEL[plan.reason]} für Tick {startTick}:
+            </span>{" "}
+            {plan.detail}
+          </p>
+          {plan.earliestTick !== null ? (
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={() => onUseTick(plan.earliestTick!)}>
+                Frühestens Tick {plan.earliestTick} übernehmen
+              </Button>
+            </div>
+          ) : (
+            <p>Kein passender Tick gefunden.</p>
+          )}
+        </div>
+      ) : (
+        <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
+          <dt className="col-span-2 pt-1 text-[11px] text-muted-foreground">Neu eingeplant</dt>
+          {plan.added.map((a) => (
+            <div key={a.name} className="contents">
+              <dt>{a.name}</dt>
+              <dd className="text-right text-muted-foreground">
+                T{a.startTick} → T{a.endTick}
+              </dd>
+            </div>
+          ))}
+          {plan.existing.length > 0 ? (
+            <>
+              <dt className="col-span-2 pt-1 text-[11px] text-muted-foreground">Bereits im Plan (unverändert)</dt>
+              {plan.existing.map((e) => (
+                <div key={e.name} className="contents">
+                  <dt className="text-muted-foreground">{e.name}</dt>
+                  <dd className="text-right text-muted-foreground">fertig T{e.finishTick ?? "–"}</dd>
+                </div>
+              ))}
+            </>
+          ) : null}
+        </dl>
+      )}
+    </div>
   );
 }
 

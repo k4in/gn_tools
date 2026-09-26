@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   clonePlanEntries,
   defaults as defaultConfig,
@@ -47,6 +47,11 @@ import { TooltipProvider } from "@/components/shadcn/tooltip";
 import { byName } from "@/lib/calculateFastestWayToGoal";
 import { ASTEROID_COST } from "@/lib/calculateFastestWayToGoal";
 import { useNow } from "@/lib/use-now";
+import {
+  missingPrerequisiteNames,
+  planPrerequisites,
+  prerequisitesAvailable,
+} from "@/lib/plan-prerequisites";
 import {
   parseHistoryWindow,
   type HistoryWindow,
@@ -393,6 +398,18 @@ function parseImportedPlan(text: string): ImportPlanParseResult {
     return { ok: false, error: "Keine gültigen Plan-Einträge gefunden." };
   }
   return { ok: true, plan, taxes: normalizeTaxes(taxesRaw) };
+}
+
+/** Fügt rückwärts eingeplante Voraussetzungen direkt vor einem bestehenden Eintrag ein. */
+function withPrerequisitesBefore(
+  plan: PlanEntry[],
+  entryId: string,
+  prerequisites: PlanEntry[],
+): PlanEntry[] {
+  if (prerequisites.length === 0) return plan;
+  const index = plan.findIndex((e) => e.id === entryId);
+  if (index < 0) return [...plan, ...prerequisites];
+  return [...plan.slice(0, index), ...prerequisites, ...plan.slice(index)];
 }
 
 /** Plan ohne einen Eintrag, z. B. um beim Bearbeiten das freie Budget zu bestimmen. */
@@ -1074,12 +1091,14 @@ export default function App() {
     targetMet?: number;
     targetKris?: number;
     duration?: number;
+    prerequisites?: PlanEntry[];
   }) => {
     if (!dialogTarget) return;
+    const prerequisites = values.prerequisites ?? [];
 
     if (dialogMode === "edit" && editingEntry) {
       updateCurrentPlan((plan) =>
-        plan.map((e) => {
+        withPrerequisitesBefore(plan, editingEntry.id, prerequisites).map((e) => {
           if (e.id !== editingEntry.id) return e;
           if (e.kind === "tech") {
             return { ...e, startTick: values.startTick };
@@ -1183,7 +1202,7 @@ export default function App() {
         startTick: values.startTick,
         count: Math.max(1, values.count ?? 1),
       };
-      updateCurrentPlan((plan) => [...plan, entry]);
+      updateCurrentPlan((plan) => [...plan, ...prerequisites, entry]);
       return;
     }
 
@@ -1323,6 +1342,23 @@ export default function App() {
     });
   };
 
+  // Techtree rückwärts einplanen: nur für Schiffe/Geschütze und erst mit vollständiger Raumstation.
+  const prerequisiteContext = useMemo(() => {
+    if (!dialogOpen || dialogTarget?.kind !== "unit") return null;
+    const cfg =
+      dialogMode === "edit" && editingEntry ? withoutPlanEntry(startCfg, editingEntry.id) : startCfg;
+    if (!prerequisitesAvailable(cfg.plan)) return null;
+    const target = { name: dialogTarget.name, count: 1 };
+    const missing = missingPrerequisiteNames(cfg.plan, target);
+    return missing.length > 0 ? { cfg, target, missing } : null;
+  }, [dialogOpen, dialogTarget, dialogMode, editingEntry, startCfg]);
+  // Stabil halten: App rendert durch die Uhr jede Sekunde, der Dialog soll nicht jedes Mal neu planen.
+  const resolvePrerequisites = useCallback(
+    (tick: number, count: number) =>
+      planPrerequisites(prerequisiteContext!.cfg, { ...prerequisiteContext!.target, count }, tick),
+    [prerequisiteContext],
+  );
+
   return (
     <TooltipProvider>
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
@@ -1447,6 +1483,8 @@ export default function App() {
             }
             return 999;
           }}
+          missingPrerequisites={prerequisiteContext?.missing}
+          resolvePrerequisites={prerequisiteContext ? resolvePrerequisites : undefined}
           resolveEconomyAtTick={(tick) => {
             const info = getMaxExtractorsAtTick(startCfg, tick);
             const snap = getResourcesAtTick(startCfg, tick);
