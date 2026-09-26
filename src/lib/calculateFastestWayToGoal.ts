@@ -2116,14 +2116,9 @@ export function getMaxBuildCountAtTick(
     kris = projected.kris;
   }
 
-  let count = 0;
-  while (met >= cost.met && kris >= cost.kris) {
-    met -= cost.met;
-    kris -= cost.kris;
-    count += 1;
-    if (count >= 999) break;
-  }
-  return count;
+  const byMet = cost.met > 0 ? met / cost.met : Infinity;
+  const byKris = cost.kris > 0 ? kris / cost.kris : Infinity;
+  return Math.max(0, Math.floor(Math.min(byMet, byKris)));
 }
 
 /**

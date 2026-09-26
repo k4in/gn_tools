@@ -420,7 +420,8 @@ export function PlanEntryDialog({
     if (startTick < 0) return false;
     if (target.kind === "tech") return true;
     if (target.kind === "unit" || target.kind === "recon") {
-      return count >= 1 && count <= Math.max(1, liveMax);
+      // Das Maximum ist nur ein Hinweis: reichen die Rohstoffe nicht, startet der Auftrag später.
+      return count >= 1;
     }
     if (target.kind === "economy") {
       const a = Math.max(0, asteroidCount);
@@ -680,7 +681,6 @@ export function PlanEntryDialog({
                     id="plan-count"
                     type="number"
                     min={1}
-                    max={Math.max(1, liveMax)}
                     value={count}
                     onChange={(e) => {
                       const n = Number(e.target.value);
@@ -1055,9 +1055,10 @@ export function PlanEntryDialog({
             )}
           </div>
 
-          {(target.kind === "unit" || target.kind === "recon") && liveMax > 0 && (
+          {(target.kind === "unit" || target.kind === "recon") && (
             <p className="text-[11px] text-muted-foreground tabular-nums">
               Max. bei Tick {startTick}: {liveMax}
+              {count > liveMax ? " · Mehr als die Rohstoffe erlauben, der Auftrag startet später." : null}
             </p>
           )}
 

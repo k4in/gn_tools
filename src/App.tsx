@@ -395,6 +395,11 @@ function parseImportedPlan(text: string): ImportPlanParseResult {
   return { ok: true, plan, taxes: normalizeTaxes(taxesRaw) };
 }
 
+/** Plan ohne einen Eintrag, z. B. um beim Bearbeiten das freie Budget zu bestimmen. */
+function withoutPlanEntry(cfg: StartConfig, entryId: string): StartConfig {
+  return { ...cfg, plan: cfg.plan.filter((e) => e.id !== entryId) };
+}
+
 function normalizeConfig(raw: unknown): StartConfig {
   const base: StartConfig = {
     start_time: defaultConfig.start_time,
@@ -927,9 +932,11 @@ export default function App() {
         cost: { met: 0, kris: 0 },
         dependencies: [],
       };
-      const maxCount = Math.max(
-        entry.count,
-        getMaxBuildCountAtTick(startCfg, "unit", entry.name, entry.startTick),
+      const maxCount = getMaxBuildCountAtTick(
+        withoutPlanEntry(startCfg, entry.id),
+        "unit",
+        entry.name,
+        entry.startTick,
       );
       setDialogTarget({
         kind: "unit",
@@ -943,9 +950,11 @@ export default function App() {
       });
     } else if (entry.kind === "recon") {
       const item = reconByName(entry.name);
-      const maxCount = Math.max(
-        entry.count,
-        getMaxBuildCountAtTick(startCfg, "recon", entry.name, entry.startTick),
+      const maxCount = getMaxBuildCountAtTick(
+        withoutPlanEntry(startCfg, entry.id),
+        "recon",
+        entry.name,
+        entry.startTick,
       );
       setDialogTarget({
         kind: "recon",
@@ -1427,33 +1436,14 @@ export default function App() {
           onRemove={dialogMode === "edit" ? handleDialogRemove : undefined}
           resolveMaxCount={(tick) => {
             if (!dialogTarget) return 1;
-            // When editing, refund this entry's cost into the affordability budget
-            // (simulation still includes the entry, so leftover resources alone undercount).
-            if (dialogTarget.kind === "unit") {
-              const max = getMaxBuildCountAtTick(
-                startCfg,
-                "unit",
-                dialogTarget.name,
-                tick,
-              );
-              const bonus =
-                dialogMode === "edit" && editingEntry?.kind === "unit"
-                  ? editingEntry.count
-                  : 0;
-              return max + bonus;
-            }
-            if (dialogTarget.kind === "recon") {
-              const max = getMaxBuildCountAtTick(
-                startCfg,
-                "recon",
-                dialogTarget.name,
-                tick,
-              );
-              const bonus =
-                dialogMode === "edit" && editingEntry?.kind === "recon"
-                  ? editingEntry.count
-                  : 0;
-              return max + bonus;
+            // Beim Bearbeiten ohne den Eintrag selbst simulieren, sonst fehlen
+            // dessen Kosten im Budget (bzw. zählen doppelt, wenn er später startet).
+            if (dialogTarget.kind === "unit" || dialogTarget.kind === "recon") {
+              const cfg =
+                dialogMode === "edit" && editingEntry
+                  ? withoutPlanEntry(startCfg, editingEntry.id)
+                  : startCfg;
+              return getMaxBuildCountAtTick(cfg, dialogTarget.kind, dialogTarget.name, tick);
             }
             return 999;
           }}
