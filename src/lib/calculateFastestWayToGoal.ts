@@ -3,7 +3,7 @@ import {
   getExtractorYield,
   getRequiredAsteroidAmount,
 } from "@/gn-data/extractor";
-import { defaults, type PlanEntry } from "@/gn-data/plan";
+import { defaults, type PlanEntry, type RoidMulti } from "@/gn-data/plan";
 import {
   evaluateQuests,
   type QuestDef,
@@ -21,7 +21,7 @@ const ships = baseShips.map(withUnitBuildBug);
 const defenses = baseDefenses.map(withUnitBuildBug);
 const utilities = baseUtilities.map((u) => (u.name === "Asteroid" ? u : withUnitBuildBug(u)));
 
-export type { PlanEntry };
+export type { PlanEntry, RoidCoAttacker, RoidMulti } from "@/gn-data/plan";
 
 /** @deprecated use startCfg.tick_minutes / defaults.tick_minutes */
 export const TICK_MINUTES = defaults.tick_minutes;
@@ -613,6 +613,129 @@ export function findOverlappingRoid(
   );
 }
 
+/** Bereinigt die Mehrfach-Angreifer-Daten (z. B. aus localStorage/Import). */
+export function normalizeRoidMulti(raw: unknown): RoidMulti | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as { ownCleptors?: unknown; attackers?: unknown };
+  const int = (v: unknown, min: number, max = Number.MAX_SAFE_INTEGER) =>
+    typeof v === "number" && Number.isFinite(v)
+      ? Math.min(max, Math.max(min, Math.floor(v)))
+      : min;
+  const attackers = Array.isArray(o.attackers)
+    ? o.attackers
+        .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
+        .map((a) => ({
+          startOffset: int(a.startOffset, 0, ROID_DURATION_MAX - 1),
+          duration: int(a.duration, ROID_DURATION_MIN, ROID_DURATION_MAX),
+          cleptors: int(a.cleptors, 0),
+        }))
+    : [];
+  return { ownCleptors: int(o.ownCleptors, 0), attackers };
+}
+
+export type RoidLootPlan = {
+  /** Eigene Beute pro eigenem Angriffs-Tick. */
+  perTick: { met: number; kris: number }[];
+  own: { met: number; kris: number };
+  /** Beute aller Angreifer zusammen. */
+  total: { met: number; kris: number };
+};
+
+/**
+ * Rechnet einen Roid Tick für Tick durch. Pro Tick sind 10% der restlichen Ziel-Exen
+ * (abgerundet) erbeutbar. Ohne `multi` bekommen wir alles (Cleptoren unbegrenzt).
+ * Mit `multi` wird die Beute nach aktiven Cleptoren aufgeteilt; jeder Cleptor, der eine
+ * Exe klaut, wird zerstört. Jeder Anteil wird kaufmännisch gerundet (im Spiel verifiziert:
+ * 18263 vs. 12166 Cleptoren auf 701/947 Exen) — wir zuerst, dann die anderen Angreifer in
+ * Reihenfolge, bis nichts mehr übrig ist.
+ */
+export function computeRoidLoot(
+  targetMet: number,
+  targetKris: number,
+  duration: number,
+  multi?: RoidMulti,
+): RoidLootPlan {
+  let remMet = Math.max(0, Math.floor(targetMet));
+  let remKris = Math.max(0, Math.floor(targetKris));
+  const ticks = clampRoidDuration(duration);
+  const perTick: { met: number; kris: number }[] = [];
+  const own = { met: 0, kris: 0 };
+  const total = { met: 0, kris: 0 };
+
+  // Index 0 = wir, danach die weiteren Angreifer.
+  const cleptors = multi
+    ? [Math.max(0, multi.ownCleptors), ...multi.attackers.map((a) => Math.max(0, a.cleptors))]
+    : [];
+
+  for (let i = 0; i < ticks; i++) {
+    const stealMet = Math.floor(remMet * ROID_STEAL_RATE);
+    const stealKris = Math.floor(remKris * ROID_STEAL_RATE);
+
+    if (!multi) {
+      perTick.push({ met: stealMet, kris: stealKris });
+      own.met += stealMet;
+      own.kris += stealKris;
+      total.met += stealMet;
+      total.kris += stealKris;
+      remMet -= stealMet;
+      remKris -= stealKris;
+      continue;
+    }
+
+    const active = cleptors.map((c, idx) => {
+      if (c <= 0) return 0;
+      if (idx === 0) return c;
+      const a = multi.attackers[idx - 1];
+      return i >= a.startOffset && i < a.startOffset + a.duration ? c : 0;
+    });
+    const sumCleptors = active.reduce((s, c) => s + c, 0);
+    const demand = stealMet + stealKris;
+    if (sumCleptors <= 0 || demand <= 0) {
+      perTick.push({ met: 0, kris: 0 });
+      continue;
+    }
+
+    // Zu wenige Cleptoren: Beute anteilig auf Metall/Kristall kürzen.
+    let poolMet = stealMet;
+    let poolKris = stealKris;
+    if (demand > sumCleptors) {
+      poolMet = Math.min(stealMet, Math.ceil((sumCleptors * stealMet) / demand));
+      poolKris = Math.min(stealKris, sumCleptors - poolMet);
+    }
+    const effMet = poolMet;
+    const effKris = poolKris;
+
+    const got = active.map((c) => {
+      if (c <= 0) return { met: 0, kris: 0 };
+      let m = Math.min(poolMet, Math.round((effMet * c) / sumCleptors));
+      let k = Math.min(poolKris, Math.round((effKris * c) / sumCleptors));
+      // Jeder Cleptor klaut höchstens eine Exe.
+      if (m + k > c) {
+        const over = m + k - c;
+        const cutKris = Math.min(k, over);
+        k -= cutKris;
+        m -= over - cutKris;
+      }
+      poolMet -= m;
+      poolKris -= k;
+      return { met: m, kris: k };
+    });
+
+    got.forEach((g, idx) => {
+      cleptors[idx] -= g.met + g.kris;
+      total.met += g.met;
+      total.kris += g.kris;
+    });
+    remMet -= effMet - poolMet;
+    remKris -= effKris - poolKris;
+    perTick.push(got[0]);
+    own.met += got[0].met;
+    own.kris += got[0].kris;
+  }
+
+  return { perTick, own, total };
+}
+
 /**
  * Max. Extraktoren, die mit aktuellem Metall + Kristall (Asteroiden) finanzierbar sind.
  */
@@ -928,8 +1051,8 @@ type PendingRoid = {
   entryId: string;
   targetMet: number;
   targetKris: number;
-  remainingMet: number;
-  remainingKris: number;
+  /** Eigene Beute pro Angriffs-Tick. */
+  loot: { met: number; kris: number }[];
   desiredTick: number;
   duration: number;
   ticksDone: number;
@@ -1112,8 +1235,7 @@ function simulatePlan(
         entryId: e.id,
         targetMet,
         targetKris,
-        remainingMet: targetMet,
-        remainingKris: targetKris,
+        loot: computeRoidLoot(targetMet, targetKris, e.duration, e.multi).perTick,
         desiredTick: e.startTick,
         duration: clampRoidDuration(e.duration),
         ticksDone: 0,
@@ -1530,10 +1652,10 @@ function simulatePlan(
           if (firstRoidStartTick === null) firstRoidStartTick = tick;
         }
 
-        const stealMet = Math.floor(pending.remainingMet * ROID_STEAL_RATE);
-        const stealKris = Math.floor(pending.remainingKris * ROID_STEAL_RATE);
-        pending.remainingMet -= stealMet;
-        pending.remainingKris -= stealKris;
+        const { met: stealMet, kris: stealKris } = pending.loot[pending.ticksDone] ?? {
+          met: 0,
+          kris: 0,
+        };
         if (stealMet > 0) {
           extractorsMet += stealMet;
           for (let i = 0; i < stealMet; i++) extractorQueue.push("met");

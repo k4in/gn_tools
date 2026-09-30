@@ -1,6 +1,22 @@
 import { balanced } from "@/gn-data/plan-template/balanced";
 import { empty } from "@/gn-data/plan-template/empty";
 
+/** Weiterer Angreifer beim Roid, relativ zum eigenen Angriffsbeginn. */
+export type RoidCoAttacker = {
+  /** Start relativ zum eigenen ersten Angriffs-Tick (0 = gleichzeitig). */
+  startOffset: number;
+  /** Anzahl Ticks, die dieser Angreifer mitroidet. */
+  duration: number;
+  /** Cleptoren dieses Angreifers zu seinem Start. */
+  cleptors: number;
+};
+
+export type RoidMulti = {
+  /** Eigene Cleptoren zu Angriffsbeginn. */
+  ownCleptors: number;
+  attackers: RoidCoAttacker[];
+};
+
 export type PlanEntry =
   | { id: string; kind: "tech"; name: string; startTick: number }
   | { id: string; kind: "unit"; name: string; startTick: number; count: number }
@@ -48,6 +64,8 @@ export type PlanEntry =
       targetKris: number;
       /** Anzahl Angriffs-Ticks (1–10). */
       duration: number;
+      /** Weitere Angreifer gleichzeitig: Beute wird anteilig nach Cleptoren aufgeteilt. */
+      multi?: RoidMulti;
     }
   /** Eigene Extraktoren verlieren (Katastrophe): 10% der eigenen Exen pro Tick. */
   | {

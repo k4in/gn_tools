@@ -35,11 +35,13 @@ import {
   hasTechInPlan,
   missingRequiredTechs,
   newPlanEntryId,
+  normalizeRoidMulti,
   normalizeTaxes,
   reconByName,
   removePlanEntryCascade,
   unitByName,
   type PlanEntry,
+  type RoidMulti,
   type StartConfig,
   type TaxSegment,
 } from "@/lib/calculateFastestWayToGoal";
@@ -150,6 +152,9 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       o.targetMet = met;
       o.targetKris = kris;
       o.duration = Math.min(10, Math.max(1, Math.floor(duration)));
+      const multi = normalizeRoidMulti(o.multi);
+      if (multi) o.multi = multi;
+      else delete o.multi;
       return met > 0 || kris > 0;
     }
     case "catastrophe": {
@@ -313,6 +318,7 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
         targetMet: Math.max(0, Math.floor(e.targetMet)),
         targetKris: Math.max(0, Math.floor(e.targetKris)),
         duration: Math.min(10, Math.max(1, Math.floor(e.duration))),
+        ...(e.multi ? { multi: normalizeRoidMulti(e.multi) } : {}),
       });
       continue;
     }
@@ -876,7 +882,7 @@ export default function App() {
       defaultTick: defaultAddTick(inspectTick, currentTick),
       defaultTargetMet: 0,
       defaultTargetKris: 0,
-      defaultDuration: 1,
+      defaultDuration: 5,
       occupiedRoids: occupiedRoids(),
     });
     setDialogOpen(true);
@@ -1038,6 +1044,7 @@ export default function App() {
         defaultTargetMet: entry.targetMet,
         defaultTargetKris: entry.targetKris,
         defaultDuration: entry.duration,
+        defaultMulti: entry.multi,
         occupiedRoids: occupiedRoids(entry.id),
       });
     } else if (entry.kind === "catastrophe") {
@@ -1074,6 +1081,7 @@ export default function App() {
     targetMet?: number;
     targetKris?: number;
     duration?: number;
+    multi?: RoidMulti;
   }) => {
     if (!dialogTarget) return;
 
@@ -1129,6 +1137,7 @@ export default function App() {
               targetMet: Math.max(0, values.targetMet ?? e.targetMet),
               targetKris: Math.max(0, values.targetKris ?? e.targetKris),
               duration: Math.min(10, Math.max(1, values.duration ?? e.duration)),
+              multi: values.multi ?? undefined,
             };
           }
           if (e.kind === "catastrophe") {
@@ -1262,6 +1271,7 @@ export default function App() {
         targetMet,
         targetKris,
         duration,
+        ...(values.multi ? { multi: values.multi } : {}),
       };
       updateCurrentPlan((plan) => [...plan, entry]);
       return;

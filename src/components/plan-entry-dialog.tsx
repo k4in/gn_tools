@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
 import { Field, FieldLabel } from "@/components/shadcn/field";
 import { RadioGroup, RadioGroupItem } from "@/components/shadcn/radio-group";
 import { Input } from "@/components/shadcn/input";
+import { Checkbox } from "@/components/shadcn/checkbox";
 import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group";
 import {
   Combobox,
@@ -22,6 +24,7 @@ import {
 import {
   ASTEROID_COST,
   ASTEROID_SLOT_CAPACITY,
+  computeRoidLoot,
   extractorBatchCost,
   extractorUnitCost,
   CATASTROPHE_DURATION_MAX,
@@ -36,6 +39,8 @@ import {
   ROID_DURATION_MIN,
   roidsOverlap,
   type PlanEntry,
+  type RoidCoAttacker,
+  type RoidMulti,
 } from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 import type { Defense } from "@/gn-data/defense";
@@ -46,6 +51,7 @@ const ROID_DURATION_ITEMS = Array.from(
   { length: ROID_DURATION_MAX - ROID_DURATION_MIN + 1 },
   (_, i) => String(ROID_DURATION_MIN + i),
 );
+const ROID_DEFAULT_DURATION = 5;
 const CATASTROPHE_DURATION_ITEMS = Array.from(
   { length: CATASTROPHE_DURATION_MAX - CATASTROPHE_DURATION_MIN + 1 },
   (_, i) => String(CATASTROPHE_DURATION_MIN + i),
@@ -117,6 +123,7 @@ type RoidTarget = {
   defaultTargetMet: number;
   defaultTargetKris: number;
   defaultDuration: number;
+  defaultMulti?: RoidMulti;
   occupiedRoids: OccupiedRoid[];
 };
 
@@ -160,6 +167,8 @@ export type PlanEntryDialogSubmit = {
   targetMet?: number;
   targetKris?: number;
   duration?: number;
+  /** Nur Roid: weitere Angreifer; fehlt = alleine. */
+  multi?: RoidMulti;
 };
 
 export type PlanEntryDialogProps = {
@@ -208,6 +217,9 @@ export function PlanEntryDialog({
   const [targetMet, setTargetMet] = useState(0);
   const [targetKris, setTargetKris] = useState(0);
   const [duration, setDuration] = useState(ROID_DURATION_MIN);
+  const [multiEnabled, setMultiEnabled] = useState(false);
+  const [ownCleptors, setOwnCleptors] = useState(0);
+  const [coAttackers, setCoAttackers] = useState<RoidCoAttacker[]>([]);
 
   useEffect(() => {
     if (!open || !target) return;
@@ -249,6 +261,9 @@ export function PlanEntryDialog({
         setDuration(
           Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, entry.duration)),
         );
+        setMultiEnabled(!!entry.multi);
+        setOwnCleptors(entry.multi?.ownCleptors ?? 0);
+        setCoAttackers(entry.multi?.attackers.map((a) => ({ ...a })) ?? []);
         return;
       }
       if (entry.kind === "catastrophe") {
@@ -309,6 +324,9 @@ export function PlanEntryDialog({
           Math.max(ROID_DURATION_MIN, target.defaultDuration),
         ),
       );
+      setMultiEnabled(!!target.defaultMulti);
+      setOwnCleptors(target.defaultMulti?.ownCleptors ?? 0);
+      setCoAttackers(target.defaultMulti?.attackers.map((a) => ({ ...a })) ?? []);
     } else {
       setCount(1);
     }
@@ -385,6 +403,23 @@ export function PlanEntryDialog({
     };
   }, [target, liveEconomy, asteroidCount, extractorMetCount, extractorKrisCount]);
 
+  const roidMulti = useMemo<RoidMulti | undefined>(
+    () =>
+      target?.kind === "roid" && multiEnabled
+        ? { ownCleptors, attackers: coAttackers }
+        : undefined,
+    [target, multiEnabled, ownCleptors, coAttackers],
+  );
+
+  const roidLoot = useMemo(
+    () => (roidMulti ? computeRoidLoot(targetMet, targetKris, duration, roidMulti) : null),
+    [roidMulti, targetMet, targetKris, duration],
+  );
+
+  const updateCoAttacker = (index: number, patch: Partial<RoidCoAttacker>) => {
+    setCoAttackers((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+  };
+
   if (!target) return null;
 
   const title = (() => {
@@ -441,6 +476,7 @@ export function PlanEntryDialog({
     if (target.kind === "roid") {
       if (targetMet <= 0 && targetKris <= 0) return false;
       if (duration < ROID_DURATION_MIN || duration > ROID_DURATION_MAX) return false;
+      if (multiEnabled && ownCleptors <= 0) return false;
       const overlaps = target.occupiedRoids.some((r) =>
         roidsOverlap(startTick, duration, r.startTick, r.duration),
       );
@@ -492,6 +528,7 @@ export function PlanEntryDialog({
         targetMet: Math.max(0, targetMet),
         targetKris: Math.max(0, targetKris),
         duration,
+        multi: roidMulti,
       });
     } else if (target.kind === "catastrophe") {
       onSubmit({ startTick, duration });
@@ -636,7 +673,7 @@ export function PlanEntryDialog({
           {target.kind === "roid" && (
             <div className="flex flex-col gap-2 text-xs text-muted-foreground">
               <p>
-                Pro Tick 10% der restlichen Ziel-Exen (immer abgerundet), kostenlos.
+                Pro Tick 10% der restlichen Ziel-Exen (immer abgerundet).
                 Ertrag ab dem nächsten Tick, Asteroidenplätze werden gebraucht.
               </p>
               {overlappingRoid && (
@@ -992,6 +1029,94 @@ export function PlanEntryDialog({
                     </ComboboxContent>
                   </Combobox>
                 </Field>
+                {multiEnabled && (
+                  <Field className="w-32">
+                    <FieldLabel htmlFor="plan-roid-own-clep">Eigene Cleptoren</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="plan-roid-own-clep"
+                        type="number"
+                        min={0}
+                        value={ownCleptors}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setOwnCleptors(Math.max(0, Math.floor(n)));
+                        }}
+                        className="tabular-nums"
+                      />
+                    </InputGroup>
+                  </Field>
+                )}
+                <div className="flex basis-full flex-col gap-2">
+                  <label className="flex items-center gap-2 text-xs">
+                    <Checkbox
+                      checked={multiEnabled}
+                      onCheckedChange={(checked) => {
+                        setMultiEnabled(checked);
+                        if (checked && coAttackers.length === 0) {
+                          setCoAttackers([{ startOffset: 0, duration: ROID_DEFAULT_DURATION, cleptors: 0 }]);
+                        }
+                      }}
+                    />
+                    Mehr als ein Angreifer
+                  </label>
+                  {multiEnabled && (
+                    <div className="flex flex-col gap-2">
+                      {coAttackers.length > 0 && (
+                        <div className="grid grid-cols-[auto_1fr_1fr_1fr_auto] items-center gap-x-2 gap-y-1 text-xs">
+                          <span />
+                          <span className="text-muted-foreground">Start (+Ticks)</span>
+                          <span className="text-muted-foreground">Dauer</span>
+                          <span className="text-muted-foreground">Cleptoren</span>
+                          <span />
+                          {coAttackers.map((a, i) => (
+                            <AttackerRow
+                              key={i}
+                              index={i}
+                              attacker={a}
+                              onChange={(patch) => updateCoAttacker(i, patch)}
+                              onRemove={() =>
+                                setCoAttackers((prev) => prev.filter((_, j) => j !== i))
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="self-start"
+                        onClick={() =>
+                          setCoAttackers((prev) => [
+                            ...prev,
+                            { startOffset: 0, duration: ROID_DEFAULT_DURATION, cleptors: 0 },
+                          ])
+                        }
+                      >
+                        <Plus data-icon="inline-start" />
+                        Angreifer
+                      </Button>
+                      {roidLoot && (
+                        <p className="text-xs tabular-nums text-muted-foreground">
+                          {ownCleptors <= 0 ? (
+                            <span className="text-amber-500">Eigene Cleptoren angeben.</span>
+                          ) : (
+                            <>
+                              Ich klaue{" "}
+                              <span className="font-medium text-foreground">
+                                {formatRoidShare(roidLoot)}
+                              </span>{" "}
+                              der erbeuteten Exen ({roidLoot.own.met} M / {roidLoot.own.kris} K
+                              von {roidLoot.total.met} M / {roidLoot.total.kris} K).
+                            </>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
@@ -1096,6 +1221,85 @@ export function PlanEntryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function formatRoidShare(loot: ReturnType<typeof computeRoidLoot>): string {
+  const own = loot.own.met + loot.own.kris;
+  const total = loot.total.met + loot.total.kris;
+  if (total <= 0) return "0%";
+  return `${Math.round((own / total) * 100)}%`;
+}
+
+function AttackerRow({
+  index,
+  attacker,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  attacker: RoidCoAttacker;
+  onChange: (patch: Partial<RoidCoAttacker>) => void;
+  onRemove: () => void;
+}) {
+  const numberInput = (
+    value: number,
+    min: number,
+    max: number | undefined,
+    apply: (n: number) => void,
+    label: string,
+  ) => (
+    <InputGroup>
+      <InputGroupInput
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        aria-label={label}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (!Number.isFinite(n)) return;
+          const clamped = Math.max(min, Math.floor(n));
+          apply(max === undefined ? clamped : Math.min(max, clamped));
+        }}
+        className="tabular-nums"
+      />
+    </InputGroup>
+  );
+  return (
+    <>
+      <span className="text-muted-foreground tabular-nums">#{index + 1}</span>
+      {numberInput(
+        attacker.startOffset,
+        0,
+        ROID_DURATION_MAX - 1,
+        (n) => onChange({ startOffset: n }),
+        `Angreifer ${index + 1} Start`,
+      )}
+      {numberInput(
+        attacker.duration,
+        ROID_DURATION_MIN,
+        ROID_DURATION_MAX,
+        (n) => onChange({ duration: n }),
+        `Angreifer ${index + 1} Dauer`,
+      )}
+      {numberInput(
+        attacker.cleptors,
+        0,
+        undefined,
+        (n) => onChange({ cleptors: n }),
+        `Angreifer ${index + 1} Cleptoren`,
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Angreifer ${index + 1} entfernen`}
+        onClick={onRemove}
+      >
+        <X />
+      </Button>
+    </>
   );
 }
 
