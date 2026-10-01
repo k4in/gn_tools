@@ -1,13 +1,6 @@
 import { useRef, type ReactNode } from "react";
-import { useScrollIntoViewWhenActive } from "@/components/overview/use-scroll-when-active";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/shadcn/table";
+import { useScrollIntoViewWhenActive } from "@/hooks/useScrollIntoViewWhenActive.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/shadcn/table.tsx";
 import {
   formatCatastropheLossLabel,
   formatRes,
@@ -15,9 +8,9 @@ import {
   type JobKind,
   type NamedJob,
   type TickSnapshot,
-} from "@/lib/calculateFastestWayToGoal";
-import { StatusDot } from "@/components/sidebar/status-dot";
-import { cn } from "@/lib/utils/cn";
+} from "@/lib/calculate-fastest-way-to-goal.ts";
+import { StatusDot } from "@/components/sidebar/status-dot.tsx";
+import { cn } from "@/lib/utils/cn.ts";
 
 export type DisplayJob = {
   name: string;
@@ -33,7 +26,6 @@ function formatCustomCost(cost: { met: number; kris: number }) {
   if (cost.kris > 0) parts.push(`−${formatRes(cost.kris)} K`);
   return parts.join(" · ");
 }
-
 
 export function jobTypeClass(type: JobKind) {
   if (type === "building") return "text-amber-500";
@@ -86,28 +78,19 @@ export function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
   }
   if (extractorsMet > 0) {
     out.push({
-      name:
-        extractorsMet === 1
-          ? "1 Metallextraktor bauen"
-          : `${extractorsMet} Metallextraktoren bauen`,
+      name: extractorsMet === 1 ? "1 Metallextraktor bauen" : `${extractorsMet} Metallextraktoren bauen`,
       type: "economy",
     });
   }
   if (extractorsKris > 0) {
     out.push({
-      name:
-        extractorsKris === 1
-          ? "1 Kristallextraktor bauen"
-          : `${extractorsKris} Kristallextraktoren bauen`,
+      name: extractorsKris === 1 ? "1 Kristallextraktor bauen" : `${extractorsKris} Kristallextraktoren bauen`,
       type: "economy",
     });
   }
   if (extractorsGeneric > 0) {
     out.push({
-      name:
-        extractorsGeneric === 1
-          ? "1 Extraktor bauen"
-          : `${extractorsGeneric} Extraktoren bauen`,
+      name: extractorsGeneric === 1 ? "1 Extraktor bauen" : `${extractorsGeneric} Extraktoren bauen`,
       type: "economy",
     });
   }
@@ -115,24 +98,14 @@ export function collapseEconomyJobs(items: DisplayJob[]): DisplayJob[] {
 }
 
 function withoutCustom(items: DisplayJob[]) {
-  return items.filter(
-    (item) => item.type !== "custom" && item.type !== "trade" && item.type !== "snapshot",
-  );
+  return items.filter((item) => item.type !== "custom" && item.type !== "trade" && item.type !== "snapshot");
 }
 
 function onlyCustom(items: DisplayJob[]) {
-  return items.filter(
-    (item) => item.type === "custom" || item.type === "trade" || item.type === "snapshot",
-  );
+  return items.filter((item) => item.type === "custom" || item.type === "trade" || item.type === "snapshot");
 }
 
-export function ExtraEvents({
-  customs,
-  tick,
-}: {
-  customs: NamedJob[];
-  tick: TickSnapshot;
-}) {
+export function ExtraEvents({ customs, tick }: { customs: NamedJob[]; tick: TickSnapshot }) {
   const hasQuests = tick.quests.length > 0;
   const hasRoids = tick.roidLoot.length > 0;
   const hasCatastrophe = tick.catastropheLoss.length > 0;
@@ -150,7 +123,7 @@ export function ExtraEvents({
             {q.label}
           </span>
         ))}
-      </span>,
+      </span>
     );
   }
   tick.roidLoot.forEach((loot, i) => {
@@ -159,7 +132,7 @@ export function ExtraEvents({
     parts.push(
       <span key={`${loot.planEntryId}-${i}`} className="text-blue-400">
         {label}
-      </span>,
+      </span>
     );
   });
   tick.catastropheLoss.forEach((loss, i) => {
@@ -168,7 +141,7 @@ export function ExtraEvents({
     parts.push(
       <span key={`cat-${loss.planEntryId}-${i}`} className="text-red-400">
         {label}
-      </span>,
+      </span>
     );
   });
 
@@ -189,8 +162,7 @@ export function JobList({ items }: { items: DisplayJob[] }) {
   return (
     <span className="inline">
       {collapsed.map((item, i) => {
-        const customCost =
-          item.type === "custom" && item.cost ? formatCustomCost(item.cost) : "";
+        const customCost = item.type === "custom" && item.cost ? formatCustomCost(item.cost) : "";
         const extra = customCost || item.suffix;
         return (
           <span key={`${item.name}-${i}`}>
@@ -218,13 +190,7 @@ function formatDelta(n: number) {
   return `${n > 0 ? "+" : ""}${formatRes(n)}`;
 }
 
-function TruncateCell({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
+function TruncateCell({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <TableCell className={cn("max-w-0", className)}>
       <div className="truncate">{children}</div>
@@ -294,23 +260,13 @@ export function TickTable({
           const isNow = nowTick !== null && t.tick === nowTick;
           const isInspect = inspectRowTick !== null && t.tick === inspectRowTick;
           return (
-            <TableRow
-              key={t.tick}
-              ref={scrollTick === t.tick ? currentRowRef : undefined}
-              className={cn(isNow && "bg-green-500/15")}
-            >
+            <TableRow key={t.tick} ref={scrollTick === t.tick ? currentRowRef : undefined} className={cn(isNow && "bg-green-500/15")}>
               <TableCell className="tabular-nums">{t.tick}</TableCell>
-              <TableCell className={cn("tabular-nums", isInspect && "text-primary")}>
-                {t.clockLabel}
-              </TableCell>
+              <TableCell className={cn("tabular-nums", isInspect && "text-primary")}>{t.clockLabel}</TableCell>
               <TableCell className="text-right tabular-nums">{formatRes(t.met)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatRes(t.kris)}</TableCell>
-              <TableCell className={cn("text-right tabular-nums", deltaClass(t.incomeMet))}>
-                {formatDelta(t.incomeMet)}
-              </TableCell>
-              <TableCell className={cn("text-right tabular-nums", deltaClass(t.incomeKris))}>
-                {formatDelta(t.incomeKris)}
-              </TableCell>
+              <TableCell className={cn("text-right tabular-nums", deltaClass(t.incomeMet))}>{formatDelta(t.incomeMet)}</TableCell>
+              <TableCell className={cn("text-right tabular-nums", deltaClass(t.incomeKris))}>{formatDelta(t.incomeKris)}</TableCell>
               <TruncateCell>
                 {t.active.length ? (
                   <JobList
@@ -324,11 +280,7 @@ export function TickTable({
                   "—"
                 )}
               </TruncateCell>
-              <TruncateCell>
-                {withoutCustom(t.started).length ? (
-                  <JobList items={withoutCustom(t.started)} />
-                ) : null}
-              </TruncateCell>
+              <TruncateCell>{withoutCustom(t.started).length ? <JobList items={withoutCustom(t.started)} /> : null}</TruncateCell>
               <TruncateCell>
                 <ExtraEvents customs={onlyCustom(t.started)} tick={t} />
               </TruncateCell>
@@ -349,21 +301,10 @@ export type ActionPlanProps = {
 };
 
 /** Kompakter Auftragsplan: Tick · Uhrzeit · Auftrag */
-export function ActionPlan({
-  ticks,
-  currentTick,
-  inspectTick = null,
-  hasPlan,
-  isActive = false,
-}: ActionPlanProps) {
+export function ActionPlan({ ticks, currentTick, inspectTick = null, hasPlan, isActive = false }: ActionPlanProps) {
   const currentRowRef = useRef<HTMLTableRowElement>(null);
-  const nextTick =
-    hasPlan
-      ? ticks.find((t) => t.tick >= currentTick && withoutCustom(t.started).length > 0)?.tick ??
-        null
-      : null;
-  const inspectRowTick =
-    hasPlan && inspectTick != null ? tickAtOrAfter(ticks, inspectTick) : null;
+  const nextTick = hasPlan ? (ticks.find((t) => t.tick >= currentTick && withoutCustom(t.started).length > 0)?.tick ?? null) : null;
+  const inspectRowTick = hasPlan && inspectTick != null ? tickAtOrAfter(ticks, inspectTick) : null;
   const scrollTick = inspectRowTick ?? nextTick;
   useScrollIntoViewWhenActive(isActive, currentRowRef, "center", "nearest", scrollTick);
 
@@ -388,11 +329,7 @@ export function ActionPlan({
           const orders = withoutCustom(t.started);
           const extras = onlyCustom(t.started);
           return (
-            <TableRow
-              key={t.tick}
-              ref={scrollTick === t.tick ? currentRowRef : undefined}
-              className={cn(isNext && "bg-green-500/15")}
-            >
+            <TableRow key={t.tick} ref={scrollTick === t.tick ? currentRowRef : undefined} className={cn(isNext && "bg-green-500/15")}>
               <TableCell>{t.tick}</TableCell>
               <TableCell className={cn(isInspect && "text-primary")}>{t.clockLabel}</TableCell>
               <TableCell>{orders.length ? <JobList items={orders} /> : "—"}</TableCell>
@@ -402,7 +339,6 @@ export function ActionPlan({
             </TableRow>
           );
         })}
-
       </TableBody>
     </Table>
   );

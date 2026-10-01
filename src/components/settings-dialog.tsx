@@ -1,35 +1,12 @@
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/shadcn/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/shadcn/field";
-import { Input } from "@/components/shadcn/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/shadcn/combobox";
-import {
-  HISTORY_WINDOW_TICKS,
-  type HistoryWindow,
-} from "@/lib/history-window";
+import { Button } from "@/components/shadcn/button.tsx";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/shadcn/dialog.tsx";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/shadcn/field.tsx";
+import { Input } from "@/components/shadcn/input.tsx";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group.tsx";
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/shadcn/combobox.tsx";
+import { HISTORY_WINDOW_TICKS, type HistoryWindow } from "@/lib/history-window.ts";
 
 export type AppliedSettings = {
   start_date: string;
@@ -96,8 +73,7 @@ export function SettingsDialog({
   const dateValid = isValidDate(date);
   const parsedTickMinutes = parseTickMinutes(tickMinutes);
   const currentTime = normalizeTime(startTime) ?? startTime;
-  const dirty =
-    date !== startDate || (normalizedTime ?? time) !== currentTime || parsedTickMinutes !== savedTickMinutes;
+  const dirty = date !== startDate || (normalizedTime ?? time) !== currentTime || parsedTickMinutes !== savedTickMinutes;
   const canApply = dateValid && !!normalizedTime && parsedTickMinutes !== null && dirty;
 
   return (
@@ -172,9 +148,7 @@ export function SettingsDialog({
           </FieldSet>
           <FieldSet>
             <FieldLegend>Anzeige</FieldLegend>
-            <FieldDescription>
-              Vergangenheit in Timeline und Tabellen. Die Zukunft bleibt immer sichtbar.
-            </FieldDescription>
+            <FieldDescription>Vergangenheit in Timeline und Tabellen. Die Zukunft bleibt immer sichtbar.</FieldDescription>
             <Field>
               <FieldLabel>Verlauf</FieldLabel>
               <Combobox

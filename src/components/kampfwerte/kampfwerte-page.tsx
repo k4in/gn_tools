@@ -1,17 +1,13 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
-import { KillMatrix } from "@/components/kampfwerte/kill-matrix";
-import { ratioColor } from "@/components/kampfwerte/format";
-import { FleetBuilder } from "@/components/kampfwerte/fleet-builder";
+import { KillMatrix } from "@/components/kampfwerte/kill-matrix.tsx";
+import { ratioColor } from "@/lib/utils/kampfwerte-format.ts";
+import { FleetBuilder } from "@/components/kampfwerte/fleet-builder.tsx";
 
 const HELPSYS_URL = "https://galaxy-network.de/helpsys";
 
 function Formula({ children }: { children: ReactNode }) {
-  return (
-    <code className="rounded-sm bg-muted px-1.5 py-0.5 text-[11px] text-foreground tabular-nums">
-      {children}
-    </code>
-  );
+  return <code className="rounded-sm bg-muted px-1.5 py-0.5 text-[11px] text-foreground tabular-nums">{children}</code>;
 }
 
 export function KampfwertePage() {
@@ -29,9 +25,8 @@ export function KampfwertePage() {
               <Formula>Abschüsse je Tick × Kosten Ziel ÷ Kosten Schütze</Formula>
             </p>
             <p>
-              Gibt an, wie viel Baukostenwert ein Schütze pro Kampftick zerstört, gemessen an seinen
-              eigenen Baukosten, bei 100 % Feuer auf dieses Ziel. Beispiel Fornax → Horus:{" "}
-              <Formula>4,5 × 2.000 ÷ 22.500 = 0,400</Formula>. Fast alle Paarungen liegen bei 0,40.
+              Gibt an, wie viel Baukostenwert ein Schütze pro Kampftick zerstört, gemessen an seinen eigenen Baukosten, bei 100 % Feuer auf
+              dieses Ziel. Beispiel Fornax → Horus: <Formula>4,5 × 2.000 ÷ 22.500 = 0,400</Formula>. Fast alle Paarungen liegen bei 0,40.
               Werte darunter heißen: Das Ziel hält mehr aus, als seine Kosten vermuten lassen.
             </p>
           </div>

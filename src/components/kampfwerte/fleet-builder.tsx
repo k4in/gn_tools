@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import { Input } from "@/components/shadcn/input";
-import { formatNumber } from "@/components/kampfwerte/format";
-import { combatUnits, type CombatUnit, type CombatUnitName } from "@/gn-data/kampfwerte";
-import { cn } from "@/lib/utils/cn";
+import { Input } from "@/components/shadcn/input.tsx";
+import { formatNumber } from "@/lib/utils/kampfwerte-format.ts";
+import { combatUnits, type CombatUnit, type CombatUnitName } from "@/lib/gn-data/kampfwerte.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 /**
  * Trennlinie zwischen Geschützen und Schiffen, wie in der Matrix. Sitzt mittig
  * im Spaltenabstand, damit die erste Schiffsspalte nicht schmaler wird.
  */
-const DIVIDER_LEFT =
-  "relative before:absolute before:inset-y-0 before:-left-1 before:border-l before:border-l-foreground/25";
+const DIVIDER_LEFT = "relative before:absolute before:inset-y-0 before:-left-1 before:border-l before:border-l-foreground/25";
 
 /**
  * Gewicht je Schiffsart für eine ausgeglichene Flotte: Budget = Grundbudget ×
@@ -67,45 +66,43 @@ export function FleetBuilder() {
   const [fleet, setFleet] = useState<Set<CombatUnitName>>(new Set());
   const [sculptors, setSculptors] = useState(DEFAULT_SCULPTORS);
 
-  const toggle = (name: CombatUnitName) =>
-    setFleet((prev) => {
+  function toggle(name: CombatUnitName) {
+    return setFleet((prev) => {
       const next = new Set(prev);
       if (!next.delete(name)) next.add(name);
       return next;
     });
+  }
 
   const active = combatUnits.filter((u) => fleet.has(u.name));
   const counts = fleetCounts(active, sculptors);
   const fleetValue = active.reduce((sum, u) => sum + (counts.get(u.name) ?? 0) * u.total, 0);
   const carrierMissing = !fleet.has("Zenit") && CARRIED.some((name) => fleet.has(name));
   /** Zerstörter Wert je Tick, null wenn keine aktive Schiffsart das Ziel beschießt. */
-  const valueOn = (target: CombatUnit) => {
+  function valueOn(target: CombatUnit) {
     const shots = active.flatMap((shooter) => {
       const shot = shooter.shots.find((s) => s.target === target.name);
       return shot ? [(counts.get(shooter.name) ?? 0) * shot.perTick * shot.share * target.total] : [];
     });
     return shots.length > 0 ? shots.reduce((sum, v) => sum + v, 0) : null;
-  };
+  }
 
   return (
     <section className="flex flex-col gap-4 border-t border-border pt-6">
       <div>
         <h2 className="font-heading text-base font-semibold tracking-tight">Flotte zusammenstellen</h2>
         <p className="mt-1 max-w-3xl text-xs/relaxed text-muted-foreground">
-          Schiffe oben aktivieren und die Anzahl Sculptor eintragen. Daraus ergibt sich, wie viele
-          der übrigen Schiffe eine ausgeglichene Flotte braucht (gleiche Baukosten je Schiffsart,
-          Sculptor × 1,5, Fornax und Draco × 1,3, Cleptor × 1,4, Cancri × 0,25). Zenit richten sich nach den aktiven Jägern und
-          Bombern (2,5 × Anzahl ÷ 100), ohne sie gilt × 0,25. Ziele, die die Flotte abschießt, werden grün und zeigen den zerstörten
-          Baukostenwert je Tick. Angenommen ist, dass alle Ziele eines Schiffs anwesend sind, ohne
+          Schiffe oben aktivieren und die Anzahl Sculptor eintragen. Daraus ergibt sich, wie viele der übrigen Schiffe eine ausgeglichene
+          Flotte braucht (gleiche Baukosten je Schiffsart, Sculptor × 1,5, Fornax und Draco × 1,3, Cleptor × 1,4, Cancri × 0,25). Zenit
+          richten sich nach den aktiven Jägern und Bombern (2,5 × Anzahl ÷ 100), ohne sie gilt × 0,25. Ziele, die die Flotte abschießt,
+          werden grün und zeigen den zerstörten Baukostenwert je Tick. Angenommen ist, dass alle Ziele eines Schiffs anwesend sind, ohne
           Restfeuer.
         </p>
       </div>
 
       <p className="text-xs text-muted-foreground">
         Gesamtkosten der Flotte (Metall + Kristall):{" "}
-        <span className="text-sm font-semibold text-foreground tabular-nums">
-          {formatNumber(fleetValue)}
-        </span>
+        <span className="text-sm font-semibold text-foreground tabular-nums">{formatNumber(fleetValue)}</span>
       </p>
 
       <div className="overflow-x-auto">
@@ -132,7 +129,7 @@ export function FleetBuilder() {
                     "w-full rounded-md border px-1 py-1 text-[11px] font-medium transition-colors",
                     on
                       ? "border-foreground/60 bg-foreground text-background"
-                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
                   {unit.name}
@@ -167,13 +164,13 @@ export function FleetBuilder() {
                       ? "border-border text-muted-foreground"
                       : hit
                         ? "border-green-500/40 bg-green-500/10"
-                        : "border-destructive/40 bg-destructive/10",
+                        : "border-destructive/40 bg-destructive/10"
                   )}
                 >
                   <span
                     className={cn(
                       "text-center text-[11px] font-medium",
-                      active.length > 0 && (hit ? "text-green-500" : "text-destructive"),
+                      active.length > 0 && (hit ? "text-green-500" : "text-destructive")
                     )}
                   >
                     {unit.name}
@@ -181,9 +178,7 @@ export function FleetBuilder() {
                   {hit ? (
                     <span className="text-center text-[11px] font-medium tabular-nums">
                       {formatNumber(Math.round(value))}
-                      <span className="block text-[9px] font-normal text-muted-foreground">
-                        Wert je Tick
-                      </span>
+                      <span className="block text-[9px] font-normal text-muted-foreground">Wert je Tick</span>
                     </span>
                   ) : null}
                 </div>

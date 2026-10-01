@@ -1,18 +1,13 @@
 import { Info } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/shadcn/dialog";
+import { Button } from "@/components/shadcn/button.tsx";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/shadcn/dialog.tsx";
 
 export function InfoDialog() {
   return (
     <Dialog>
-      <DialogTrigger render={<Button type="button" variant="ghost" size="icon-lg" aria-label="Info" className="size-10 text-muted-foreground" />}>
+      <DialogTrigger
+        render={<Button type="button" variant="ghost" size="icon-lg" aria-label="Info" className="size-10 text-muted-foreground" />}
+      >
         <Info />
       </DialogTrigger>
       <DialogContent>

@@ -1,5 +1,5 @@
-import { defenses, type DefenseName } from "./defense";
-import { ships, type ShipName } from "./ships";
+import { defenses, type DefenseName } from "@/lib/gn-data/defense.ts";
+import { ships, type ShipName } from "@/lib/gn-data/ships.ts";
 
 /**
  * Kampfwerte aus dem GN-Hilfesystem (galaxy-network.de/helpsys, Kampfsystem).

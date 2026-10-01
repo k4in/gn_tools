@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from "react";
 import { CircleAlert, Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -8,9 +8,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/shadcn/alert-dialog";
-import { Button } from "@/components/shadcn/button";
-import { Textarea } from "@/components/shadcn/textarea";
+} from "@/components/shadcn/alert-dialog.tsx";
+import { Button } from "@/components/shadcn/button.tsx";
+import { Textarea } from "@/components/shadcn/textarea.tsx";
 import {
   containsScan,
   formatTimeMarker,
@@ -23,38 +23,12 @@ import {
   targetKey,
   type Scan,
   type TargetScans,
-} from "@/lib/scan-parser";
-import { cn } from "@/lib/utils/cn";
-
-/** State aus dem localStorage, der bei jeder Änderung zurückgeschrieben wird. */
-export function useStoredState<T>(key: string, load: (raw: unknown) => T) {
-  const [value, setValue] = useState<T>(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      return load(raw ? JSON.parse(raw) : null);
-    } catch {
-      return load(null);
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (err) {
-      console.error("Konnte Scans nicht speichern", err);
-    }
-  }, [key, value]);
-
-  return [value, setValue] as const;
-}
+} from "@/lib/scan-parser.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 /** Code-Schnipsel in den Hilfetexten. */
 export function HelpCode({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <code className={cn("rounded-sm bg-muted px-1 py-0.5 text-[11px] whitespace-nowrap text-foreground", className)}>
-      {children}
-    </code>
-  );
+  return <code className={cn("rounded-sm bg-muted px-1 py-0.5 text-[11px] whitespace-nowrap text-foreground", className)}>{children}</code>;
 }
 
 /** Hilfetext zur Zeitmarke, gilt für beide Auswertungen. */
@@ -62,8 +36,8 @@ export function TimeMarkerHelp() {
   return (
     <p>
       Beim Einfügen wird automatisch eine Zeitmarke mit der aktuellen Uhrzeit davorgesetzt, z. B.{" "}
-      <HelpCode className="text-amber-500">@ 23.09. 14:30</HelpCode>. Sie gilt für alle Scans darunter bis zur nächsten
-      Zeitmarke. Stammt ein Scan von früher, etwa aus der Datenbank, pass die Uhrzeit einfach im Text an.{" "}
+      <HelpCode className="text-amber-500">@ 23.09. 14:30</HelpCode>. Sie gilt für alle Scans darunter bis zur nächsten Zeitmarke. Stammt
+      ein Scan von früher, etwa aus der Datenbank, pass die Uhrzeit einfach im Text an.{" "}
       <HelpCode className="text-amber-500">@ 14:30</HelpCode> reicht für denselben Tag wie die Zeitmarke davor.
     </p>
   );
@@ -112,7 +86,7 @@ export function ScanWorkspace({
   const foreign = targets.filter((t) => t !== primary);
 
   /** Eingefügte Scans bekommen eine Zeitmarke mit der aktuellen Uhrzeit. */
-  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
     // „heute um …“ wird zum festen Datum, damit gespeicherte Scans auch morgen noch stimmen.
     const pasted = resolveRelativeDates(event.clipboardData.getData("text"));
     if (!containsScan(pasted)) return;
@@ -130,7 +104,7 @@ export function ScanWorkspace({
     requestAnimationFrame(() => {
       textareaRef.current?.setSelectionRange(cursor, cursor);
     });
-  };
+  }
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

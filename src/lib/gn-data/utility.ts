@@ -1,4 +1,4 @@
-import type { TechName } from "./techtree";
+import { type TechName } from "@/lib/gn-data/techtree.ts";
 
 type UtilityName = "Asteroid" | "Scanverstärker" | "EloKa-Satelliten";
 

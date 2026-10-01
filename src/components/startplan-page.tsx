@@ -6,16 +6,15 @@ import {
   PLAN_SLOT_IDS,
   planSlotLabel,
   planTemplates,
+  type PlanEntry,
   type PlanSlotId,
-} from "@/gn-data/plan";
-import { Header } from "@/components/header";
-import { Overview } from "@/components/overview/overview";
-import { PlanSwitcher } from "@/components/plan-switcher";
-import { Sidebar } from "@/components/sidebar/sidebar";
-import {
-  PlanEntryDialog,
-  type PlanEntryDialogTarget,
-} from "@/components/plan-entry-dialog";
+  type RoidMulti,
+} from "@/lib/gn-data/plan.ts";
+import { Header } from "@/components/header.tsx";
+import { Overview } from "@/components/overview/overview.tsx";
+import { PlanSwitcher } from "@/components/plan-switcher.tsx";
+import { Sidebar } from "@/components/sidebar/sidebar.tsx";
+import { PlanEntryDialog, type PlanEntryDialogTarget } from "@/components/plan-entry-dialog.tsx";
 import {
   calculateFastestWayToGoal,
   computeCurrentTick,
@@ -44,19 +43,14 @@ import {
   reconByName,
   removePlanEntryCascade,
   unitByName,
-  type PlanEntry,
-  type RoidMulti,
   type StartConfig,
   type TaxSegment,
-} from "@/lib/calculateFastestWayToGoal";
-import { TooltipProvider } from "@/components/shadcn/tooltip";
-import { byName } from "@/lib/calculateFastestWayToGoal";
-import { ASTEROID_COST } from "@/lib/calculateFastestWayToGoal";
-import { useNow } from "@/lib/use-now";
-import {
-  parseHistoryWindow,
-  type HistoryWindow,
-} from "@/lib/history-window";
+} from "@/lib/calculate-fastest-way-to-goal.ts";
+import { TooltipProvider } from "@/components/shadcn/tooltip.tsx";
+import { byName } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { ASTEROID_COST } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { useNow } from "@/hooks/useNow.tsx";
+import { parseHistoryWindow, type HistoryWindow } from "@/lib/history-window.ts";
 
 // Redeploy
 const STORAGE_KEY = "gn_tool.plan";
@@ -74,37 +68,21 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       return typeof o.name === "string" && !!o.name;
     case "unit":
     case "recon":
-      return (
-        typeof o.name === "string" &&
-        !!o.name &&
-        typeof o.count === "number" &&
-        o.count > 0
-      );
+      return typeof o.name === "string" && !!o.name && typeof o.count === "number" && o.count > 0;
     case "economy": {
-      const asteroids =
-        typeof o.asteroids === "number" && Number.isFinite(o.asteroids)
-          ? Math.max(0, Math.floor(o.asteroids))
-          : 0;
+      const asteroids = typeof o.asteroids === "number" && Number.isFinite(o.asteroids) ? Math.max(0, Math.floor(o.asteroids)) : 0;
       o.asteroids = asteroids;
-      const hasNew =
-        typeof o.extractorsMet === "number" || typeof o.extractorsKris === "number";
+      const hasNew = typeof o.extractorsMet === "number" || typeof o.extractorsKris === "number";
       if (hasNew) {
         const extractorsMet =
-          typeof o.extractorsMet === "number" && Number.isFinite(o.extractorsMet)
-            ? Math.max(0, Math.floor(o.extractorsMet))
-            : 0;
+          typeof o.extractorsMet === "number" && Number.isFinite(o.extractorsMet) ? Math.max(0, Math.floor(o.extractorsMet)) : 0;
         const extractorsKris =
-          typeof o.extractorsKris === "number" && Number.isFinite(o.extractorsKris)
-            ? Math.max(0, Math.floor(o.extractorsKris))
-            : 0;
+          typeof o.extractorsKris === "number" && Number.isFinite(o.extractorsKris) ? Math.max(0, Math.floor(o.extractorsKris)) : 0;
         o.extractorsMet = extractorsMet;
         o.extractorsKris = extractorsKris;
         return asteroids > 0 || extractorsMet > 0 || extractorsKris > 0;
       }
-      const extractors =
-        typeof o.extractors === "number" && Number.isFinite(o.extractors)
-          ? Math.max(0, Math.floor(o.extractors))
-          : 0;
+      const extractors = typeof o.extractors === "number" && Number.isFinite(o.extractors) ? Math.max(0, Math.floor(o.extractors)) : 0;
       if (asteroids <= 0 && extractors <= 0) return false;
       if (extractors > 0 && o.resource !== "met" && o.resource !== "kris") {
         return false;
@@ -113,11 +91,7 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
     }
     // legacy kinds — accepted then migrated in normalizePlan
     case "extractors":
-      return (
-        (o.resource === "met" || o.resource === "kris") &&
-        typeof o.count === "number" &&
-        o.count > 0
-      );
+      return (o.resource === "met" || o.resource === "kris") && typeof o.count === "number" && o.count > 0;
     case "asteroids":
       return typeof o.count === "number" && o.count > 0;
     case "custom": {
@@ -177,8 +151,9 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
         delete o.roidDuration;
       }
       // Ziel-Exen sind optional (ältere Angriffsflüge hatten keine).
-      const exen = (v: unknown) =>
-        typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+      function exen(v: unknown) {
+        return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+      }
       o.targetMet = exen(o.targetMet);
       o.targetKris = exen(o.targetKris);
       const multi = normalizeRoidMulti(o.multi);
@@ -189,20 +164,15 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       return true;
     }
     case "snapshot": {
-      const num = (v: unknown) =>
-        typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : null;
+      function num(v: unknown) {
+        return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : null;
+      }
       const met = num(o.met);
       const kris = num(o.kris);
       const extractorsMet = num(o.extractorsMet);
       const extractorsKris = num(o.extractorsKris);
       const asteroids = num(o.asteroids);
-      if (
-        met === null ||
-        kris === null ||
-        extractorsMet === null ||
-        extractorsKris === null ||
-        asteroids === null
-      ) {
+      if (met === null || kris === null || extractorsMet === null || extractorsKris === null || asteroids === null) {
         return false;
       }
       o.met = met;
@@ -228,10 +198,7 @@ function toEconomyEntry(raw: PlanEntry): Extract<PlanEntry, { kind: "economy" }>
     };
     let extractorsMet = 0;
     let extractorsKris = 0;
-    if (
-      typeof legacy.extractorsMet === "number" ||
-      typeof legacy.extractorsKris === "number"
-    ) {
+    if (typeof legacy.extractorsMet === "number" || typeof legacy.extractorsKris === "number") {
       extractorsMet = Math.max(0, Math.floor(legacy.extractorsMet ?? 0));
       extractorsKris = Math.max(0, Math.floor(legacy.extractorsKris ?? 0));
     } else {
@@ -386,9 +353,7 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
     out.push({
       ...e,
       startTick: Math.max(0, Math.floor(e.startTick)),
-      ...("count" in e
-        ? { count: Math.max(1, Math.floor(e.count)) }
-        : {}),
+      ...("count" in e ? { count: Math.max(1, Math.floor(e.count)) } : {}),
     } as PlanEntry);
   }
   return out;
@@ -404,9 +369,7 @@ type ImportedPlan = {
   taxes: TaxSegment[];
 };
 
-type ImportPlanParseResult =
-  | { ok: true } & ImportedPlan
-  | { ok: false; error: string };
+type ImportPlanParseResult = ({ ok: true } & ImportedPlan) | { ok: false; error: string };
 
 function parseImportedPlan(text: string): ImportPlanParseResult {
   const trimmed = text.trim();
@@ -462,24 +425,13 @@ function normalizeConfig(raw: unknown): StartConfig {
   if (!raw || typeof raw !== "object") return base;
   const obj = raw as Partial<StartConfig> & { economyOrders?: unknown };
 
-  const start_time =
-    typeof obj.start_time === "string" && obj.start_time.trim()
-      ? obj.start_time
-      : base.start_time;
-  const start_date =
-    typeof obj.start_date === "string" && obj.start_date.trim()
-      ? obj.start_date
-      : base.start_date;
+  const start_time = typeof obj.start_time === "string" && obj.start_time.trim() ? obj.start_time : base.start_time;
+  const start_date = typeof obj.start_date === "string" && obj.start_date.trim() ? obj.start_date : base.start_date;
 
   const res = obj.starting_resources;
-  const metall =
-    res && typeof res.metall === "number" && Number.isFinite(res.metall)
-      ? res.metall
-      : base.starting_resources.metall;
+  const metall = res && typeof res.metall === "number" && Number.isFinite(res.metall) ? res.metall : base.starting_resources.metall;
   const kristall =
-    res && typeof res.kristall === "number" && Number.isFinite(res.kristall)
-      ? res.kristall
-      : base.starting_resources.kristall;
+    res && typeof res.kristall === "number" && Number.isFinite(res.kristall) ? res.kristall : base.starting_resources.kristall;
 
   let plan = normalizePlan(obj.plan);
 
@@ -488,14 +440,9 @@ function normalizeConfig(raw: unknown): StartConfig {
     for (const item of obj.economyOrders) {
       if (!item || typeof item !== "object") continue;
       const o = item as Record<string, unknown>;
-      const id =
-        typeof o.id === "string" && o.id ? o.id : newPlanEntryId("eco");
-      const count =
-        typeof o.count === "number" && o.count > 0 ? Math.floor(o.count) : 0;
-      const atTick =
-        typeof o.atTick === "number" && Number.isFinite(o.atTick)
-          ? Math.max(0, Math.floor(o.atTick))
-          : 0;
+      const id = typeof o.id === "string" && o.id ? o.id : newPlanEntryId("eco");
+      const count = typeof o.count === "number" && o.count > 0 ? Math.floor(o.count) : 0;
+      const atTick = typeof o.atTick === "number" && Number.isFinite(o.atTick) ? Math.max(0, Math.floor(o.atTick)) : 0;
       if (!count) continue;
       if (o.kind === "asteroids") {
         plan.push({
@@ -520,14 +467,8 @@ function normalizeConfig(raw: unknown): StartConfig {
     }
   }
 
-  const tick_minutes =
-    typeof obj.tick_minutes === "number" && obj.tick_minutes > 0
-      ? obj.tick_minutes
-      : base.tick_minutes;
-  const max_ticks =
-    typeof obj.max_ticks === "number" && obj.max_ticks > base.max_ticks
-      ? obj.max_ticks
-      : base.max_ticks;
+  const tick_minutes = typeof obj.tick_minutes === "number" && obj.tick_minutes > 0 ? obj.tick_minutes : base.tick_minutes;
+  const max_ticks = typeof obj.max_ticks === "number" && obj.max_ticks > base.max_ticks ? obj.max_ticks : base.max_ticks;
 
   return {
     start_time,
@@ -562,12 +503,7 @@ type PersistedAppState = {
   plans: Record<PlanSlotId, StoredPlan>;
 };
 
-function sharedFromConfig(
-  cfg: Pick<
-    StartConfig,
-    "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "starting_resources"
-  >,
-) {
+function sharedFromConfig(cfg: Pick<StartConfig, "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "starting_resources">) {
   return {
     start_time: cfg.start_time,
     start_date: cfg.start_date,
@@ -644,10 +580,7 @@ function loadStoredState(): PersistedAppState {
       return initial;
     }
     const parsed: unknown = JSON.parse(raw);
-    const version =
-      parsed && typeof parsed === "object"
-        ? (parsed as { version?: unknown }).version
-        : undefined;
+    const version = parsed && typeof parsed === "object" ? (parsed as { version?: unknown }).version : undefined;
     if (version === 2 || version === 3) {
       const obj = parsed as Partial<PersistedAppState> & {
         taxes?: unknown;
@@ -680,16 +613,12 @@ function loadStoredState(): PersistedAppState {
   }
 }
 
-function defaultAddTick(
-  inspectTick: number | null,
-  currentTick: number,
-  earliest = 0,
-): number {
+function defaultAddTick(inspectTick: number | null, currentTick: number, earliest = 0): number {
   const preferred = inspectTick != null ? inspectTick : currentTick;
   return Math.max(0, preferred, earliest);
 }
 
-export default function App() {
+export function StartplanPage() {
   const [appState, setAppState] = useState<PersistedAppState>(() => loadStoredState());
   const [viewId, setViewId] = useState<PlanSlotId>(appState.activePlanId);
   const activeSlot = viewId;
@@ -702,12 +631,9 @@ export default function App() {
     }
   }, [appState]);
 
-  const startCfg = useMemo(
-    () => configFromState(appState, activeSlot),
-    [appState, activeSlot],
-  );
+  const startCfg = useMemo(() => configFromState(appState, activeSlot), [appState, activeSlot]);
 
-  const updateCurrentPlan = (updater: (plan: PlanEntry[]) => PlanEntry[]) => {
+  function updateCurrentPlan(updater: (plan: PlanEntry[]) => PlanEntry[]) {
     setAppState((prev) => {
       const current = prev.plans[viewId];
       return {
@@ -715,7 +641,7 @@ export default function App() {
         plans: { ...prev.plans, [viewId]: { ...current, plan: updater(current.plan) } },
       };
     });
-  };
+  }
 
   const plan = useMemo(() => {
     try {
@@ -727,14 +653,8 @@ export default function App() {
   }, [startCfg]);
 
   const addableTechs = useMemo(() => getAddableTechs(startCfg.plan), [startCfg.plan]);
-  const neededTechs = useMemo(
-    () => missingRequiredTechs(startCfg.plan),
-    [startCfg.plan],
-  );
-  const plannedTechs = useMemo(
-    () => new Set(startCfg.plan.filter((e) => e.kind === "tech").map((e) => e.name)),
-    [startCfg.plan],
-  );
+  const neededTechs = useMemo(() => missingRequiredTechs(startCfg.plan), [startCfg.plan]);
+  const plannedTechs = useMemo(() => new Set(startCfg.plan.filter((e) => e.kind === "tech").map((e) => e.name)), [startCfg.plan]);
   const allShips = useMemo(() => getShips(), []);
   const allDefenses = useMemo(() => getDefenses(), []);
   const allRecon = useMemo(() => getReconItems(), []);
@@ -746,24 +666,15 @@ export default function App() {
   const attackBlocked = !hasTechInPlan(startCfg.plan, "Marineakademie");
 
   // Angriffsflüge zählen nicht zum Planende, sollen in der Timeline aber ganz sichtbar sein.
-  const maxTick = Math.max(
-    plan?.finishTick ?? 1,
-    ...(plan?.steps ?? []).filter((s) => s.type === "attack").map((s) => s.endTick),
-    1,
-  );
-  const actionTicks = useMemo(
-    () => (plan ? plan.ticks.filter((t) => t.started.length > 0) : []),
-    [plan],
-  );
+  const maxTick = Math.max(plan?.finishTick ?? 1, ...(plan?.steps ?? []).filter((s) => s.type === "attack").map((s) => s.endTick), 1);
+  const actionTicks = useMemo(() => (plan ? plan.ticks.filter((t) => t.started.length > 0) : []), [plan]);
 
   const now = useNow();
 
   const currentTick = computeCurrentTick(startCfg, now);
   const nextAction = useMemo(() => {
     const ticks = actionTicks.filter((t) =>
-      t.started.some(
-        (job) => job.type !== "custom" && job.type !== "trade" && job.type !== "snapshot",
-      ),
+      t.started.some((job) => job.type !== "custom" && job.type !== "trade" && job.type !== "snapshot")
     );
     return ticks.find((t) => t.tick >= currentTick) ?? null;
   }, [actionTicks, currentTick]);
@@ -773,37 +684,24 @@ export default function App() {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
-  const [dialogTarget, setDialogTarget] = useState<PlanEntryDialogTarget | null>(
-    null,
-  );
+  const [dialogTarget, setDialogTarget] = useState<PlanEntryDialogTarget | null>(null);
   const [editingEntry, setEditingEntry] = useState<PlanEntry | null>(null);
 
-  const openAddTech = (name: string) => {
+  function openAddTech(name: string) {
     const tech = byName().get(name);
     if (!tech) return;
-    const defaultTick = defaultAddTick(
-      inspectTick,
-      currentTick,
-      getEarliestTechStartTick(startCfg, name),
-    );
+    const defaultTick = defaultAddTick(inspectTick, currentTick, getEarliestTechStartTick(startCfg, name));
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({ kind: "tech", tech, defaultTick });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddUnit = (name: string) => {
+  function openAddUnit(name: string) {
     const unit = unitByName(name);
     if (!unit) return;
-    const defaultTick = defaultAddTick(
-      inspectTick,
-      currentTick,
-      getEarliestBuildStartTick(startCfg, "unit", name),
-    );
-    const maxCount = Math.max(
-      1,
-      getMaxBuildCountAtTick(startCfg, "unit", name, defaultTick),
-    );
+    const defaultTick = defaultAddTick(inspectTick, currentTick, getEarliestBuildStartTick(startCfg, "unit", name));
+    const maxCount = Math.max(1, getMaxBuildCountAtTick(startCfg, "unit", name, defaultTick));
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -817,20 +715,13 @@ export default function App() {
       maxCount,
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddRecon = (name: string) => {
+  function openAddRecon(name: string) {
     const item = reconByName(name);
     if (!item) return;
-    const defaultTick = defaultAddTick(
-      inspectTick,
-      currentTick,
-      getEarliestBuildStartTick(startCfg, "recon", name),
-    );
-    const maxCount = Math.max(
-      1,
-      getMaxBuildCountAtTick(startCfg, "recon", name, defaultTick),
-    );
+    const defaultTick = defaultAddTick(inspectTick, currentTick, getEarliestBuildStartTick(startCfg, "recon", name));
+    const maxCount = Math.max(1, getMaxBuildCountAtTick(startCfg, "recon", name, defaultTick));
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -844,19 +735,20 @@ export default function App() {
       maxCount,
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddEconomy = (preset: {
-    asteroids?: number;
-    extractorsMet?: number;
-    extractorsKris?: number;
-  } = {}) => {
-    const earliest =
-      hasExtraktorTech
-        ? getEarliestExtractorStartTick(startCfg)
-        : hasObservatorium
-          ? getEarliestAsteroidStartTick(startCfg)
-          : 0;
+  function openAddEconomy(
+    preset: {
+      asteroids?: number;
+      extractorsMet?: number;
+      extractorsKris?: number;
+    } = {}
+  ) {
+    const earliest = hasExtraktorTech
+      ? getEarliestExtractorStartTick(startCfg)
+      : hasObservatorium
+        ? getEarliestAsteroidStartTick(startCfg)
+        : 0;
     const defaultTick = defaultAddTick(inspectTick, currentTick, earliest);
     const info = getMaxExtractorsAtTick(startCfg, defaultTick);
     setDialogMode("add");
@@ -875,9 +767,9 @@ export default function App() {
       costKrisPerAsteroid: ASTEROID_COST.kris,
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddCustom = () => {
+  function openAddCustom() {
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -888,9 +780,9 @@ export default function App() {
       defaultKris: 0,
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddTrade = () => {
+  function openAddTrade() {
     const doneTick = plan?.steps.find((s) => s.name === "Interstellarer Handel")?.endTick ?? 0;
     setDialogMode("add");
     setEditingEntry(null);
@@ -902,11 +794,11 @@ export default function App() {
       defaultReceiveAmount: 0,
     });
     setDialogOpen(true);
-  };
+  }
 
   // Kampffenster aller Roids (alte Roid-Einträge + Angriffsflüge mit Ziel-Exen).
-  const occupiedRoids = (exceptId?: string) =>
-    startCfg.plan.flatMap((e) => {
+  function occupiedRoids(exceptId?: string) {
+    return startCfg.plan.flatMap((e) => {
       if (e.id === exceptId) return [];
       if (e.kind === "roid") {
         return [
@@ -930,8 +822,9 @@ export default function App() {
       }
       return [];
     });
+  }
 
-  const openAddCatastrophe = () => {
+  function openAddCatastrophe() {
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -940,9 +833,9 @@ export default function App() {
       defaultDuration: 1,
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddAttack = () => {
+  function openAddAttack() {
     setDialogMode("add");
     setEditingEntry(null);
     setDialogTarget({
@@ -956,9 +849,9 @@ export default function App() {
       occupiedRoids: occupiedRoids(),
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openAddSnapshot = () => {
+  function openAddSnapshot() {
     const defaultTick = currentTick > 0 ? currentTick : 1;
     const snap = getResourcesAtTick(startCfg, defaultTick);
     setDialogMode("add");
@@ -973,9 +866,9 @@ export default function App() {
       defaultAsteroids: snap.asteroids,
     });
     setDialogOpen(true);
-  };
+  }
 
-  const openEditEntry = (id: string) => {
+  function openEditEntry(id: string) {
     const entry = startCfg.plan.find((e) => e.id === id);
     if (!entry) return;
     setDialogMode("edit");
@@ -997,12 +890,7 @@ export default function App() {
         cost: { met: 0, kris: 0 },
         dependencies: [],
       };
-      const maxCount = getMaxBuildCountAtTick(
-        withoutPlanEntry(startCfg, entry.id),
-        "unit",
-        entry.name,
-        entry.startTick,
-      );
+      const maxCount = getMaxBuildCountAtTick(withoutPlanEntry(startCfg, entry.id), "unit", entry.name, entry.startTick);
       setDialogTarget({
         kind: "unit",
         name: entry.name,
@@ -1015,12 +903,7 @@ export default function App() {
       });
     } else if (entry.kind === "recon") {
       const item = reconByName(entry.name);
-      const maxCount = getMaxBuildCountAtTick(
-        withoutPlanEntry(startCfg, entry.id),
-        "recon",
-        entry.name,
-        entry.startTick,
-      );
+      const maxCount = getMaxBuildCountAtTick(withoutPlanEntry(startCfg, entry.id), "recon", entry.name, entry.startTick);
       setDialogTarget({
         kind: "recon",
         name: entry.name,
@@ -1031,11 +914,7 @@ export default function App() {
         defaultCount: entry.count,
         maxCount,
       });
-    } else if (
-      entry.kind === "economy" ||
-      entry.kind === "asteroids" ||
-      entry.kind === "extractors"
-    ) {
+    } else if (entry.kind === "economy" || entry.kind === "asteroids" || entry.kind === "extractors") {
       const eco =
         entry.kind === "economy"
           ? {
@@ -1059,14 +938,8 @@ export default function App() {
               };
       const info = getMaxExtractorsAtTick(startCfg, eco.startTick);
       const asteroidsOwned = Math.max(0, info.asteroids - eco.asteroids);
-      const alreadyBuilt = Math.max(
-        0,
-        info.alreadyBuilt - eco.extractorsMet - eco.extractorsKris,
-      );
-      const freeSlots = Math.max(
-        0,
-        asteroidsOwned * 20 - alreadyBuilt,
-      );
+      const alreadyBuilt = Math.max(0, info.alreadyBuilt - eco.extractorsMet - eco.extractorsKris);
+      const freeSlots = Math.max(0, asteroidsOwned * 20 - alreadyBuilt);
       setDialogTarget({
         kind: "economy",
         defaultTick: eco.startTick,
@@ -1136,9 +1009,9 @@ export default function App() {
       });
     }
     setDialogOpen(true);
-  };
+  }
 
-  const handleDialogSubmit = (values: {
+  function handleDialogSubmit(values: {
     startTick: number;
     count?: number;
     asteroids?: number;
@@ -1155,7 +1028,7 @@ export default function App() {
     multi?: RoidMulti;
     noReturn?: boolean;
     roidDuration?: number;
-  }) => {
+  }) {
     if (!dialogTarget) return;
 
     if (dialogMode === "edit" && editingEntry) {
@@ -1165,11 +1038,7 @@ export default function App() {
           if (e.kind === "tech") {
             return { ...e, startTick: values.startTick };
           }
-          if (
-            e.kind === "economy" ||
-            e.kind === "asteroids" ||
-            e.kind === "extractors"
-          ) {
+          if (e.kind === "economy" || e.kind === "asteroids" || e.kind === "extractors") {
             const asteroids = Math.max(0, values.asteroids ?? 0);
             const extractorsMet = Math.max(0, values.extractorsMet ?? 0);
             const extractorsKris = Math.max(0, values.extractorsKris ?? 0);
@@ -1226,10 +1095,7 @@ export default function App() {
               kind: "attack",
               startTick: values.startTick,
               duration: clampAttackDuration(values.duration ?? e.duration),
-              roidDuration: clampAttackRoidDuration(
-                values.roidDuration ?? e.roidDuration,
-                values.duration ?? e.duration,
-              ),
+              roidDuration: clampAttackRoidDuration(values.roidDuration ?? e.roidDuration, values.duration ?? e.duration),
               targetMet: Math.max(0, values.targetMet ?? e.targetMet),
               targetKris: Math.max(0, values.targetKris ?? e.targetKris),
               ...(values.multi ? { multi: values.multi } : {}),
@@ -1252,7 +1118,7 @@ export default function App() {
             startTick: values.startTick,
             count: values.count ?? ("count" in e ? e.count : 1),
           } as PlanEntry;
-        }),
+        })
       );
       return;
     }
@@ -1407,16 +1273,16 @@ export default function App() {
       };
       updateCurrentPlan((plan) => [...plan, entry]);
     }
-  };
+  }
 
-  const handleDialogRemove = () => {
+  function handleDialogRemove() {
     if (!editingEntry) return;
     updateCurrentPlan((plan) => removePlanEntryCascade(plan, editingEntry.id));
     setDialogOpen(false);
     setEditingEntry(null);
-  };
+  }
 
-  const resetPlan = (sourceId: string) => {
+  function resetPlan(sourceId: string) {
     setAppState((prev) => {
       const slot = viewId;
       let next: StoredPlan | null = null;
@@ -1436,7 +1302,7 @@ export default function App() {
         plans: { ...prev.plans, [slot]: next },
       };
     });
-  };
+  }
 
   return (
     <TooltipProvider>
@@ -1467,25 +1333,25 @@ export default function App() {
         />
         <div className="grid min-h-0 flex-1 grid-cols-[20rem_minmax(0,1fr)]">
           <Sidebar
-              techs={addableTechs}
-              neededTechs={neededTechs}
-              plannedTechs={plannedTechs}
-              ships={allShips}
-              defenses={allDefenses}
-              recon={allRecon}
-              hasObservatorium={hasObservatorium}
-              hasExtraktorTech={hasExtraktorTech}
-              attackBlocked={attackBlocked}
-              onAddTech={openAddTech}
-              onAddUnit={openAddUnit}
-              onAddRecon={openAddRecon}
-              onAddEconomy={openAddEconomy}
-              onAddCatastrophe={openAddCatastrophe}
-              onAddAttack={openAddAttack}
-              onAddCustom={openAddCustom}
-              onAddTrade={openAddTrade}
-              hasInterstellarerHandel={hasInterstellarerHandel}
-            />
+            techs={addableTechs}
+            neededTechs={neededTechs}
+            plannedTechs={plannedTechs}
+            ships={allShips}
+            defenses={allDefenses}
+            recon={allRecon}
+            hasObservatorium={hasObservatorium}
+            hasExtraktorTech={hasExtraktorTech}
+            attackBlocked={attackBlocked}
+            onAddTech={openAddTech}
+            onAddUnit={openAddUnit}
+            onAddRecon={openAddRecon}
+            onAddEconomy={openAddEconomy}
+            onAddCatastrophe={openAddCatastrophe}
+            onAddAttack={openAddAttack}
+            onAddCustom={openAddCustom}
+            onAddTrade={openAddTrade}
+            hasInterstellarerHandel={hasInterstellarerHandel}
+          />
           <Overview
             actionTicks={actionTicks}
             logTicks={plan?.ticks ?? []}
@@ -1556,10 +1422,7 @@ export default function App() {
             // Beim Bearbeiten ohne den Eintrag selbst simulieren, sonst fehlen
             // dessen Kosten im Budget (bzw. zählen doppelt, wenn er später startet).
             if (dialogTarget.kind === "unit" || dialogTarget.kind === "recon") {
-              const cfg =
-                dialogMode === "edit" && editingEntry
-                  ? withoutPlanEntry(startCfg, editingEntry.id)
-                  : startCfg;
+              const cfg = dialogMode === "edit" && editingEntry ? withoutPlanEntry(startCfg, editingEntry.id) : startCfg;
               return getMaxBuildCountAtTick(cfg, dialogTarget.kind, dialogTarget.name, tick);
             }
             return 999;
@@ -1584,8 +1447,7 @@ export default function App() {
             const freeSlots = Math.max(0, asteroids * 20 - alreadyBuilt);
             // Refund costs of the entry being edited so max reflects free budget.
             const refundKris = bonusAst * ASTEROID_COST.kris;
-            const refundMet =
-              bonusExt > 0 ? extractorBatchCost(alreadyBuilt, bonusExt) : 0;
+            const refundMet = bonusExt > 0 ? extractorBatchCost(alreadyBuilt, bonusExt) : 0;
             let met = snap.met + refundMet;
             let kris = snap.kris + refundKris;
             if (dialogMode === "edit" && editingEntry?.kind === "trade") {

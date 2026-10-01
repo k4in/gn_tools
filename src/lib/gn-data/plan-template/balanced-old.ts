@@ -1,5 +1,5 @@
 /** Previous balanced plan (not wired into the app for now). */
-import type { PlanEntry, PlanTemplate } from "@/gn-data/plan";
+import { type PlanEntry, type PlanTemplate } from "@/lib/gn-data/plan.ts";
 
 export const balancedOld: PlanTemplate = {
   id: "balanced_old",

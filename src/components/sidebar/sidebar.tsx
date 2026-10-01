@@ -1,17 +1,12 @@
-import { Economy } from "@/components/sidebar/economy";
-import { Legend } from "@/components/sidebar/legend";
-import { Tech } from "@/components/sidebar/tech";
-import { Units } from "@/components/sidebar/units";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/shadcn/tabs";
-import type { Defense } from "@/gn-data/defense";
-import type { TechTreeEntry } from "@/gn-data/techtree";
-import type { Ship } from "@/gn-data/ships";
-import type { Utility } from "@/gn-data/utility";
+import { Economy } from "@/components/sidebar/economy.tsx";
+import { Legend } from "@/components/sidebar/legend.tsx";
+import { Tech } from "@/components/sidebar/tech.tsx";
+import { Units } from "@/components/sidebar/units.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn/tabs.tsx";
+import { type Defense } from "@/lib/gn-data/defense.ts";
+import { type TechTreeEntry } from "@/lib/gn-data/techtree.ts";
+import { type Ship } from "@/lib/gn-data/ships.ts";
+import { type Utility } from "@/lib/gn-data/utility.ts";
 
 export type SidebarProps = {
   techs: TechTreeEntry[];
@@ -26,11 +21,7 @@ export type SidebarProps = {
   onAddTech: (name: string) => void;
   onAddUnit: (name: string) => void;
   onAddRecon: (name: string) => void;
-  onAddEconomy: (preset?: {
-    asteroids?: number;
-    extractorsMet?: number;
-    extractorsKris?: number;
-  }) => void;
+  onAddEconomy: (preset?: { asteroids?: number; extractorsMet?: number; extractorsKris?: number }) => void;
   onAddCatastrophe: () => void;
   onAddAttack: () => void;
   onAddCustom: () => void;
@@ -76,14 +67,7 @@ export function Sidebar({
         </TabsContent>
 
         <TabsContent value="units" className={PANEL_CLASS}>
-          <Units
-            ships={ships}
-            defenses={defenses}
-            recon={recon}
-            planned={plannedTechs}
-            onAdd={onAddUnit}
-            onAddRecon={onAddRecon}
-          />
+          <Units ships={ships} defenses={defenses} recon={recon} planned={plannedTechs} onAdd={onAddUnit} onAddRecon={onAddRecon} />
         </TabsContent>
 
         <TabsContent value="economy" className={PANEL_CLASS}>

@@ -23,11 +23,11 @@ export type QuestDef = {
   isComplete: (ctx: QuestContext) => boolean;
 };
 
-function hasAll(completed: ReadonlySet<string>, names: string[]) {
+export function hasAll(completed: ReadonlySet<string>, names: string[]) {
   return names.every((n) => completed.has(n));
 }
 
-function hasAny(completed: ReadonlySet<string>, names: string[]) {
+export function hasAny(completed: ReadonlySet<string>, names: string[]) {
   return names.some((n) => completed.has(n));
 }
 
@@ -57,9 +57,7 @@ export const QUESTS: QuestDef[] = [
   resQuest("extraktor-research", 10000, 10000, (ctx) => ctx.completed.has("Extraktor")),
   resQuest("raumstation", 12000, 5000, (ctx) => ctx.completed.has("Raumstation")),
   resQuest("sektorscan", 10000, 20000, (ctx) => ctx.completed.has("Sektorscan")),
-  resQuest("einheiten-oder-geschuetzscan", 25000, 20000, (ctx) =>
-    hasAny(ctx.completed, ["Einheitenscan", "Geschützscan"])
-  ),
+  resQuest("einheiten-oder-geschuetzscan", 25000, 20000, (ctx) => hasAny(ctx.completed, ["Einheitenscan", "Geschützscan"])),
   resQuest("first-scanverstaerker", 10000, 25000, (ctx) => ctx.scanverstaerker >= 1),
   {
     id: "asteroid-met-extractors",
@@ -68,12 +66,7 @@ export const QUESTS: QuestDef[] = [
     isComplete: (ctx) => ctx.asteroids >= 1 && ctx.extractorsMet >= 10,
   },
   // 2. Angriffstick des ersten Roids; bei Dauer 1 der Tick danach.
-  resQuest(
-    "first-roid",
-    60000,
-    80000,
-    (ctx) => ctx.firstRoidStartTick !== null && ctx.tick >= ctx.firstRoidStartTick + 1,
-  ),
+  resQuest("first-roid", 60000, 80000, (ctx) => ctx.firstRoidStartTick !== null && ctx.tick >= ctx.firstRoidStartTick + 1),
   resQuest("cancri-100", 50000, 75000, (ctx) => ctx.cancri >= 100),
 ];
 
@@ -88,5 +81,3 @@ export function formatQuestReward(reward: QuestReward): string {
   }
   return resLabel(reward.met, reward.kris) || "—";
 }
-
-export { hasAll, hasAny };

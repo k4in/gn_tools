@@ -1,5 +1,5 @@
-import { AvailableTechs } from "@/components/sidebar/available-techs";
-import type { TechTreeEntry } from "@/gn-data/techtree";
+import { AvailableTechs } from "@/components/sidebar/available-techs.tsx";
+import { type TechTreeEntry } from "@/lib/gn-data/techtree.ts";
 
 export type TechProps = {
   techs: TechTreeEntry[];

@@ -1,27 +1,17 @@
-import {
-  getExtractorCost,
-  getExtractorYield,
-  getRequiredAsteroidAmount,
-} from "@/gn-data/extractor";
-import { defaults, type PlanEntry, type RoidMulti } from "@/gn-data/plan";
-import {
-  evaluateQuests,
-  type QuestDef,
-  type QuestReward,
-} from "@/gn-data/quests";
-import { withUnitBuildBug } from "@/gn-data/build-time-bug";
-import { defenses as baseDefenses, type Defense } from "@/gn-data/defense";
-import { ships as baseShips, type Ship } from "@/gn-data/ships";
-import { techtree, type TechTreeEntry } from "@/gn-data/techtree";
-import { utilities as baseUtilities, type Utility } from "@/gn-data/utility";
+import { getExtractorCost, getExtractorYield, getRequiredAsteroidAmount } from "@/lib/gn-data/extractor.ts";
+import { defaults, type PlanEntry, type RoidMulti } from "@/lib/gn-data/plan.ts";
+import { evaluateQuests, type QuestDef, type QuestReward } from "@/lib/gn-data/quests.ts";
+import { withUnitBuildBug } from "@/lib/gn-data/build-time-bug.ts";
+import { defenses as baseDefenses, type Defense } from "@/lib/gn-data/defense.ts";
+import { ships as baseShips, type Ship } from "@/lib/gn-data/ships.ts";
+import { techtree, type TechTreeEntry } from "@/lib/gn-data/techtree.ts";
+import { utilities as baseUtilities, type Utility } from "@/lib/gn-data/utility.ts";
 
 // Spiel-Bug: Einheiten und Scan-Items bauen 1 Tick länger (siehe build-time-bug.ts).
 // Asteroiden sind sofort da und bleiben ausgenommen.
 const ships = baseShips.map(withUnitBuildBug);
 const defenses = baseDefenses.map(withUnitBuildBug);
 const utilities = baseUtilities.map((u) => (u.name === "Asteroid" ? u : withUnitBuildBug(u)));
-
-export type { PlanEntry, RoidCoAttacker, RoidMulti } from "@/gn-data/plan";
 
 /** @deprecated use startCfg.tick_minutes / defaults.tick_minutes */
 export const TICK_MINUTES = defaults.tick_minutes;
@@ -81,14 +71,9 @@ export function normalizeTaxes(raw: unknown): TaxSegment[] {
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
-    const fromTick =
-      typeof o.fromTick === "number" && Number.isFinite(o.fromTick)
-        ? Math.max(0, Math.floor(o.fromTick))
-        : NaN;
-    const met =
-      typeof o.met === "number" && Number.isFinite(o.met) ? o.met : NaN;
-    const kris =
-      typeof o.kris === "number" && Number.isFinite(o.kris) ? o.kris : NaN;
+    const fromTick = typeof o.fromTick === "number" && Number.isFinite(o.fromTick) ? Math.max(0, Math.floor(o.fromTick)) : NaN;
+    const met = typeof o.met === "number" && Number.isFinite(o.met) ? o.met : NaN;
+    const kris = typeof o.kris === "number" && Number.isFinite(o.kris) ? o.kris : NaN;
     if (!Number.isFinite(fromTick) || !Number.isFinite(met) || !Number.isFinite(kris)) continue;
     if (fromTick <= 0) continue;
     byTick.set(fromTick, {
@@ -100,10 +85,7 @@ export function normalizeTaxes(raw: unknown): TaxSegment[] {
   return [...byTick.values()].sort((a, b) => a.fromTick - b.fromTick);
 }
 
-export function taxRatesAt(
-  taxes: TaxSegment[] | undefined,
-  tick: number,
-): { met: number; kris: number } {
+export function taxRatesAt(taxes: TaxSegment[] | undefined, tick: number): { met: number; kris: number } {
   let current = { met: 0, kris: 0 };
   if (!taxes) return current;
   for (const seg of taxes) {
@@ -113,11 +95,7 @@ export function taxRatesAt(
   return current;
 }
 
-export function taxedIncome(
-  gross: Res,
-  taxes: TaxSegment[] | undefined,
-  tick: number,
-): Res {
+export function taxedIncome(gross: Res, taxes: TaxSegment[] | undefined, tick: number): Res {
   const tax = taxRatesAt(taxes, tick);
   return {
     met: Math.ceil((gross.met * (100 - tax.met)) / 100),
@@ -125,13 +103,7 @@ export function taxedIncome(
   };
 }
 
-function projectWithIncome(
-  start: Res,
-  fromTick: number,
-  toTick: number,
-  grossIncome: Res,
-  taxes: TaxSegment[] | undefined,
-): Res {
+function projectWithIncome(start: Res, fromTick: number, toTick: number, grossIncome: Res, taxes: TaxSegment[] | undefined): Res {
   let met = start.met;
   let kris = start.kris;
   for (let t = fromTick + 1; t <= toTick; t++) {
@@ -153,16 +125,7 @@ function maxTicksOf(startCfg: StartConfig) {
 export type Res = { met: number; kris: number };
 
 export type JobKind =
-  | TechTreeEntry["type"]
-  | "economy"
-  | "unit"
-  | "recon"
-  | "custom"
-  | "roid"
-  | "catastrophe"
-  | "attack"
-  | "trade"
-  | "snapshot";
+  TechTreeEntry["type"] | "economy" | "unit" | "recon" | "custom" | "roid" | "catastrophe" | "attack" | "trade" | "snapshot";
 
 export type Job = {
   name: string;
@@ -321,28 +284,22 @@ function pay(res: Res, cost: Res): Res {
 
 function requiredClosure(goal: string, map: Map<string, TechTreeEntry>) {
   const needed = new Set<string>();
-  const visit = (name: string) => {
+  function visit(name: string) {
     if (needed.has(name)) return;
     const entry = map.get(name);
     if (!entry) throw new Error(`Unbekannte Technologie: ${name}`);
     needed.add(name);
     for (const dep of entry.dependencies) visit(dep);
-  };
+  }
   visit(goal);
   return needed;
 }
 
-function criticalPathTicks(
-  name: string,
-  map: Map<string, TechTreeEntry>,
-  memo = new Map<string, number>(),
-): number {
+function criticalPathTicks(name: string, map: Map<string, TechTreeEntry>, memo = new Map<string, number>()): number {
   const cached = memo.get(name);
   if (cached !== undefined) return cached;
   const entry = map.get(name)!;
-  const depMax = entry.dependencies.length
-    ? Math.max(...entry.dependencies.map((d) => criticalPathTicks(d, map, memo)))
-    : 0;
+  const depMax = entry.dependencies.length ? Math.max(...entry.dependencies.map((d) => criticalPathTicks(d, map, memo))) : 0;
   const total = depMax + entry.ticks;
   memo.set(name, total);
   return total;
@@ -355,9 +312,7 @@ function criticalPathSet(goal: string, map: Map<string, TechTreeEntry>) {
     path.add(current);
     const entry: TechTreeEntry = map.get(current)!;
     if (!entry.dependencies.length) break;
-    current = entry.dependencies.reduce((best, d) =>
-      criticalPathTicks(d, map) > criticalPathTicks(best, map) ? d : best,
-    );
+    current = entry.dependencies.reduce((best, d) => (criticalPathTicks(d, map) > criticalPathTicks(best, map) ? d : best));
   }
   return path;
 }
@@ -410,11 +365,7 @@ function tickDateTime(startCfg: StartConfig, tick: number): Date {
 }
 
 /** Restzeit bis zu einem Tick, z.B. "in 2 Stunden und 05 Minuten". */
-export function formatTimeUntilTick(
-  startCfg: StartConfig,
-  tick: number,
-  now: Date = new Date(),
-): string {
+export function formatTimeUntilTick(startCfg: StartConfig, tick: number, now: Date = new Date()): string {
   const target = tickDateTime(startCfg, tick);
   const diffMs = target.getTime() - now.getTime();
   if (diffMs <= 0) return "jetzt";
@@ -533,11 +484,7 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
   }
 }
 
-export function formatTradePlanLabel(
-  give: "met" | "kris",
-  giveAmount: number,
-  receiveAmount: number,
-) {
+export function formatTradePlanLabel(give: "met" | "kris", giveAmount: number, receiveAmount: number) {
   const from = give === "met" ? "M" : "K";
   const to = give === "met" ? "K" : "M";
   return `Trade ${formatRes(giveAmount)}${from} → ${formatRes(receiveAmount)}${to}`;
@@ -574,16 +521,8 @@ export function clampAttackRoidDuration(roidDuration: number | undefined, durati
 }
 
 /** Erster Roid-Tick: der Roid liegt immer auf den letzten Kampfticks. */
-export function attackRoidStartTick(
-  startTick: number,
-  duration: number,
-  roidDuration: number | undefined,
-): number {
-  return (
-    attackFirstCombatTick(startTick) +
-    clampAttackDuration(duration) -
-    clampAttackRoidDuration(roidDuration, duration)
-  );
+export function attackRoidStartTick(startTick: number, duration: number, roidDuration: number | undefined): number {
+  return attackFirstCombatTick(startTick) + clampAttackDuration(duration) - clampAttackRoidDuration(roidDuration, duration);
 }
 
 /** Gesamtdauer eines Angriffsflugs: Hinflug + Kampf (+ Rückflug). */
@@ -591,11 +530,7 @@ export function attackTotalTicks(duration: number, noReturn = false): number {
   return (noReturn ? 1 : 2) * ATTACK_FLIGHT_TICKS + clampAttackDuration(duration);
 }
 
-export function formatAttackPlanLabel(entry: {
-  duration: number;
-  targetMet: number;
-  targetKris: number;
-}): string {
+export function formatAttackPlanLabel(entry: { duration: number; targetMet: number; targetKris: number }): string {
   const d = clampAttackDuration(entry.duration);
   return entry.targetMet > 0 || entry.targetKris > 0
     ? `Angriffsflug ${entry.targetMet}/${entry.targetKris} · ${d} T`
@@ -609,10 +544,7 @@ export function clampRoidDuration(n: number): number {
 
 export function clampCatastropheDuration(n: number): number {
   if (!Number.isFinite(n)) return CATASTROPHE_DURATION_MIN;
-  return Math.min(
-    CATASTROPHE_DURATION_MAX,
-    Math.max(CATASTROPHE_DURATION_MIN, Math.floor(n)),
-  );
+  return Math.min(CATASTROPHE_DURATION_MAX, Math.max(CATASTROPHE_DURATION_MIN, Math.floor(n)));
 }
 
 export function formatRoidPlanLabel(targetMet: number, targetKris: number): string {
@@ -651,12 +583,7 @@ export function roidEndTick(startTick: number, duration: number): number {
   return startTick + clampRoidDuration(duration);
 }
 
-export function roidsOverlap(
-  aStart: number,
-  aDuration: number,
-  bStart: number,
-  bDuration: number,
-): boolean {
+export function roidsOverlap(aStart: number, aDuration: number, bStart: number, bDuration: number): boolean {
   return aStart < roidEndTick(bStart, bDuration) && bStart < roidEndTick(aStart, aDuration);
 }
 
@@ -664,13 +591,11 @@ export function findOverlappingRoid(
   plan: PlanEntry[],
   startTick: number,
   duration: number,
-  exceptId?: string,
+  exceptId?: string
 ): Extract<PlanEntry, { kind: "roid" }> | undefined {
   return plan.find(
     (e): e is Extract<PlanEntry, { kind: "roid" }> =>
-      e.kind === "roid" &&
-      e.id !== exceptId &&
-      roidsOverlap(startTick, duration, e.startTick, e.duration),
+      e.kind === "roid" && e.id !== exceptId && roidsOverlap(startTick, duration, e.startTick, e.duration)
   );
 }
 
@@ -678,10 +603,9 @@ export function findOverlappingRoid(
 export function normalizeRoidMulti(raw: unknown): RoidMulti | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const o = raw as { ownCleptors?: unknown; attackers?: unknown };
-  const int = (v: unknown, min: number, max = Number.MAX_SAFE_INTEGER) =>
-    typeof v === "number" && Number.isFinite(v)
-      ? Math.min(max, Math.max(min, Math.floor(v)))
-      : min;
+  function int(v: unknown, min: number, max = Number.MAX_SAFE_INTEGER) {
+    return typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.floor(v))) : min;
+  }
   const attackers = Array.isArray(o.attackers)
     ? o.attackers
         .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
@@ -710,12 +634,7 @@ export type RoidLootPlan = {
  * 18263 vs. 12166 Cleptoren auf 701/947 Exen) — wir zuerst, dann die anderen Angreifer in
  * Reihenfolge, bis nichts mehr übrig ist.
  */
-export function computeRoidLoot(
-  targetMet: number,
-  targetKris: number,
-  duration: number,
-  multi?: RoidMulti,
-): RoidLootPlan {
+export function computeRoidLoot(targetMet: number, targetKris: number, duration: number, multi?: RoidMulti): RoidLootPlan {
   let remMet = Math.max(0, Math.floor(targetMet));
   let remKris = Math.max(0, Math.floor(targetKris));
   const ticks = clampRoidDuration(duration);
@@ -724,9 +643,7 @@ export function computeRoidLoot(
   const total = { met: 0, kris: 0 };
 
   // Index 0 = wir, danach die weiteren Angreifer.
-  const cleptors = multi
-    ? [Math.max(0, multi.ownCleptors), ...multi.attackers.map((a) => Math.max(0, a.cleptors))]
-    : [];
+  const cleptors = multi ? [Math.max(0, multi.ownCleptors), ...multi.attackers.map((a) => Math.max(0, a.cleptors))] : [];
 
   for (let i = 0; i < ticks; i++) {
     const stealMet = Math.floor(remMet * ROID_STEAL_RATE);
@@ -820,12 +737,7 @@ export function maxAffordableExtractors(opts: {
 
   let canBuild = 0;
   while (true) {
-    while (
-      allowBuy &&
-      built + canBuild >= slots &&
-      asteroids < maxAsteroids &&
-      kris >= ASTEROID_COST_KRIS
-    ) {
+    while (allowBuy && built + canBuild >= slots && asteroids < maxAsteroids && kris >= ASTEROID_COST_KRIS) {
       kris -= ASTEROID_COST_KRIS;
       asteroids += 1;
       slots += EXTRACTOR_SLOT_PER_ASTEROID;
@@ -841,7 +753,7 @@ export function maxAffordableExtractors(opts: {
 
 function slottedExtractorStats(
   queue: Array<"met" | "kris">,
-  slots: number,
+  slots: number
 ): {
   income: Res;
   producingMet: number;
@@ -867,9 +779,7 @@ function slottedExtractorStats(
   };
 }
 
-export function getExtractorSlotShortage(
-  plan: PlanResult,
-): ExtractorSlotShortage | null {
+export function getExtractorSlotShortage(plan: PlanResult): ExtractorSlotShortage | null {
   if (plan.unslottedExtractors <= 0) return null;
   const extractors = plan.extractorsMet + plan.extractorsKris;
   const needed = getRequiredAsteroidAmount(extractors);
@@ -883,16 +793,11 @@ export function getExtractorSlotShortage(
 }
 
 export function plannedTechNames(plan: PlanEntry[]): string[] {
-  return plan.filter((e): e is Extract<PlanEntry, { kind: "tech" }> => e.kind === "tech").map(
-    (e) => e.name,
-  );
+  return plan.filter((e): e is Extract<PlanEntry, { kind: "tech" }> => e.kind === "tech").map((e) => e.name);
 }
 
 /** Namen, die durch bereits geplante Techs via `eliminates` blockiert sind. */
-export function eliminatedTechNames(
-  owned: Iterable<string>,
-  map: Map<string, TechTreeEntry> = byName(),
-): Set<string> {
+export function eliminatedTechNames(owned: Iterable<string>, map: Map<string, TechTreeEntry> = byName()): Set<string> {
   const eliminated = new Set<string>();
   for (const name of owned) {
     const tech = map.get(name);
@@ -902,11 +807,7 @@ export function eliminatedTechNames(
   return eliminated;
 }
 
-function isBlockedByElimination(
-  tech: TechTreeEntry,
-  eliminated: Set<string>,
-  map: Map<string, TechTreeEntry>,
-): boolean {
+function isBlockedByElimination(tech: TechTreeEntry, eliminated: Set<string>, map: Map<string, TechTreeEntry>): boolean {
   if (eliminated.size === 0) return false;
   for (const n of requiredClosure(tech.name, map)) {
     if (eliminated.has(n)) return true;
@@ -945,12 +846,12 @@ export function missingRequiredTechs(plan: PlanEntry[]): Set<string> {
   const map = byName();
   const owned = new Set(plannedTechNames(plan));
   const needed = new Set<string>();
-  const addName = (name: string) => {
+  function addName(name: string) {
     if (!map.has(name)) return;
     for (const n of requiredClosure(name, map)) {
       if (!owned.has(n)) needed.add(n);
     }
-  };
+  }
   for (const e of plan) {
     if (e.kind === "tech") addName(e.name);
     else if (e.kind === "unit") {
@@ -1039,9 +940,7 @@ export function removePlanEntryCascade(plan: PlanEntry[], id: string): PlanEntry
           changed = true;
         }
       } else if (entry.kind === "economy") {
-        const needsExt =
-          (entry.extractorsMet > 0 || entry.extractorsKris > 0) &&
-          removedTechNames.has("Extraktor");
+        const needsExt = (entry.extractorsMet > 0 || entry.extractorsKris > 0) && removedTechNames.has("Extraktor");
         const needsAst = entry.asteroids > 0 && removedTechNames.has("Observatorium");
         if (needsExt || needsAst) {
           toRemove.add(entry.id);
@@ -1137,11 +1036,7 @@ type PendingSnapshot = {
   done: boolean;
 };
 
-function removeQueuedExtractors(
-  queue: Array<"met" | "kris">,
-  resource: "met" | "kris",
-  count: number,
-) {
+function removeQueuedExtractors(queue: Array<"met" | "kris">, resource: "met" | "kris", count: number) {
   let left = count;
   for (let i = queue.length - 1; i >= 0 && left > 0; i--) {
     if (queue[i] === resource) {
@@ -1158,11 +1053,7 @@ function removeQueuedExtractors(
  * - Ressourcenkonflikte: früherer Wunsch-Tick hat Vorrang; gleicher Tick → Plan-Reihenfolge
  * - Unbegrenzt parallele Jobs
  */
-function simulatePlan(
-  plan: PlanEntry[],
-  map: Map<string, TechTreeEntry>,
-  startCfg: StartConfig,
-): Omit<PlanResult, "start" | "critical"> {
+function simulatePlan(plan: PlanEntry[], map: Map<string, TechTreeEntry>, startCfg: StartConfig): Omit<PlanResult, "start" | "critical"> {
   let res: Res = {
     met: startCfg.starting_resources.metall,
     kris: startCfg.starting_resources.kristall,
@@ -1192,9 +1083,7 @@ function simulatePlan(
   const entryDone = new Set<string>();
 
   // Pending work derived from plan (insertion order preserved)
-  const techEntries = plan.filter(
-    (e): e is Extract<PlanEntry, { kind: "tech" }> => e.kind === "tech",
-  );
+  const techEntries = plan.filter((e): e is Extract<PlanEntry, { kind: "tech" }> => e.kind === "tech");
   const completedUnits = new Set<string>();
   const pendingTechs = new Map<string, { entryId: string; desiredTick: number }>();
   for (const e of techEntries) {
@@ -1344,24 +1233,19 @@ function simulatePlan(
     .sort((a, b) => a.entry.startTick - b.entry.startTick || a.index - b.index)
     .map(({ entry }) => entry);
 
-  const totalExtractors = () => extractorsMet + extractorsKris;
+  function totalExtractors() {
+    return extractorsMet + extractorsKris;
+  }
 
-  const isReady = (name: string) => {
+  function isReady(name: string) {
     const e = map.get(name)!;
     return e.dependencies.every((d) => completed.has(d));
-  };
+  }
 
-  const allDone = () => {
+  function allDone() {
     if (pendingTechs.size > 0) return false;
     if (pendingUnits.some((u) => u.remaining > 0)) return false;
-    if (
-      pendingEconomy.some(
-        (u) =>
-          u.remainingAsteroids > 0 ||
-          u.remainingExtractorsMet > 0 ||
-          u.remainingExtractorsKris > 0,
-      )
-    ) {
+    if (pendingEconomy.some((u) => u.remainingAsteroids > 0 || u.remainingExtractorsMet > 0 || u.remainingExtractorsKris > 0)) {
       return false;
     }
     if (pendingCustom.some((c) => !c.done)) return false;
@@ -1372,18 +1256,18 @@ function simulatePlan(
     // active tech/unit jobs still running → wait
     if (active.length > 0) return false;
     return true;
-  };
+  }
 
-  const markEntryStart = (id: string, tick: number) => {
+  function markEntryStart(id: string, tick: number) {
     if (entryActualStart[id] === undefined) entryActualStart[id] = tick;
-  };
+  }
 
-  const markEntryFinish = (id: string, tick: number) => {
+  function markEntryFinish(id: string, tick: number) {
     entryFinishTicks[id] = tick;
     entryDone.add(id);
-  };
+  }
 
-  const applyManualSnapshots = (tick: number): NamedJob[] => {
+  function applyManualSnapshots(tick: number): NamedJob[] {
     const started: NamedJob[] = [];
     for (const pending of pendingSnapshots) {
       if (pending.done || pending.desiredTick !== tick) continue;
@@ -1411,9 +1295,9 @@ function simulatePlan(
       pending.done = true;
     }
     return started;
-  };
+  }
 
-  const tryStart = (tick: number) => {
+  function tryStart(tick: number) {
     const startedJobs: NamedJob[] = [];
     const finishedJobs: NamedJob[] = [];
     const roidLoot: RoidLootEvent[] = [];
@@ -1466,10 +1350,7 @@ function simulatePlan(
         if (tick < pending.desiredTick) continue;
 
         // deps: for units/recon check tech deps completed
-        const deps =
-          entry.kind === "unit"
-            ? unitByName(entry.name)?.dependencies ?? []
-            : reconByName(entry.name)?.dependencies ?? [];
+        const deps = entry.kind === "unit" ? (unitByName(entry.name)?.dependencies ?? []) : (reconByName(entry.name)?.dependencies ?? []);
 
         const count = pending.remaining;
         const totalCost = {
@@ -1482,8 +1363,7 @@ function simulatePlan(
         spent = addRes(spent, totalCost);
         pending.remaining = 0;
 
-        const label =
-          count === 1 ? `1 ${entry.name} bauen` : `${count} ${entry.name} bauen`;
+        const label = count === 1 ? `1 ${entry.name} bauen` : `${count} ${entry.name} bauen`;
         const duration = pending.duration;
         const job: Job = {
           name: label,
@@ -1527,18 +1407,10 @@ function simulatePlan(
         continue;
       }
 
-      if (
-        entry.kind === "economy" ||
-        entry.kind === "asteroids" ||
-        entry.kind === "extractors"
-      ) {
+      if (entry.kind === "economy" || entry.kind === "asteroids" || entry.kind === "extractors") {
         const pending = pendingEconomy.find((p) => p.entryId === entry.id);
         if (!pending) continue;
-        if (
-          pending.remainingAsteroids <= 0 &&
-          pending.remainingExtractorsMet <= 0 &&
-          pending.remainingExtractorsKris <= 0
-        ) {
+        if (pending.remainingAsteroids <= 0 && pending.remainingExtractorsMet <= 0 && pending.remainingExtractorsKris <= 0) {
           continue;
         }
         if (tick < pending.desiredTick) continue;
@@ -1547,10 +1419,7 @@ function simulatePlan(
 
         // Asteroids first so slots open for extractors in the same entry/tick.
         if (pending.remainingAsteroids > 0) {
-          while (
-            pending.remainingAsteroids > 0 &&
-            canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })
-          ) {
+          while (pending.remainingAsteroids > 0 && canAfford(res, { met: 0, kris: ASTEROID_COST_KRIS })) {
             const cost = { met: 0, kris: ASTEROID_COST_KRIS };
             res = pay(res, cost);
             spent = addRes(spent, cost);
@@ -1575,10 +1444,9 @@ function simulatePlan(
           }
         }
 
-        const buildExtractors = (resource: "met" | "kris") => {
-          const remainingKey =
-            resource === "met" ? "remainingExtractorsMet" : "remainingExtractorsKris";
-          while (pending[remainingKey] > 0) {
+        function buildExtractors(economy: PendingEconomy, resource: "met" | "kris") {
+          const remainingKey = resource === "met" ? "remainingExtractorsMet" : "remainingExtractorsKris";
+          while (economy[remainingKey] > 0) {
             const nextIndex = totalExtractors() + 1;
             const cost = { met: extractorUnitCost(nextIndex), kris: 0 };
             if (!canAfford(res, cost)) break;
@@ -1587,12 +1455,9 @@ function simulatePlan(
             if (resource === "met") extractorsMet += 1;
             else extractorsKris += 1;
             extractorQueue.push(resource);
-            pending[remainingKey] -= 1;
+            economy[remainingKey] -= 1;
             didWork = true;
-            const label =
-              resource === "met"
-                ? `Extraktor (Metall) #${extractorsMet}`
-                : `Extraktor (Kristall) #${extractorsKris}`;
+            const label = resource === "met" ? `Extraktor (Metall) #${extractorsMet}` : `Extraktor (Kristall) #${extractorsKris}`;
             const job: Job = {
               name: label,
               type: "economy",
@@ -1607,16 +1472,11 @@ function simulatePlan(
             finishedJobs.push({ name: label, type: "economy", planEntryId: entry.id });
             markEntryStart(entry.id, tick);
           }
-        };
-        buildExtractors("met");
-        buildExtractors("kris");
+        }
+        buildExtractors(pending, "met");
+        buildExtractors(pending, "kris");
 
-        if (
-          didWork &&
-          pending.remainingAsteroids <= 0 &&
-          pending.remainingExtractorsMet <= 0 &&
-          pending.remainingExtractorsKris <= 0
-        ) {
+        if (didWork && pending.remainingAsteroids <= 0 && pending.remainingExtractorsMet <= 0 && pending.remainingExtractorsKris <= 0) {
           markEntryFinish(entry.id, tick);
         }
         continue;
@@ -1727,8 +1587,7 @@ function simulatePlan(
             endTick: pending.desiredTick + pending.duration,
             cost: { met: 0, kris: 0 },
             planEntryId: entry.id,
-            blocked:
-              !completed.has("Marineakademie") || !completedUnits.has("Cleptor"),
+            blocked: !completed.has("Marineakademie") || !completedUnits.has("Cleptor"),
             delayed: tick > pending.desiredTick,
           });
           markEntryStart(entry.id, tick);
@@ -1805,9 +1664,9 @@ function simulatePlan(
     }
 
     return { startedJobs, finishedJobs, spent, roidLoot, catastropheLoss };
-  };
+  }
 
-  const applyQuestRewards = (quests: QuestDef[]): QuestEvent[] => {
+  function applyQuestRewards(quests: QuestDef[]): QuestEvent[] {
     const events: QuestEvent[] = [];
     for (const q of quests) {
       claimedQuests.add(q.id);
@@ -1823,26 +1682,26 @@ function simulatePlan(
       events.push({ id: q.id, label: q.label, reward: q.reward });
     }
     return events;
-  };
+  }
 
-  const noteFinishedRecon = (jobs: NamedJob[]) => {
+  function noteFinishedRecon(jobs: NamedJob[]) {
     for (const j of jobs) {
       if (j.type !== "recon") continue;
       const m = /^(\d+) Scanverstärker\b/.exec(j.name);
       if (m) scanverstaerker += Number(m[1]);
     }
-  };
+  }
 
-  const noteFinishedUnits = (jobs: NamedJob[]) => {
+  function noteFinishedUnits(jobs: NamedJob[]) {
     for (const j of jobs) {
       if (j.type !== "unit") continue;
       const m = /^(\d+)\s+Cancri\s+bauen/.exec(j.name);
       if (m) cancri += Number(m[1]);
     }
-  };
+  }
 
-  const claimReadyQuests = (tick: number): QuestEvent[] =>
-    applyQuestRewards(
+  function claimReadyQuests(tick: number): QuestEvent[] {
+    return applyQuestRewards(
       evaluateQuests(
         {
           completed,
@@ -1854,52 +1713,53 @@ function simulatePlan(
           firstRoidStartTick,
           cancri,
         },
-        claimedQuests,
-      ),
+        claimedQuests
+      )
     );
+  }
 
-  const snapshot = (
+  function snapshot(
     tick: number,
     started: NamedJob[],
     finished: NamedJob[],
     delta: Res,
     quests: QuestEvent[] = [],
     roidLoot: RoidLootEvent[] = [],
-    catastropheLoss: RoidLootEvent[] = [],
-  ): TickSnapshot => {
+    catastropheLoss: RoidLootEvent[] = []
+  ): TickSnapshot {
     const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
     return {
-    tick,
-    clockLabel: clockLabel(startCfg, tick),
-    met: res.met,
-    kris: res.kris,
-    incomeMet: delta.met,
-    incomeKris: delta.kris,
-    active: active
-      .map((j) => ({
-        name: j.name,
-        type: j.type,
-        remainingTicks: Math.max(0, j.endTick - tick),
-        planEntryId: j.planEntryId,
-        delayed: j.delayed,
-      }))
-      .sort((a, b) => a.remainingTicks - b.remainingTicks || a.name.localeCompare(b.name)),
-    started,
-    finished,
-    quests,
-    roidLoot,
-    catastropheLoss,
-    asteroids,
-    extractorsMet,
-    extractorsKris,
-    extractorsMetProducing: slotted.producingMet,
-    extractorsKrisProducing: slotted.producingKris,
-  };
-  };
+      tick,
+      clockLabel: clockLabel(startCfg, tick),
+      met: res.met,
+      kris: res.kris,
+      incomeMet: delta.met,
+      incomeKris: delta.kris,
+      active: active
+        .map((j) => ({
+          name: j.name,
+          type: j.type,
+          remainingTicks: Math.max(0, j.endTick - tick),
+          planEntryId: j.planEntryId,
+          delayed: j.delayed,
+        }))
+        .sort((a, b) => a.remainingTicks - b.remainingTicks || a.name.localeCompare(b.name)),
+      started,
+      finished,
+      quests,
+      roidLoot,
+      catastropheLoss,
+      asteroids,
+      extractorsMet,
+      extractorsKris,
+      extractorsMetProducing: slotted.producingMet,
+      extractorsKrisProducing: slotted.producingKris,
+    };
+  }
 
   // Angriffsflug-Balken: keine started/finished-Events → nicht in den Tabellen.
   // Die Roid-Beute läuft über pendingRoids und erscheint wie gewohnt als Exen-Gewinn.
-  const attackSteps = (): Job[] => {
+  function attackSteps(): Job[] {
     const academyAt = completedAt.get("Marineakademie");
     return plan.flatMap((e): Job[] => {
       if (e.kind !== "attack") return [];
@@ -1913,10 +1773,7 @@ function simulatePlan(
           endTick: e.startTick + attackTotalTicks(e.duration, e.noReturn),
           cost: { met: 0, kris: 0 },
           planEntryId: e.id,
-          blocked:
-            academyAt === undefined ||
-            academyAt > e.startTick ||
-            attackMissingCleptor.has(e.id),
+          blocked: academyAt === undefined || academyAt > e.startTick || attackMissingCleptor.has(e.id),
           // Kampfticks liegen auf (Ankunft, Ankunft + Dauer]: 08:00 ab → 15:45–16:45.
           // Roid-Teil wie die Kampfticks als (Tick − 1, Tick] gezeichnet.
           combat: {
@@ -1924,17 +1781,16 @@ function simulatePlan(
             endTick: combatEnd,
             ...(hasRoid
               ? {
-                  roidStartTick:
-                    attackRoidStartTick(e.startTick, e.duration, e.roidDuration) - 1,
+                  roidStartTick: attackRoidStartTick(e.startTick, e.duration, e.roidDuration) - 1,
                 }
               : {}),
           },
         },
       ];
     });
-  };
+  }
 
-  const resultAt = (finishTick: number) => {
+  function resultAt(finishTick: number) {
     const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
     return {
       goal: techEntries.at(-1)?.name ?? (plan.length ? formatPlanEntryLabel(plan[plan.length - 1]!) : "Plan"),
@@ -1954,13 +1810,11 @@ function simulatePlan(
       entryActualStart: { ...entryActualStart },
       entryFinishTicks: { ...entryFinishTicks },
     };
-  };
+  }
 
   // Empty plan
   if (plan.length === 0) {
-    ticks.push(
-      snapshot(0, [], [], { met: 0, kris: 0 }),
-    );
+    ticks.push(snapshot(0, [], [], { met: 0, kris: 0 }));
     return resultAt(0);
   }
 
@@ -1969,15 +1823,7 @@ function simulatePlan(
     const snapshotJobs = applyManualSnapshots(0);
     const { startedJobs, finishedJobs, spent, roidLoot, catastropheLoss } = tryStart(0);
     ticks.push(
-      snapshot(
-        0,
-        [...snapshotJobs, ...startedJobs],
-        finishedJobs,
-        { met: -spent.met, kris: -spent.kris },
-        [],
-        roidLoot,
-        catastropheLoss,
-      ),
+      snapshot(0, [...snapshotJobs, ...startedJobs], finishedJobs, { met: -spent.met, kris: -spent.kris }, [], roidLoot, catastropheLoss)
     );
     if (allDone()) return resultAt(0);
   }
@@ -1998,17 +1844,13 @@ function simulatePlan(
         if (unit) completedUnits.add(unit.name);
         if (entryFinishTicks[job.planEntryId] === undefined) {
           const stillActive = active.some((j) => j.planEntryId === job.planEntryId);
-          const stillPending = pendingUnits.some(
-            (u) => u.entryId === job.planEntryId && u.remaining > 0,
-          );
+          const stillPending = pendingUnits.some((u) => u.entryId === job.planEntryId && u.remaining > 0);
           if (!stillActive && !stillPending) markEntryFinish(job.planEntryId, t);
         }
       } else if (job.planEntryId && entryFinishTicks[job.planEntryId] === undefined) {
         // unit/recon multi: finish already marked when last started with endTick
         const stillActive = active.some((j) => j.planEntryId === job.planEntryId);
-        const stillPending = pendingUnits.some(
-          (u) => u.entryId === job.planEntryId && u.remaining > 0,
-        );
+        const stillPending = pendingUnits.some((u) => u.entryId === job.planEntryId && u.remaining > 0);
         if (!stillActive && !stillPending) markEntryFinish(job.planEntryId, t);
       }
       finishedJobs.push({
@@ -2026,7 +1868,7 @@ function simulatePlan(
       [...completed].filter((n) => {
         const at = completedAt.get(n) ?? 0;
         return n === "Koloniezentrum" ? at <= t : at < t;
-      }),
+      })
     );
     const mineIncome = incomeFrom(producing);
     const extIncome = slottedExtractorStats(extractorQueue, extractorSlots).income;
@@ -2036,7 +1878,7 @@ function simulatePlan(
         kris: mineIncome.kris + extIncome.kris,
       },
       startCfg.taxes,
-      t,
+      t
     );
     if (income.met || income.kris) {
       res = addRes(res, income);
@@ -2059,19 +1901,11 @@ function simulatePlan(
     const questEventsLate = claimReadyQuests(t);
     const questEvents = [...questEventsEarly, ...questEventsLate];
     const questRes: Res = questEvents.reduce(
-      (acc, q) =>
-        q.reward.kind === "res"
-          ? addRes(acc, { met: q.reward.met, kris: q.reward.kris })
-          : acc,
-      { met: 0, kris: 0 },
+      (acc, q) => (q.reward.kind === "res" ? addRes(acc, { met: q.reward.met, kris: q.reward.kris }) : acc),
+      { met: 0, kris: 0 }
     );
 
-    const waiting =
-      !allDone() &&
-      startedJobs.length === 0 &&
-      active.length === 0 &&
-      roidLoot.length === 0 &&
-      catastropheLoss.length === 0;
+    const waiting = !allDone() && startedJobs.length === 0 && active.length === 0 && roidLoot.length === 0 && catastropheLoss.length === 0;
 
     if (waiting) {
       waitStreak += 1;
@@ -2087,22 +1921,12 @@ function simulatePlan(
     ticks.push(snapshot(t, startedJobs, allFinished, delta, questEvents, roidLoot, catastropheLoss));
 
     if (allDone()) {
-      const finishTick = Math.max(
-        0,
-        ...Object.values(entryFinishTicks),
-        ...steps.map((s) => s.endTick),
-        t,
-      );
+      const finishTick = Math.max(0, ...Object.values(entryFinishTicks), ...steps.map((s) => s.endTick), t);
       return resultAt(finishTick);
     }
 
     // Deadlock detection
-    if (
-      active.length === 0 &&
-      income.met === 0 &&
-      income.kris === 0 &&
-      startedJobs.length === 0
-    ) {
+    if (active.length === 0 && income.met === 0 && income.kris === 0 && startedJobs.length === 0) {
       const stuckTech = [...pendingTechs.entries()].some(([name, pending]) => {
         if (t < pending.desiredTick) return false;
         const c = map.get(name)!.cost;
@@ -2112,15 +1936,11 @@ function simulatePlan(
         if (t < p.desiredTick) return false;
         const stuckAst = p.remainingAsteroids > 0 && res.kris < ASTEROID_COST_KRIS;
         const stuckExt =
-          (p.remainingExtractorsMet > 0 || p.remainingExtractorsKris > 0) &&
-          res.met < extractorUnitCost(totalExtractors() + 1);
+          (p.remainingExtractorsMet > 0 || p.remainingExtractorsKris > 0) && res.met < extractorUnitCost(totalExtractors() + 1);
         return stuckAst || stuckExt;
       });
       const hasPendingEco = pendingEconomy.some(
-        (p) =>
-          p.remainingAsteroids > 0 ||
-          p.remainingExtractorsMet > 0 ||
-          p.remainingExtractorsKris > 0,
+        (p) => p.remainingAsteroids > 0 || p.remainingExtractorsMet > 0 || p.remainingExtractorsKris > 0
       );
       const hasPendingCustom = pendingCustom.some((p) => !p.done);
       const stuckCustom = pendingCustom.some((p) => {
@@ -2134,26 +1954,15 @@ function simulatePlan(
         return have < p.giveAmount;
       });
       if (
-        (pendingTechs.size > 0 ||
-          pendingUnits.some((u) => u.remaining > 0) ||
-          hasPendingEco ||
-          hasPendingCustom ||
-          hasPendingTrade) &&
-        (stuckTech ||
-          stuckEco ||
-          stuckCustom ||
-          stuckTrade ||
-          pendingUnits.some((u) => u.remaining > 0))
+        (pendingTechs.size > 0 || pendingUnits.some((u) => u.remaining > 0) || hasPendingEco || hasPendingCustom || hasPendingTrade) &&
+        (stuckTech || stuckEco || stuckCustom || stuckTrade || pendingUnits.some((u) => u.remaining > 0))
       ) {
         // If purely waiting for income that will never come
         const anyFutureIncome =
           [...completed].some((n) => INCOME_BY_BUILDING[n]) ||
-          slottedExtractorStats(extractorQueue, extractorSlots).unslotted <
-            extractorQueue.length;
+          slottedExtractorStats(extractorQueue, extractorSlots).unslotted < extractorQueue.length;
         if (!anyFutureIncome) {
-          throw new Error(
-            `Plan nicht erreichbar: keine Produktion und unzureichende Ressourcen bei Tick ${t}`,
-          );
+          throw new Error(`Plan nicht erreichbar: keine Produktion und unzureichende Ressourcen bei Tick ${t}`);
         }
       }
     }
@@ -2185,9 +1994,7 @@ export function calculateFastestWayToGoal(startCfg: StartConfig): PlanResult {
   const sim = simulatePlan(plan, map, { ...startCfg, plan });
 
   // Fix goal label (ternary precedence bug-safe)
-  const goal =
-    lastTech?.name ??
-    (plan.length ? formatPlanEntryLabel(plan[plan.length - 1]!) : "Koloniezentrum");
+  const goal = lastTech?.name ?? (plan.length ? formatPlanEntryLabel(plan[plan.length - 1]!) : "Koloniezentrum");
 
   return {
     ...sim,
@@ -2201,10 +2008,7 @@ export function calculateFastestWayToGoal(startCfg: StartConfig): PlanResult {
  * Frühester Tick, an dem eine Tech starten könnte (Deps fertig + Ressourcen),
  * basierend auf der Simulation des aktuellen Plans. Nie kleiner als 0.
  */
-export function getEarliestTechStartTick(
-  startCfg: StartConfig,
-  techName: string,
-): number {
+export function getEarliestTechStartTick(startCfg: StartConfig, techName: string): number {
   const map = byName();
   const tech = map.get(techName);
   if (!tech) return 0;
@@ -2252,7 +2056,7 @@ function estimateSteadyIncome(plan: PlanResult): Res {
     plan.steps
       .filter((s) => s.type === "building" || s.type === "research")
       .filter((s) => s.endTick <= plan.finishTick)
-      .map((s) => s.name),
+      .map((s) => s.name)
   );
   const mine = incomeFrom(completed);
   return {
@@ -2264,11 +2068,7 @@ function estimateSteadyIncome(plan: PlanResult): Res {
 /**
  * Frühester sinnvoller Tick für Unit/Recon (Deps fertig + mind. 1 Stück finanzierbar).
  */
-export function getEarliestBuildStartTick(
-  startCfg: StartConfig,
-  kind: "unit" | "recon",
-  name: string,
-): number {
+export function getEarliestBuildStartTick(startCfg: StartConfig, kind: "unit" | "recon", name: string): number {
   const item = kind === "unit" ? unitByName(name) : reconByName(name);
   if (!item) return 0;
 
@@ -2308,12 +2108,7 @@ export function getEarliestBuildStartTick(
  * Max. Anzahl Units/Recon, die am gegebenen Tick mit Snapshot-Ressourcen
  * (nach bestehenden Plan-Ausgaben) finanzierbar sind.
  */
-export function getMaxBuildCountAtTick(
-  startCfg: StartConfig,
-  kind: "unit" | "recon",
-  name: string,
-  tick: number,
-): number {
+export function getMaxBuildCountAtTick(startCfg: StartConfig, kind: "unit" | "recon", name: string, tick: number): number {
   const item = kind === "unit" ? unitByName(name) : reconByName(name);
   if (!item) return 0;
   const cost = item.cost;
@@ -2326,34 +2121,19 @@ export function getMaxBuildCountAtTick(
     return 0;
   }
 
-  const snap =
-    plan.ticks.find((t) => t.tick === tick) ??
-    plan.ticks.filter((t) => t.tick <= tick).at(-1) ??
-    null;
+  const snap = plan.ticks.find((t) => t.tick === tick) ?? plan.ticks.filter((t) => t.tick <= tick).at(-1) ?? null;
 
   let met = snap?.met ?? plan.finalRes.met;
   let kris = snap?.kris ?? plan.finalRes.kris;
 
   // If tick is beyond simulation, project income
   if (snap && snap.tick < tick) {
-    const projected = projectWithIncome(
-      { met, kris },
-      snap.tick,
-      tick,
-      estimateSteadyIncome(plan),
-      startCfg.taxes,
-    );
+    const projected = projectWithIncome({ met, kris }, snap.tick, tick, estimateSteadyIncome(plan), startCfg.taxes);
     met = projected.met;
     kris = projected.kris;
   } else if (!snap) {
     const last = plan.ticks[plan.ticks.length - 1]?.tick ?? 0;
-    const projected = projectWithIncome(
-      plan.finalRes,
-      last,
-      tick,
-      estimateSteadyIncome(plan),
-      startCfg.taxes,
-    );
+    const projected = projectWithIncome(plan.finalRes, last, tick, estimateSteadyIncome(plan), startCfg.taxes);
     met = projected.met;
     kris = projected.kris;
   }
@@ -2368,7 +2148,7 @@ export function getMaxBuildCountAtTick(
  */
 export function getResourcesAtTick(
   startCfg: StartConfig,
-  tick: number,
+  tick: number
 ): { met: number; kris: number; asteroids: number; extractorsMet: number; extractorsKris: number } {
   let plan: PlanResult;
   try {
@@ -2383,9 +2163,7 @@ export function getResourcesAtTick(
     };
   }
 
-  const snap =
-    plan.ticks.find((t) => t.tick === tick) ??
-    plan.ticks.filter((t) => t.tick <= tick).at(-1);
+  const snap = plan.ticks.find((t) => t.tick === tick) ?? plan.ticks.filter((t) => t.tick <= tick).at(-1);
 
   if (snap && snap.tick === tick) {
     return {
@@ -2405,13 +2183,7 @@ export function getResourcesAtTick(
     extractorsMet: plan.extractorsMet,
     extractorsKris: plan.extractorsKris,
   };
-  const projected = projectWithIncome(
-    { met: base.met, kris: base.kris },
-    base.tick,
-    tick,
-    estimateSteadyIncome(plan),
-    startCfg.taxes,
-  );
+  const projected = projectWithIncome({ met: base.met, kris: base.kris }, base.tick, tick, estimateSteadyIncome(plan), startCfg.taxes);
   return {
     met: projected.met,
     kris: projected.kris,
@@ -2427,7 +2199,7 @@ export function getResourcesAtTick(
  */
 export function getMaxExtractorsAtTick(
   startCfg: StartConfig,
-  tick: number,
+  tick: number
 ): { max: number; freeSlots: number; asteroids: number; alreadyBuilt: number } {
   const r = getResourcesAtTick(startCfg, tick);
   const alreadyBuilt = r.extractorsMet + r.extractorsKris;

@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
-import { Input } from "@/components/shadcn/input";
-import { Separator } from "@/components/shadcn/separator";
+import { Input } from "@/components/shadcn/input.tsx";
+import { Separator } from "@/components/shadcn/separator.tsx";
 import {
   ARTILLERY,
   ARTILLERY_TICKS,
@@ -17,12 +17,14 @@ import {
   type DefenseTiming,
   type Fleet,
   type NewsAnalysis,
-} from "@/lib/news-analysis";
-import type { NewsScan } from "@/lib/scan-parser";
-import { useNow } from "@/lib/use-now";
-import { cn } from "@/lib/utils/cn";
+} from "@/lib/news-analysis.ts";
+import { type NewsScan } from "@/lib/scan-parser.ts";
+import { useNow } from "@/hooks/useNow.tsx";
+import { cn } from "@/lib/utils/cn.ts";
 
-const pad = (n: number) => String(n).padStart(2, "0");
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
 
 function formatClock(time: number) {
   const d = new Date(time);
@@ -53,19 +55,13 @@ function FleetName({ fleet, className }: { fleet: Fleet; className?: string }) {
       <span className={cn("font-medium", ROLE_TEXT[fleet.role])}>
         {coordsKey(fleet)} {fleet.player}
       </span>
-      {fleet.fleet !== null ? (
-        <span className="text-muted-foreground"> Flotte {fleet.fleet}</span>
-      ) : null}
+      {fleet.fleet !== null ? <span className="text-muted-foreground"> Flotte {fleet.fleet}</span> : null}
     </span>
   );
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-      {children}
-    </h3>
-  );
+  return <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{children}</h3>;
 }
 
 function OrbitInput({ fleet, onChange }: { fleet: Fleet; onChange: (ticks: number) => void }) {
@@ -111,11 +107,16 @@ function FleetTable({
           <th className="py-1 text-left font-normal">Ankunft</th>
           <th className="py-1 text-left font-normal">Kampf</th>
           <th className="py-1 text-left font-normal">Ticks im Orbit</th>
-          {attackers && DEFENSE_TYPES.map((d) => (
-            <th key={d.label} className="py-1 text-left font-normal" title={`Abflugfenster für ${d.label} (${d.flightTicks} Ticks Flugzeit)`}>
-              {d.header}
-            </th>
-          ))}
+          {attackers &&
+            DEFENSE_TYPES.map((d) => (
+              <th
+                key={d.label}
+                className="py-1 text-left font-normal"
+                title={`Abflugfenster für ${d.label} (${d.flightTicks} Ticks Flugzeit)`}
+              >
+                {d.header}
+              </th>
+            ))}
         </tr>
       </thead>
       <tbody>
@@ -160,8 +161,12 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
   const start = firstTick - (ARTILLERY_TICKS + 1) * NEWS_TICK_MS;
   const end = endTick + NEWS_TICK_MS;
   const span = end - start;
-  const pct = (t: number) => ((Math.min(Math.max(t, start), end) - start) / span) * 100;
-  const bar = (from: number, to: number) => ({ left: `${pct(from)}%`, width: `${pct(to) - pct(from)}%` });
+  function pct(t: number) {
+    return ((Math.min(Math.max(t, start), end) - start) / span) * 100;
+  }
+  function bar(from: number, to: number) {
+    return { left: `${pct(from)}%`, width: `${pct(to) - pct(from)}%` };
+  }
 
   // Markierter Bereich: Kampfzeitraum aller Angreifer.
   const window = combatStart(analysis) !== null ? { from: firstTick, to: endTick } : null;
@@ -178,10 +183,7 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
         <div key={t} className="absolute inset-y-0 w-px bg-border/40" style={{ left: `${pct(t)}%` }} />
       ))}
       {window ? (
-        <div
-          className="absolute inset-y-0 border-x border-foreground/30 bg-foreground/5"
-          style={bar(window.from, window.to)}
-        />
+        <div className="absolute inset-y-0 border-x border-foreground/30 bg-foreground/5" style={bar(window.from, window.to)} />
       ) : null}
     </>
   );
@@ -241,7 +243,7 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
               >
                 {formatClock(t)}
               </span>
-            ) : null,
+            ) : null
           )}
         </div>
       </div>
@@ -324,9 +326,7 @@ function CombatClock({ now, start, end }: { now: number; start: number | null; e
   return (
     <div className="flex flex-wrap justify-between gap-x-10 gap-y-3 rounded-md border border-border px-4 py-3">
       <Stat label="Aktuelle Uhrzeit">{formatDateTime(now)}</Stat>
-      <Stat label="Erster Kampftick">
-        {start !== null ? formatDateTime(start) : <span className="text-muted-foreground">–</span>}
-      </Stat>
+      <Stat label="Erster Kampftick">{start !== null ? formatDateTime(start) : <span className="text-muted-foreground">–</span>}</Stat>
       <Stat label="Ticks bis Kampfbeginn">{upcoming ? ticksLeft : status}</Stat>
       <Stat label="Zeit bis Kampfbeginn">{upcoming ? formatDuration(start - now) : status}</Stat>
     </div>
@@ -363,9 +363,7 @@ export function NewsAnalysisView({
           key={r.id}
           className={cn(
             "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-xs",
-            r.unresolved
-              ? "border-yellow-300/30 bg-yellow-300/10 text-yellow-300"
-              : "border-border text-muted-foreground",
+            r.unresolved ? "border-yellow-300/30 bg-yellow-300/10 text-yellow-300" : "border-border text-muted-foreground"
           )}
         >
           {r.unresolved ? <TriangleAlert className="size-3.5 shrink-0" /> : null}
@@ -388,7 +386,7 @@ export function NewsAnalysisView({
                   "rounded-md border px-2 py-0.5 font-medium transition-colors",
                   selected
                     ? "border-foreground/40 bg-foreground/10 text-foreground"
-                    : "border-border text-muted-foreground hover:text-foreground",
+                    : "border-border text-muted-foreground hover:text-foreground"
                 )}
               >
                 {f.fleet !== null ? `Flotte ${f.fleet}` : fleetLabel(f)} ({formatClock(f.departure)})
@@ -399,9 +397,7 @@ export function NewsAnalysisView({
       ))}
 
       {analysis.fleets.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Keine Angriffe oder Verteidigungen in den letzten 10 Stunden.
-        </p>
+        <p className="text-xs text-muted-foreground">Keine Angriffe oder Verteidigungen in den letzten 10 Stunden.</p>
       ) : (
         <>
           <section>
@@ -429,9 +425,7 @@ export function NewsAnalysisView({
                   fleets={fleets}
                   attackers={role === "attacker"}
                   now={now}
-                  onTicksChange={(fleetId, ticks) =>
-                    onChange({ ...state, fleetTicks: { ...state.fleetTicks, [fleetId]: ticks } })
-                  }
+                  onTicksChange={(fleetId, ticks) => onChange({ ...state, fleetTicks: { ...state.fleetTicks, [fleetId]: ticks } })}
                 />
               </section>
             );

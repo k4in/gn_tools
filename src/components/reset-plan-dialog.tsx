@@ -1,14 +1,7 @@
 import { useState } from "react";
 import { ListRestart } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/shadcn/combobox";
+import { Button } from "@/components/shadcn/button.tsx";
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/shadcn/combobox.tsx";
 import {
   Dialog,
   DialogClose,
@@ -18,8 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/shadcn/dialog";
-import { Field, FieldLabel } from "@/components/shadcn/field";
+} from "@/components/shadcn/dialog.tsx";
+import { Field, FieldLabel } from "@/components/shadcn/field.tsx";
 
 export type ResetPlanSource = {
   id: string;
@@ -51,18 +44,13 @@ export function ResetPlanDialog({ sources, onReset }: ResetPlanDialogProps) {
         <DialogHeader>
           <DialogTitle>Plan zurücksetzen?</DialogTitle>
           <DialogDescription>
-            Nur der aktuelle Plan wird gelöscht und ersetzt. Die anderen beiden Pläne
-            bleiben unverändert. Das lässt sich nicht rückgängig machen.
+            Nur der aktuelle Plan wird gelöscht und ersetzt. Die anderen beiden Pläne bleiben unverändert. Das lässt sich nicht rückgängig
+            machen.
           </DialogDescription>
         </DialogHeader>
         <Field>
           <FieldLabel>Ersetzen durch</FieldLabel>
-          <Combobox
-            items={sources}
-            value={source}
-            onValueChange={setSource}
-            itemToStringValue={(item) => item.label}
-          >
+          <Combobox items={sources} value={source} onValueChange={setSource} itemToStringValue={(item) => item.label}>
             <ComboboxInput placeholder="Quelle wählen" />
             <ComboboxContent>
               <ComboboxEmpty>Keine Quelle gefunden.</ComboboxEmpty>
@@ -77,9 +65,7 @@ export function ResetPlanDialog({ sources, onReset }: ResetPlanDialogProps) {
           </Combobox>
         </Field>
         <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Abbrechen
-          </DialogClose>
+          <DialogClose render={<Button type="button" variant="outline" />}>Abbrechen</DialogClose>
           <Button
             type="button"
             variant="destructive"

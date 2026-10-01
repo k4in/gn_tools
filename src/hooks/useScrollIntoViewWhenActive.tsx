@@ -6,7 +6,7 @@ export function useScrollIntoViewWhenActive(
   ref: RefObject<HTMLElement | null>,
   block: ScrollLogicalPosition = "center",
   inline: ScrollLogicalPosition = "nearest",
-  trigger?: unknown,
+  trigger?: unknown
 ) {
   useEffect(() => {
     if (!isActive) return;

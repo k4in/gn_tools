@@ -1,5 +1,5 @@
 import { Clock3 } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
+import { cn } from "@/lib/utils/cn.ts";
 
 export type StatusDotKind = "needed" | "blocked" | "delayed";
 
@@ -11,10 +11,7 @@ export type StatusDotKind = "needed" | "blocked" | "delayed";
 export function StatusDot({ kind }: { kind: StatusDotKind }) {
   if (kind === "delayed") {
     return (
-      <Clock3
-        aria-label="Start verspätet (Rohstoffe)"
-        className="ml-1 inline-block size-3 shrink-0 align-[-2px] text-yellow-300"
-      >
+      <Clock3 aria-label="Start verspätet (Rohstoffe)" className="ml-1 inline-block size-3 shrink-0 align-[-2px] text-yellow-300">
         <title>Start verspätet (Rohstoffe)</title>
       </Clock3>
     );
@@ -23,7 +20,7 @@ export function StatusDot({ kind }: { kind: StatusDotKind }) {
     <span
       className={cn(
         "ml-1 inline-block size-1.5 shrink-0 rounded-full align-middle",
-        kind === "needed" ? "ring-1 ring-foreground/80 ring-inset" : "bg-destructive",
+        kind === "needed" ? "ring-1 ring-foreground/80 ring-inset" : "bg-destructive"
       )}
       title={kind === "needed" ? "Für den Plan benötigt" : "Abhängigkeiten fehlen"}
     />

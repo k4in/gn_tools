@@ -1,4 +1,4 @@
-import type { TechName } from "./techtree";
+import { type TechName } from "@/lib/gn-data/techtree.ts";
 
 export type ShipName = "Leo" | "Aquilae" | "Fornax" | "Draco" | "Goron" | "Pentalin" | "Zenit" | "Sculptor" | "Cleptor" | "Cancri";
 

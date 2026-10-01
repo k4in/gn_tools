@@ -1,5 +1,5 @@
-import type { DefenseName } from "@/gn-data/defense";
-import type { ShipName } from "@/gn-data/ships";
+import { type DefenseName } from "@/lib/gn-data/defense.ts";
+import { type ShipName } from "@/lib/gn-data/ships.ts";
 
 /**
  * Parser für aus Galaxy-Network kopierte Scans.
@@ -147,7 +147,7 @@ const SHIP_LABELS: Record<string, ShipName> = {
 export const SHIP_SCAN_LABEL = Object.fromEntries(
   Object.entries(SHIP_LABELS)
     .filter(([label]) => label !== "Schildschiff")
-    .map(([label, name]) => [name, label]),
+    .map(([label, name]) => [name, label])
 ) as Record<ShipName, string>;
 
 const DEFENSE_LABELS: Record<string, DefenseName> = {
@@ -187,34 +187,23 @@ export function normalizeLine(raw: string): string {
 
 /** Markierungen um ein Label innerhalb einer Zeile, z. B. „*Coon:* 38“ → „Coon: 38“. */
 function stripLabelMarkers(part: string) {
-  return part.replace(/^[_*]+/, "").replace(/^([^:]*?)[_*]+:/, "$1:").replace(/^([^:]*:)[_*]+/, "$1");
+  return part
+    .replace(/^[_*]+/, "")
+    .replace(/^([^:]*?)[_*]+:/, "$1:")
+    .replace(/^([^:]*:)[_*]+/, "$1");
 }
 
 // Koordinaten stehen je nach Scan mit oder ohne Klammern: „Barrett 14:5“ / „Barrett (14:5)“.
 const HEADER_RE = /^Galaxy-Network\s+(\S+?)Scan\s*\((\d+)\s*%\)\s+(.+?)\s+\(?(\d+):(\d+)\)?$/i;
 const FOOTER_RE = /^(Scan aus der Datenbank|Gescannt von)/i;
 const TIMESTAMPED_HEADER_RE = /^Daten wurden per Scan erfasst(?:\s+(.+))?$/i;
-const SCAN_DATE_RE =
-  /^(?:(heute|gestern)|(\d{1,2})\.\s*(\p{L}+)\s+(\d{4}))\s+um\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/iu;
+const SCAN_DATE_RE = /^(?:(heute|gestern)|(\d{1,2})\.\s*(\p{L}+)\s+(\d{4}))\s+um\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/iu;
 const SCANS_FROM_RE = /^Scans von\s+(\d+):(\d+)\s+(.+?)(?:\s*\|.*)?$/i;
 /** Reiterzeile „Sektorscan Geschützscan Einheitenscan Militärscan Newsscan“. */
 const SCAN_TABS_RE = /^(?:(?:Sektor|Geschütz|Einheiten|Militär|News)scan\s*)+$/i;
 const NO_DATA_RE = /^-?\s*keine Daten\s*-?$/i;
 const ACCURACY_RE = /^(\d{1,3})\s*%$/;
-const MONTHS = [
-  "januar",
-  "februar",
-  "märz",
-  "april",
-  "mai",
-  "juni",
-  "juli",
-  "august",
-  "september",
-  "oktober",
-  "november",
-  "dezember",
-];
+const MONTHS = ["januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"];
 
 /** Bezeichnungen im Format „Daten wurden per Scan erfasst …“. */
 const TIMESTAMPED_SECTOR_FIELDS: Record<string, SectorField> = {
@@ -249,12 +238,7 @@ const MARKER_RE = /^@\s*(?:(\d{1,2})\.(\d{1,2})\.(\d{4})?\s+)?(\d{1,2}):(\d{2})$
 export function containsScan(text: string) {
   return text.split(/\r?\n/).some((raw) => {
     const line = normalizeLine(raw);
-    return (
-      HEADER_RE.test(line) ||
-      POINTS_RE.test(line) ||
-      TIMESTAMPED_HEADER_RE.test(line) ||
-      SCANS_FROM_RE.test(line)
-    );
+    return HEADER_RE.test(line) || POINTS_RE.test(line) || TIMESTAMPED_HEADER_RE.test(line) || SCANS_FROM_RE.test(line);
   });
 }
 
@@ -293,10 +277,10 @@ function parseScanDate(text: string, now: Date): number | null {
  * am nächsten Tag noch den richtigen Zeitpunkt haben.
  */
 export function resolveRelativeDates(text: string, now = new Date()) {
-  const format = (d: Date) => {
+  function format(d: Date) {
     const month = MONTHS[d.getMonth()];
     return `${d.getDate()}. ${month[0].toUpperCase()}${month.slice(1)} ${d.getFullYear()}`;
-  };
+  }
   return text.replace(/\b(heute|gestern)(?=\s+um\s+\d{1,2}:\d{2})/gi, (word) => {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (word.toLowerCase() === "gestern") d.setDate(d.getDate() - 1);
@@ -320,7 +304,9 @@ export function parseTimestampedScan(base: ScanBase, lines: string[], warnings: 
     }
     fields.push([match[1].trim(), parseNumber(match[2])!]);
   }
-  const count = (labels: Record<string, unknown>) => fields.filter(([label]) => label in labels).length;
+  function count(labels: Record<string, unknown>) {
+    return fields.filter(([label]) => label in labels).length;
+  }
   const sectorHits = count(TIMESTAMPED_SECTOR_FIELDS);
   const defenseHits = count(DEFENSE_TECH_LABELS);
   const shipHits = count(SHIP_LABELS);
@@ -330,7 +316,9 @@ export function parseTimestampedScan(base: ScanBase, lines: string[], warnings: 
     return null;
   }
 
-  const unknown = (label: string) => warnings.push(`Unbekanntes Feld: „${label}“`);
+  function unknown(label: string) {
+    return warnings.push(`Unbekanntes Feld: „${label}“`);
+  }
   if (best === sectorHits) {
     const scan: SectorScan = {
       ...base,
@@ -389,7 +377,9 @@ function parsePointsLine(line: string, time: number | undefined): PointsScan | n
 
 /** Zeitmarken-Zeile für einen Zeitpunkt, z. B. „@ 23.09. 14:30“. */
 export function formatTimeMarker(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
+  function pad(n: number) {
+    return String(n).padStart(2, "0");
+  }
   return `@ ${pad(date.getDate())}.${pad(date.getMonth() + 1)}. ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
@@ -532,7 +522,7 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
   /** Spieler aus der letzten „Scans von …“-Zeile, gilt für die folgenden Scans mit Zeitpunkt. */
   let blockTarget: ScanTarget | null = null;
 
-  const flush = () => {
+  function flush() {
     if (!current) return;
     if (current.timestamped) {
       const scan = parseTimestampedScan(current.base, current.lines, result.warnings);
@@ -547,7 +537,7 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
     else if (kind === "news") result.scans.push(parseNewsScan(current.base, current.lines, result.warnings));
     else result.skipped.push({ type: current.type, target: current.base.target });
     current = null;
-  };
+  }
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = normalizeLine(rawLine);
@@ -644,8 +634,7 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
 
   // Scans ohne Spieler/Koordinaten gehören zum ausgewerteten Spieler.
   const named =
-    result.scans.find((s) => !s.anonymous && (s.kind === "sector" || s.kind === "news")) ??
-    result.scans.find((s) => !s.anonymous);
+    result.scans.find((s) => !s.anonymous && (s.kind === "sector" || s.kind === "news")) ?? result.scans.find((s) => !s.anonymous);
   for (const scan of result.scans) {
     if (scan.anonymous) scan.target = named?.target ?? UNKNOWN_TARGET;
   }
@@ -691,14 +680,10 @@ export function groupScansByTarget(scans: Scan[]): TargetScans[] {
     const entry = byTarget.get(key) ?? { target: scan.target, sectorHistory: [], pointsHistory: [] };
     if (scan.kind === "sector") {
       entry.sector = scan;
-      const duplicate = entry.sectorHistory.some(
-        (s) => s.time === scan.time && s.points === scan.points,
-      );
+      const duplicate = entry.sectorHistory.some((s) => s.time === scan.time && s.points === scan.points);
       if (scan.time !== undefined && !duplicate) entry.sectorHistory.push(scan);
     } else if (scan.kind === "points") {
-      const duplicate = entry.pointsHistory.some(
-        (s) => s.time === scan.time && s.points === scan.points,
-      );
+      const duplicate = entry.pointsHistory.some((s) => s.time === scan.time && s.points === scan.points);
       if (scan.time !== undefined && !duplicate) entry.pointsHistory.push(scan);
     } else if (scan.kind === "news") entry.news = scan;
     else if (scan.kind === "units") entry.units = scan;

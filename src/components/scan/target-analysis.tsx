@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Info, TriangleAlert } from "lucide-react";
-import { defenses } from "@/gn-data/defense";
-import { ships } from "@/gn-data/ships";
-import { formatRes } from "@/lib/calculateFastestWayToGoal";
+import { defenses } from "@/lib/gn-data/defense.ts";
+import { ships } from "@/lib/gn-data/ships.ts";
+import { formatRes } from "@/lib/calculate-fastest-way-to-goal.ts";
 import {
   analyzeHistory,
   countMismatches,
@@ -12,9 +12,9 @@ import {
   latestPointsUpdate,
   type HistoryPoint,
   type HistoryStep,
-} from "@/lib/scan-analysis";
-import { SHIP_SCAN_LABEL, type TargetScans } from "@/lib/scan-parser";
-import { cn } from "@/lib/utils/cn";
+} from "@/lib/scan-analysis.ts";
+import { SHIP_SCAN_LABEL, type TargetScans } from "@/lib/scan-parser.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 function formatSigned(n: number) {
   const rounded = Math.round(n);
@@ -24,7 +24,9 @@ function formatSigned(n: number) {
 function formatTime(time: number | undefined) {
   if (time === undefined) return null;
   const date = new Date(time);
-  const pad = (n: number) => String(n).padStart(2, "0");
+  function pad(n: number) {
+    return String(n).padStart(2, "0");
+  }
   return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}. ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
@@ -33,24 +35,11 @@ function formatTime(time: number | undefined) {
  * Uhrzeiten nach Quelle eingefärbt, in den Planer-Farben: gelb (wie Gebäude) für
  * Sektor-, Einheiten- und Geschützscans, violett (wie Forschung) für Punktzeilen.
  */
-function Timestamp({
-  time,
-  short = false,
-  source = "scan",
-}: {
-  time: number | undefined;
-  short?: boolean;
-  source?: "scan" | "points";
-}) {
+function Timestamp({ time, short = false, source = "scan" }: { time: number | undefined; short?: boolean; source?: "scan" | "points" }) {
   const label = formatTime(time);
   if (!label) return null;
   return (
-    <span
-      className={cn(
-        "font-medium tabular-nums",
-        source === "points" ? "text-fuchsia-500" : "text-amber-500",
-      )}
-    >
+    <span className={cn("font-medium tabular-nums", source === "points" ? "text-fuchsia-500" : "text-amber-500")}>
       {short ? label.slice(-5) : label}
     </span>
   );
@@ -61,21 +50,15 @@ function pointSource(point: HistoryPoint) {
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-      {children}
-    </h3>
-  );
+  return <h3 className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">{children}</h3>;
 }
 
 function ScanMeta({ accuracy, time }: { accuracy: number; time?: number }) {
   return (
     <>
-      {accuracy < 100 ? (
-        <span className="ml-1.5 font-normal normal-case text-yellow-300">{accuracy} %</span>
-      ) : null}
+      {accuracy < 100 ? <span className="ml-1.5 font-normal text-yellow-300 normal-case">{accuracy} %</span> : null}
       {time !== undefined ? (
-        <span className="ml-1.5 normal-case tracking-normal">
+        <span className="ml-1.5 tracking-normal normal-case">
           <Timestamp time={time} />
         </span>
       ) : null}
@@ -156,31 +139,21 @@ const VERDICT_CLASS: Record<HistoryStep["verdict"], string> = {
 };
 
 /** Hinweis, ob der fortgeschriebene Rohstoffwert noch zum Einkommen passt. */
-function CarryForwardHint({
-  verdict,
-  shortfall,
-  since,
-}: {
-  verdict: HistoryStep["verdict"];
-  shortfall: number | null;
-  since: number;
-}) {
+function CarryForwardHint({ verdict, shortfall, since }: { verdict: HistoryStep["verdict"]; shortfall: number | null; since: number }) {
   if (verdict === "same-tick") return null;
   const tax = shortfall !== null ? formatPercent(shortfall) : "";
   const sinceLabel = <Timestamp time={since} />;
   if (verdict === "normal") {
     return (
       <p className="text-xs text-green-500">
-        Zuwachs seit {sinceLabel} passt zum Einkommen, vermutlich {tax} Steuern. Der Wert ist
-        verlässlich.
+        Zuwachs seit {sinceLabel} passt zum Einkommen, vermutlich {tax} Steuern. Der Wert ist verlässlich.
       </p>
     );
   }
   if (verdict === "suspicious") {
     return (
       <Notice>
-        Zuwachs seit {sinceLabel} liegt {tax} unter dem Maximum. Eher Steuern als ein Bau, zur
-        Sicherheit neu scannen.
+        Zuwachs seit {sinceLabel} liegt {tax} unter dem Maximum. Eher Steuern als ein Bau, zur Sicherheit neu scannen.
       </Notice>
     );
   }
@@ -202,11 +175,7 @@ function ResourceRange({ entry }: { entry: TargetScans }) {
   const estimate = earlyGameEstimate(entry);
   if (!estimate || !entry.sector) return null;
   if (estimate.inconsistent) {
-    return (
-      <Missing>
-        Die Punkte reichen nicht einmal für lauter Horus. Die Early-Game-Annahme passt hier nicht.
-      </Missing>
-    );
+    return <Missing>Die Punkte reichen nicht einmal für lauter Horus. Die Early-Game-Annahme passt hier nicht.</Missing>;
   }
   return (
     <div className="mt-2 flex flex-col gap-1">
@@ -219,8 +188,8 @@ function ResourceRange({ entry }: { entry: TargetScans }) {
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        Spanne je nach Verhältnis von Rubium zu Horus: keine Rubium ergibt den Höchstwert, möglichst
-        viele den Mindestwert. Mit einem Geschützscan wird die Zahl exakt.
+        Spanne je nach Verhältnis von Rubium zu Horus: keine Rubium ergibt den Höchstwert, möglichst viele den Mindestwert. Mit einem
+        Geschützscan wird die Zahl exakt.
       </p>
     </div>
   );
@@ -247,29 +216,20 @@ function Resources({ entry, earlyGame }: { entry: TargetScans; earlyGame: boolea
       <div className="mt-2 flex flex-col gap-2">
         <div className="flex items-baseline gap-2">
           <span
-            className={cn(
-              "font-heading text-2xl font-semibold tabular-nums",
-              (unreliable || current.resources < 0) && "text-yellow-300",
-            )}
+            className={cn("font-heading text-2xl font-semibold tabular-nums", (unreliable || current.resources < 0) && "text-yellow-300")}
           >
             {formatRes(current.resources)}
           </span>
           <span className="text-xs text-muted-foreground">
-            Metall + Kristall · Stand{" "}
-            <Timestamp time={current.point.time} source={pointSource(current.point)} />
+            Metall + Kristall · Stand <Timestamp time={current.point.time} source={pointSource(current.point)} />
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Fortgeschrieben vom Sektorscan <Timestamp time={sector.time} /> (
-          {formatRes(resources)} Rohstoffe) mit dem Punktestand von{" "}
+          Fortgeschrieben vom Sektorscan <Timestamp time={sector.time} /> ({formatRes(resources)} Rohstoffe) mit dem Punktestand von{" "}
           <Timestamp time={current.point.time} source={pointSource(current.point)} />, unter der Annahme, dass keine Einheiten dazugekommen
           sind.
         </p>
-        <CarryForwardHint
-          verdict={current.comparison.verdict}
-          shortfall={current.comparison.shortfall}
-          since={sector.time!}
-        />
+        <CarryForwardHint verdict={current.comparison.verdict} shortfall={current.comparison.shortfall} since={sector.time!} />
       </div>
     );
   }
@@ -277,32 +237,20 @@ function Resources({ entry, earlyGame }: { entry: TargetScans; earlyGame: boolea
   return (
     <div className="mt-2 flex flex-col gap-1">
       <div className="flex items-baseline gap-2">
-        <span
-          className={cn(
-            "font-heading text-2xl font-semibold tabular-nums",
-            (resources < 0 || mismatched) && "text-yellow-300",
-          )}
-        >
+        <span className={cn("font-heading text-2xl font-semibold tabular-nums", (resources < 0 || mismatched) && "text-yellow-300")}>
           {formatRes(resources)}
         </span>
         <span className="text-xs text-muted-foreground">Metall + Kristall</span>
       </div>
       {mismatched ? (
-        <p className="text-xs text-yellow-300">
-          Unsicher: Kein Sektorscan passt zu den Zahlen aus Einheiten- und Geschützscan.
-        </p>
+        <p className="text-xs text-yellow-300">Unsicher: Kein Sektorscan passt zu den Zahlen aus Einheiten- und Geschützscan.</p>
       ) : resources < 0 ? (
-        <p className="text-xs text-yellow-300">
-          Negativ: Die Scans passen nicht zusammen, vermutlich ist einer veraltet.
-        </p>
+        <p className="text-xs text-yellow-300">Negativ: Die Scans passen nicht zusammen, vermutlich ist einer veraltet.</p>
       ) : null}
       <p className="text-xs text-muted-foreground">
-        Stand{" "}
-        {sector.time !== undefined ? <Timestamp time={sector.time} /> : "ohne Zeitmarke"}, berechnet
-        mit dem Sektorscan von diesem Zeitpunkt
-        {olderSector && !mismatched
-          ? ". Neuere Sektorscans passen nicht zu Einheiten- und Geschützscan."
-          : "."}
+        Stand {sector.time !== undefined ? <Timestamp time={sector.time} /> : "ohne Zeitmarke"}, berechnet mit dem Sektorscan von diesem
+        Zeitpunkt
+        {olderSector && !mismatched ? ". Neuere Sektorscans passen nicht zu Einheiten- und Geschützscan." : "."}
       </p>
     </div>
   );
@@ -315,8 +263,8 @@ function EarlyGame({ entry }: { entry: TargetScans }) {
   if (estimate.inconsistent) {
     return (
       <Missing>
-        Die Punkte reichen nicht einmal für lauter Horus. Vermutlich gibt es schon andere
-        Einheiten, die Early-Game-Annahme passt hier nicht.
+        Die Punkte reichen nicht einmal für lauter Horus. Vermutlich gibt es schon andere Einheiten, die Early-Game-Annahme passt hier
+        nicht.
       </Missing>
     );
   }
@@ -328,18 +276,21 @@ function EarlyGame({ entry }: { entry: TargetScans }) {
       </div>
       <p>
         Von {formatRes(estimate.defense)} Geschützen sind{" "}
-        <span className="font-medium">höchstens {formatRes(estimate.rubiumMax)} Rubium</span> (
-        {Math.round(share * 100)} %), der Rest Horus. Das gilt, wenn keine Rohstoffe herumliegen.
+        <span className="font-medium">höchstens {formatRes(estimate.rubiumMax)} Rubium</span> ({Math.round(share * 100)} %), der Rest Horus.
+        Das gilt, wenn keine Rohstoffe herumliegen.
       </p>
-      <p className="text-muted-foreground">
-        Liegen Rohstoffe herum, sind es entsprechend weniger Rubium.
-      </p>
+      <p className="text-muted-foreground">Liegen Rohstoffe herum, sind es entsprechend weniger Rubium.</p>
     </div>
   );
 }
 
 function formatDelta(n: number | null) {
-  if (n === null) return <span className="text-muted-foreground/60" title="Nur Punktzeile, keine Einheitenzahlen">?</span>;
+  if (n === null)
+    return (
+      <span className="text-muted-foreground/60" title="Nur Punktzeile, keine Einheitenzahlen">
+        ?
+      </span>
+    );
   return n ? formatSigned(n) : "—";
 }
 
@@ -370,12 +321,7 @@ function History({ steps }: { steps: HistoryStep[] }) {
             <td className="py-1.5 text-right text-muted-foreground">
               {step.ticks > 0 ? `${formatRes(step.lower)}–${formatRes(step.upper)}` : "—"}
             </td>
-            <td
-              className={cn(
-                "py-1.5 pl-4",
-                VERDICT_CLASS[step.verdict],
-              )}
-            >
+            <td className={cn("py-1.5 pl-4", VERDICT_CLASS[step.verdict])}>
               {verdictLabel(step)}
               {step.verdict === "building" ? (
                 <span className="text-muted-foreground"> · bis zu {formatRes(step.spentResources)} Res</span>
@@ -395,9 +341,7 @@ function History({ steps }: { steps: HistoryStep[] }) {
 function GroupHeading({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      <h4 className="text-[11px] font-semibold tracking-wider text-foreground/80 uppercase">
-        {children}
-      </h4>
+      <h4 className="text-[11px] font-semibold tracking-wider text-foreground/80 uppercase">{children}</h4>
       <div className="h-px flex-1 bg-border" />
     </div>
   );
@@ -424,10 +368,9 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
         <div className="flex gap-2 rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs/relaxed text-foreground">
           <Info className="mt-0.5 size-3.5 shrink-0 text-green-500" />
           <p>
-            <span className="font-medium">Early-Game-Modus:</span> Angenommen wird, dass es nur Horus,
-            Rubium, Cleptor und Cancri gibt. Cleptor und Cancri kosten beide 2.500, daher reicht ein
-            Sektorscan für die Auswertung. Ohne Geschützscan werden Rohstoffe und das Verhältnis von
-            Rubium zu Horus als Spanne geschätzt.
+            <span className="font-medium">Early-Game-Modus:</span> Angenommen wird, dass es nur Horus, Rubium, Cleptor und Cancri gibt.
+            Cleptor und Cancri kosten beide 2.500, daher reicht ein Sektorscan für die Auswertung. Ohne Geschützscan werden Rohstoffe und
+            das Verhältnis von Rubium zu Horus als Spanne geschätzt.
           </p>
         </div>
       ) : null}
@@ -456,21 +399,17 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
             <SectionLabel>
               Letzter Punktestand
               {latestPoints?.time !== undefined ? (
-                <span className="ml-1.5 normal-case tracking-normal">
+                <span className="ml-1.5 tracking-normal normal-case">
                   <Timestamp time={latestPoints.time} source={pointsUpdate ? "points" : "scan"} />
                 </span>
               ) : null}
             </SectionLabel>
             {latestPoints ? (
-              <div className="mt-2 font-heading text-xl font-semibold tabular-nums">
-                {formatRes(latestPoints.points)}
-              </div>
+              <div className="mt-2 font-heading text-xl font-semibold tabular-nums">{formatRes(latestPoints.points)}</div>
             ) : (
               <Missing>—</Missing>
             )}
-            {pointsUpdate ? (
-              <p className="mt-1 text-[11px] text-muted-foreground">aus Punktzeile</p>
-            ) : null}
+            {pointsUpdate ? <p className="mt-1 text-[11px] text-muted-foreground">aus Punktzeile</p> : null}
           </section>
         </div>
         <div className="grid grid-cols-2 gap-6 p-4">
@@ -494,19 +433,15 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
       <GroupHeading>Auswertung</GroupHeading>
 
       {!sector ? (
-        <Notice>
-          Nur Punktestände, kein Sektorscan. Für Rohstoffe und Verlauf braucht es mindestens einen
-          Sektorscan dieses Ziels.
-        </Notice>
+        <Notice>Nur Punktestände, kein Sektorscan. Für Rohstoffe und Verlauf braucht es mindestens einen Sektorscan dieses Ziels.</Notice>
       ) : null}
 
       {mismatches.length > 0 ? (
         <Notice>
           {mismatches.map((m) => (
             <p key={m.kind}>
-              {m.kind === "ships" ? "Einheitenscan" : "Geschützscan"}: {formatRes(m.scanned)}{" "}
-              {m.kind === "ships" ? "Schiffe" : "Geschütze"}, Sektorscan: {formatRes(m.sector)}.
-              Einer der Scans ist vermutlich veraltet.
+              {m.kind === "ships" ? "Einheitenscan" : "Geschützscan"}: {formatRes(m.scanned)} {m.kind === "ships" ? "Schiffe" : "Geschütze"}
+              , Sektorscan: {formatRes(m.sector)}. Einer der Scans ist vermutlich veraltet.
             </p>
           ))}
         </Notice>

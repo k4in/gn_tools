@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Copy, Download, FileJson } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
+import { Button } from "@/components/shadcn/button.tsx";
 import {
   Dialog,
   DialogClose,
@@ -10,8 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/shadcn/dialog";
-import { Textarea } from "@/components/shadcn/textarea";
+} from "@/components/shadcn/dialog.tsx";
+import { Textarea } from "@/components/shadcn/textarea.tsx";
 
 export type ExportPlanDialogProps = {
   json: string;
@@ -28,7 +28,7 @@ function planFileName(planSlot: number, now = new Date()) {
 export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
   const [copied, setCopied] = useState(false);
 
-  const copyJson = async () => {
+  async function copyJson() {
     try {
       await navigator.clipboard.writeText(json);
       setCopied(true);
@@ -36,9 +36,9 @@ export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
     } catch (err) {
       console.error("Konnte Plan-JSON nicht kopieren", err);
     }
-  };
+  }
 
-  const saveJsonFile = () => {
+  function saveJsonFile() {
     const blob = new Blob([json], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -46,7 +46,7 @@ export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
     link.download = planFileName(planSlot);
     link.click();
     URL.revokeObjectURL(url);
-  };
+  }
 
   return (
     <Dialog
@@ -61,15 +61,13 @@ export function ExportPlanDialog({ json, planSlot }: ExportPlanDialogProps) {
       <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Plan-JSON</DialogTitle>
-          <DialogDescription>
-            Vollständiges JSON des aktuellen Plans inklusive Steuern.
-          </DialogDescription>
+          <DialogDescription>Vollständiges JSON des aktuellen Plans inklusive Steuern.</DialogDescription>
         </DialogHeader>
         <Textarea
           readOnly
           value={json}
           spellCheck={false}
-          className="max-h-[60vh] min-h-64 resize-none overflow-auto font-mono text-xs/relaxed field-sizing-fixed"
+          className="field-sizing-fixed max-h-[60vh] min-h-64 resize-none overflow-auto font-mono text-xs/relaxed"
         />
         <DialogFooter>
           <DialogClose render={<Button type="button" variant="outline" />}>Schließen</DialogClose>

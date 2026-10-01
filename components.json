@@ -17,7 +17,7 @@
     "utils": "@/lib/utils/cn",
     "ui": "@/components/shadcn",
     "lib": "@/lib",
-    "hooks": "@/hooks"
+    "hooks": "@/hooks/shadcn"
   },
   "menuColor": "default",
   "menuAccent": "bold",

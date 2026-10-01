@@ -1,5 +1,5 @@
 /** Draft plan (not wired into the app yet). */
-import type { PlanEntry, PlanTemplate } from "@/gn-data/plan";
+import { type PlanEntry, type PlanTemplate } from "@/lib/gn-data/plan.ts";
 
 export const fastExen: PlanTemplate = {
   id: "fast_exen",

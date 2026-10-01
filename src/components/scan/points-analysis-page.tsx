@@ -1,9 +1,10 @@
 import { useCallback } from "react";
 import { Link } from "@tanstack/react-router";
-import { HelpCode, ScanWorkspace, TimeMarkerHelp, useStoredState } from "@/components/scan/scan-workspace";
-import { TargetAnalysis } from "@/components/scan/target-analysis";
-import type { Scan } from "@/lib/scan-parser";
-import { cn } from "@/lib/utils/cn";
+import { HelpCode, ScanWorkspace, TimeMarkerHelp } from "@/components/scan/scan-workspace.tsx";
+import { useStoredState } from "@/hooks/useStoredState.tsx";
+import { TargetAnalysis } from "@/components/scan/target-analysis.tsx";
+import { type Scan } from "@/lib/scan-parser.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 /** Eigener Key, getrennt vom Bauplan (gn_tool.plan) und der Newsscan-Analyse. */
 const STORAGE_KEY = "gn_tool.scans.sektor";
@@ -52,9 +53,7 @@ export function PointsAnalysisPage() {
           title="Schätzt Rubium/Horus ohne Geschützscan"
           className={cn(
             "inline-flex h-7 items-center gap-2 rounded-md border px-2 text-xs font-medium transition-colors",
-            earlyGame
-              ? "border-green-500/50 bg-green-500/15 text-foreground"
-              : "border-border text-muted-foreground hover:text-foreground"
+            earlyGame ? "border-green-500/50 bg-green-500/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"
           )}
         >
           <span className={cn("relative h-3 w-5 rounded-full transition-colors", earlyGame ? "bg-green-500" : "bg-muted")}>
@@ -69,14 +68,14 @@ export function PointsAnalysisPage() {
         <>
           <p>
             Einfügen lassen sich <span className="text-foreground">Sektor-, Einheiten- und Geschützscans</span>, kopiert aus der
-            Scan-Datenbank oder direkt aus WhatsApp, sowie <span className="text-foreground">Punktzeilen</span> aus der
-            Galaxieansicht, z. B. <HelpCode>14:5 ☠️ Barrett 37.242.208 28</HelpCode>. Mehrere auf einmal gehen auch.
-            Militärscans werden ignoriert. Ausgewertet werden Rohstoffe und Punkteverlauf.
+            Scan-Datenbank oder direkt aus WhatsApp, sowie <span className="text-foreground">Punktzeilen</span> aus der Galaxieansicht, z.
+            B. <HelpCode>14:5 ☠️ Barrett 37.242.208 28</HelpCode>. Mehrere auf einmal gehen auch. Militärscans werden ignoriert. Ausgewertet
+            werden Rohstoffe und Punkteverlauf.
           </p>
           <p>
             Die Scans gehen auch im Format <HelpCode>Daten wurden per Scan erfasst …</HelpCode>, auch als ganzer Block ab{" "}
-            <HelpCode>Scans von …</HelpCode>. Sie enthalten ihren Zeitpunkt selbst; „heute“ wird beim Einfügen zum festen
-            Datum. Fehlt die „Scans von“-Zeile, werden sie dem ausgewerteten Spieler zugeordnet.
+            <HelpCode>Scans von …</HelpCode>. Sie enthalten ihren Zeitpunkt selbst; „heute“ wird beim Einfügen zum festen Datum. Fehlt die
+            „Scans von“-Zeile, werden sie dem ausgewerteten Spieler zugeordnet.
           </p>
           <TimeMarkerHelp />
         </>

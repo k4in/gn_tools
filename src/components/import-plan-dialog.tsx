@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Import } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
+import { Button } from "@/components/shadcn/button.tsx";
 import {
   Dialog,
   DialogClose,
@@ -10,15 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/shadcn/dialog";
-import { Field, FieldLabel } from "@/components/shadcn/field";
-import { Textarea } from "@/components/shadcn/textarea";
-import type { PlanEntry } from "@/gn-data/plan";
-import type { TaxSegment } from "@/lib/calculateFastestWayToGoal";
+} from "@/components/shadcn/dialog.tsx";
+import { Field, FieldLabel } from "@/components/shadcn/field.tsx";
+import { Textarea } from "@/components/shadcn/textarea.tsx";
+import { type PlanEntry } from "@/lib/gn-data/plan.ts";
+import { type TaxSegment } from "@/lib/calculate-fastest-way-to-goal.ts";
 
-export type ImportPlanParseResult =
-  | { ok: true; plan: PlanEntry[]; taxes: TaxSegment[] }
-  | { ok: false; error: string };
+export type ImportPlanParseResult = { ok: true; plan: PlanEntry[]; taxes: TaxSegment[] } | { ok: false; error: string };
 
 export type ImportPlanDialogProps = {
   parse: (json: string) => ImportPlanParseResult;
@@ -30,12 +28,12 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const reset = () => {
+  function reset() {
     setText("");
     setError(null);
-  };
+  }
 
-  const handleReplace = () => {
+  function handleReplace() {
     const result = parse(text);
     if (!result.ok) {
       setError(result.error);
@@ -44,7 +42,7 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
     onReplace({ plan: result.plan, taxes: result.taxes });
     reset();
     setOpen(false);
-  };
+  }
 
   return (
     <Dialog
@@ -61,17 +59,10 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
       <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Plan importieren</DialogTitle>
-          <DialogDescription>
-            JSON eines exportierten Plans einfügen, inklusive Steuern. Startzeit bleibt
-            unverändert.
-          </DialogDescription>
+          <DialogDescription>JSON eines exportierten Plans einfügen, inklusive Steuern. Startzeit bleibt unverändert.</DialogDescription>
         </DialogHeader>
-        <p
-          role="alert"
-          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          Der Import ersetzt den aktuellen Plan vollständig. Das lässt sich nicht
-          rückgängig machen.
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Der Import ersetzt den aktuellen Plan vollständig. Das lässt sich nicht rückgängig machen.
         </p>
         <Field data-invalid={error ? true : undefined}>
           <FieldLabel htmlFor="plan-import-json">Plan-JSON</FieldLabel>
@@ -85,7 +76,7 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
             spellCheck={false}
             aria-invalid={error ? true : undefined}
             placeholder='{ "plan": [ { "id": "...", "kind": "tech", ... } ], "taxes": [] }'
-            className="max-h-[60vh] min-h-64 resize-none overflow-auto font-mono text-xs/relaxed field-sizing-fixed"
+            className="field-sizing-fixed max-h-[60vh] min-h-64 resize-none overflow-auto font-mono text-xs/relaxed"
           />
           {error ? (
             <p className="text-sm text-destructive" role="alert">
@@ -94,15 +85,8 @@ export function ImportPlanDialog({ parse, onReplace }: ImportPlanDialogProps) {
           ) : null}
         </Field>
         <DialogFooter>
-          <DialogClose render={<Button type="button" variant="outline" />}>
-            Abbrechen
-          </DialogClose>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={!text.trim()}
-            onClick={handleReplace}
-          >
+          <DialogClose render={<Button type="button" variant="outline" />}>Abbrechen</DialogClose>
+          <Button type="button" variant="destructive" disabled={!text.trim()} onClick={handleReplace}>
             Plan ersetzen
           </Button>
         </DialogFooter>

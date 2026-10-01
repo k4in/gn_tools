@@ -1,19 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/shadcn/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/shadcn/table";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/shadcn/dialog.tsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/shadcn/table.tsx";
 import {
   ASTEROID_SLOT_CAPACITY,
   attackRoidStartTick,
@@ -21,8 +8,8 @@ import {
   clockLabel,
   type PlanResult,
   type StartConfig,
-} from "@/lib/calculateFastestWayToGoal";
-import { cn } from "@/lib/utils/cn";
+} from "@/lib/calculate-fastest-way-to-goal.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 export type ExtractorsDialogProps = {
   startCfg: StartConfig;
@@ -70,45 +57,29 @@ function snapshotAtTick(plan: PlanResult, currentTick: number) {
   return best;
 }
 
-function ExtractorStats({
-  asteroids,
-  metOwned,
-  krisOwned,
-}: {
-  asteroids: number;
-  metOwned: number;
-  krisOwned: number;
-}) {
+function ExtractorStats({ asteroids, metOwned, krisOwned }: { asteroids: number; metOwned: number; krisOwned: number }) {
   const slots = asteroids * ASTEROID_SLOT_CAPACITY;
   const occupied = Math.min(metOwned + krisOwned, slots);
   const slotShortage = metOwned + krisOwned > slots;
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
       <div>
-        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          Asteroiden
-        </dt>
-        <dd className="tabular-nums font-medium">{asteroids}</dd>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Asteroiden</dt>
+        <dd className="font-medium tabular-nums">{asteroids}</dd>
       </div>
       <div>
-        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          Flächen
-        </dt>
-        <dd className={cn("tabular-nums font-medium", slotShortage && "text-destructive")}>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Flächen</dt>
+        <dd className={cn("font-medium tabular-nums", slotShortage && "text-destructive")}>
           {occupied}/{slots}
         </dd>
       </div>
       <div>
-        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          Met-Exen
-        </dt>
-        <dd className="tabular-nums font-medium">{metOwned}</dd>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Met-Exen</dt>
+        <dd className="font-medium tabular-nums">{metOwned}</dd>
       </div>
       <div>
-        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          Kris-Exen
-        </dt>
-        <dd className="tabular-nums font-medium">{krisOwned}</dd>
+        <dt className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Kris-Exen</dt>
+        <dd className="font-medium tabular-nums">{krisOwned}</dd>
       </div>
     </dl>
   );
@@ -116,10 +87,7 @@ function ExtractorStats({
 
 function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[] {
   const rows: ExtractorEventRow[] = [];
-  const roids = new Map<
-    string,
-    { start: number; end: number; met: number; kris: number; clock: string }
-  >();
+  const roids = new Map<string, { start: number; end: number; met: number; kris: number; clock: string }>();
 
   for (const tick of plan.ticks) {
     let met = 0;
@@ -175,18 +143,11 @@ function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[]
   }
 
   for (const entry of startCfg.plan) {
-    const isAttackRoid =
-      entry.kind === "attack" && (entry.targetMet > 0 || entry.targetKris > 0);
+    const isAttackRoid = entry.kind === "attack" && (entry.targetMet > 0 || entry.targetKris > 0);
     if (entry.kind !== "roid" && !isAttackRoid) continue;
     const loot = roids.get(entry.id);
-    const roidStart =
-      entry.kind === "attack"
-        ? attackRoidStartTick(entry.startTick, entry.duration, entry.roidDuration)
-        : entry.startTick;
-    const roidTicks =
-      entry.kind === "attack"
-        ? clampAttackRoidDuration(entry.roidDuration, entry.duration)
-        : entry.duration;
+    const roidStart = entry.kind === "attack" ? attackRoidStartTick(entry.startTick, entry.duration, entry.roidDuration) : entry.startTick;
+    const roidTicks = entry.kind === "attack" ? clampAttackRoidDuration(entry.roidDuration, entry.duration) : entry.duration;
     const start = loot?.start ?? roidStart;
     const end = loot?.end ?? roidStart + Math.max(0, roidTicks - 1);
     rows.push({
@@ -200,10 +161,7 @@ function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[]
     });
   }
 
-  const catastrophes = new Map<
-    string,
-    { start: number; end: number; met: number; kris: number; clock: string }
-  >();
+  const catastrophes = new Map<string, { start: number; end: number; met: number; kris: number; clock: string }>();
   for (const tick of plan.ticks) {
     for (const loss of tick.catastropheLoss) {
       const current = catastrophes.get(loss.planEntryId);
@@ -252,23 +210,13 @@ function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[]
   }
 
   const sourceOrder = { Bau: 0, Roid: 1, Katastrophe: 2, Stand: 3, Quest: 4 };
-  return rows.sort(
-    (a, b) => a.sortTick - b.sortTick || sourceOrder[a.source] - sourceOrder[b.source],
-  );
+  return rows.sort((a, b) => a.sortTick - b.sortTick || sourceOrder[a.source] - sourceOrder[b.source]);
 }
 
-export function ExtractorsDialog({
-  startCfg,
-  plan,
-  currentTick,
-  children,
-}: ExtractorsDialogProps) {
+export function ExtractorsDialog({ startCfg, plan, currentTick, children }: ExtractorsDialogProps) {
   const [open, setOpen] = useState(false);
   const snap = plan ? snapshotAtTick(plan, currentTick) : null;
-  const rows = useMemo(
-    () => (plan ? buildRows(plan, startCfg) : []),
-    [plan, startCfg],
-  );
+  const rows = useMemo(() => (plan ? buildRows(plan, startCfg) : []), [plan, startCfg]);
 
   const tickLabel = currentTick < 0 ? `−${Math.abs(currentTick)}` : String(currentTick);
 
@@ -284,72 +232,56 @@ export function ExtractorsDialog({
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Extraktoren</DialogTitle>
-          <DialogDescription>
-            Bestand im aktuellen Tick, am Planende und alle geplanten Zugänge.
-          </DialogDescription>
+          <DialogDescription>Bestand im aktuellen Tick, am Planende und alle geplanten Zugänge.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-md border border-border p-3">
-            <p className="mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Bestand im Tick {tickLabel}
-            </p>
-            <ExtractorStats
-              asteroids={snap?.asteroids ?? 0}
-              metOwned={snap?.extractorsMet ?? 0}
-              krisOwned={snap?.extractorsKris ?? 0}
-            />
+            <p className="mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Bestand im Tick {tickLabel}</p>
+            <ExtractorStats asteroids={snap?.asteroids ?? 0} metOwned={snap?.extractorsMet ?? 0} krisOwned={snap?.extractorsKris ?? 0} />
           </div>
           <div className="rounded-md border border-border p-3">
             <p className="mb-2 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
               Bestand am Planende
               {plan ? ` (Tick ${plan.finishTick})` : ""}
             </p>
-            <ExtractorStats
-              asteroids={plan?.asteroids ?? 0}
-              metOwned={plan?.extractorsMet ?? 0}
-              krisOwned={plan?.extractorsKris ?? 0}
-            />
+            <ExtractorStats asteroids={plan?.asteroids ?? 0} metOwned={plan?.extractorsMet ?? 0} krisOwned={plan?.extractorsKris ?? 0} />
           </div>
         </div>
         <div className="max-h-[60vh] overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tick</TableHead>
-              <TableHead>Uhrzeit</TableHead>
-              <TableHead className="text-right">+Met-Ex</TableHead>
-              <TableHead className="text-right">+Kris-Ex</TableHead>
-              <TableHead className="text-right">+Ast</TableHead>
-              <TableHead>Quelle</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
-                  Keine Extraktor-Einträge im Plan.
-                </TableCell>
+                <TableHead>Tick</TableHead>
+                <TableHead>Uhrzeit</TableHead>
+                <TableHead className="text-right">+Met-Ex</TableHead>
+                <TableHead className="text-right">+Kris-Ex</TableHead>
+                <TableHead className="text-right">+Ast</TableHead>
+                <TableHead>Quelle</TableHead>
               </TableRow>
-            ) : (
-              rows.map((row, i) => (
-                <TableRow key={`${row.source}-${row.tickLabel}-${i}`}>
-                  <TableCell className="tabular-nums">{row.tickLabel}</TableCell>
-                  <TableCell className="tabular-nums">{row.clockLabel}</TableCell>
-                  <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.met))}>
-                    {formatExDelta(row.met)}
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    Keine Extraktor-Einträge im Plan.
                   </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.kris))}>
-                    {formatExDelta(row.kris)}
-                  </TableCell>
-                  <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.asteroids))}>
-                    {formatExDelta(row.asteroids)}
-                  </TableCell>
-                  <TableCell className={sourceClass(row.source)}>{row.source}</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                rows.map((row, i) => (
+                  <TableRow key={`${row.source}-${row.tickLabel}-${i}`}>
+                    <TableCell className="tabular-nums">{row.tickLabel}</TableCell>
+                    <TableCell className="tabular-nums">{row.clockLabel}</TableCell>
+                    <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.met))}>{formatExDelta(row.met)}</TableCell>
+                    <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.kris))}>{formatExDelta(row.kris)}</TableCell>
+                    <TableCell className={cn("text-right tabular-nums", exDeltaClass(row.asteroids))}>
+                      {formatExDelta(row.asteroids)}
+                    </TableCell>
+                    <TableCell className={sourceClass(row.source)}>{row.source}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
       </DialogContent>
     </Dialog>

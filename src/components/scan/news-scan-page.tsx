@@ -1,8 +1,9 @@
 import { useCallback } from "react";
 import { Link } from "@tanstack/react-router";
-import { NewsAnalysisView, type NewsViewState } from "@/components/scan/news-analysis-view";
-import { ScanWorkspace, useStoredState } from "@/components/scan/scan-workspace";
-import type { Scan } from "@/lib/scan-parser";
+import { NewsAnalysisView, type NewsViewState } from "@/components/scan/news-analysis-view.tsx";
+import { ScanWorkspace } from "@/components/scan/scan-workspace.tsx";
+import { useStoredState } from "@/hooks/useStoredState.tsx";
+import { type Scan } from "@/lib/scan-parser.ts";
 
 /** Eigener Key, getrennt vom Bauplan (gn_tool.plan) und der Punkteanalyse. */
 const STORAGE_KEY = "gn_tool.scans.news";
@@ -55,12 +56,12 @@ export function NewsScanPage() {
       help={
         <>
           <p>
-            Einfügen lässt sich ein <span className="text-foreground">Newsscan</span>, kopiert aus der Scan-Datenbank oder
-            direkt aus WhatsApp. Die Auswertung zeigt, wann welche Flotte kämpft.
+            Einfügen lässt sich ein <span className="text-foreground">Newsscan</span>, kopiert aus der Scan-Datenbank oder direkt aus
+            WhatsApp. Die Auswertung zeigt, wann welche Flotte kämpft.
           </p>
           <p>
-            Ausgewertet wird immer ab <span className="text-foreground">jetzt</span>: Es zählen die Einträge der letzten
-            10 Stunden, eine Zeitmarke braucht es nicht. Zurückgezogene Flotten werden ausgeblendet.
+            Ausgewertet wird immer ab <span className="text-foreground">jetzt</span>: Es zählen die Einträge der letzten 10 Stunden, eine
+            Zeitmarke braucht es nicht. Zurückgezogene Flotten werden ausgeblendet.
           </p>
         </>
       }

@@ -1,26 +1,17 @@
+// React
 import { useEffect, useMemo, useRef, useState } from "react";
+
+// Packages
 import { ArrowLeftRight, Plus, X } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/shadcn/dialog";
-import { Field, FieldLabel } from "@/components/shadcn/field";
-import { RadioGroup, RadioGroupItem } from "@/components/shadcn/radio-group";
-import { Input } from "@/components/shadcn/input";
-import { Checkbox } from "@/components/shadcn/checkbox";
-import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/shadcn/combobox";
+
+// Types
+import { type PlanEntry, type RoidCoAttacker, type RoidMulti } from "@/lib/gn-data/plan.ts";
+import { type TechTreeEntry } from "@/lib/gn-data/techtree.ts";
+import { type Defense } from "@/lib/gn-data/defense.ts";
+import { type Ship } from "@/lib/gn-data/ships.ts";
+import { type Utility } from "@/lib/gn-data/utility.ts";
+
+// Lib/Utils
 import {
   ASTEROID_COST,
   ASTEROID_SLOT_CAPACITY,
@@ -47,24 +38,23 @@ import {
   ROID_DURATION_MAX,
   ROID_DURATION_MIN,
   roidsOverlap,
-  type PlanEntry,
-  type RoidCoAttacker,
-  type RoidMulti,
   type StartConfig,
-} from "@/lib/calculateFastestWayToGoal";
-import type { TechTreeEntry } from "@/gn-data/techtree";
-import type { Defense } from "@/gn-data/defense";
-import type { Ship } from "@/gn-data/ships";
-import type { Utility } from "@/gn-data/utility";
+} from "@/lib/calculate-fastest-way-to-goal.ts";
 
-const ROID_DURATION_ITEMS = Array.from(
-  { length: ROID_DURATION_MAX - ROID_DURATION_MIN + 1 },
-  (_, i) => String(ROID_DURATION_MIN + i),
-);
+// Shadcn components
+import { Button } from "@/components/shadcn/button.tsx";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/shadcn/dialog.tsx";
+import { Field, FieldLabel } from "@/components/shadcn/field.tsx";
+import { RadioGroup, RadioGroupItem } from "@/components/shadcn/radio-group.tsx";
+import { Input } from "@/components/shadcn/input.tsx";
+import { Checkbox } from "@/components/shadcn/checkbox.tsx";
+import { InputGroup, InputGroupInput } from "@/components/shadcn/input-group.tsx";
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/shadcn/combobox.tsx";
+
+const ROID_DURATION_ITEMS = Array.from({ length: ROID_DURATION_MAX - ROID_DURATION_MIN + 1 }, (_, i) => String(ROID_DURATION_MIN + i));
 const ROID_DEFAULT_DURATION = 5;
-const CATASTROPHE_DURATION_ITEMS = Array.from(
-  { length: CATASTROPHE_DURATION_MAX - CATASTROPHE_DURATION_MIN + 1 },
-  (_, i) => String(CATASTROPHE_DURATION_MIN + i),
+const CATASTROPHE_DURATION_ITEMS = Array.from({ length: CATASTROPHE_DURATION_MAX - CATASTROPHE_DURATION_MIN + 1 }, (_, i) =>
+  String(CATASTROPHE_DURATION_MIN + i)
 );
 
 export type PlanEntryDialogMode = "add" | "edit";
@@ -270,17 +260,9 @@ export function PlanEntryDialog({
     if (mode === "edit" && entry) {
       const entryDur =
         entry.kind === "roid" || entry.kind === "catastrophe" || entry.kind === "attack"
-          ? targetDuration(
-              target,
-              entry.duration,
-              entry.kind === "attack" && !!entry.noReturn,
-            )
+          ? targetDuration(target, entry.duration, entry.kind === "attack" && !!entry.noReturn)
           : targetDuration(target, 0, false);
-      setTickInput(
-        tickInputModeRef.current === "end" && entryDur > 0
-          ? entry.startTick + entryDur
-          : entry.startTick,
-      );
+      setTickInput(tickInputModeRef.current === "end" && entryDur > 0 ? entry.startTick + entryDur : entry.startTick);
       if (entry.kind === "economy") {
         setAsteroidCount(Math.max(0, entry.asteroids));
         setExtractorMetCount(Math.max(0, entry.extractorsMet));
@@ -314,9 +296,7 @@ export function PlanEntryDialog({
       if (entry.kind === "roid" || entry.kind === "attack") {
         setTargetMet(Math.max(0, entry.targetMet));
         setTargetKris(Math.max(0, entry.targetKris));
-        setDuration(
-          Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, entry.duration)),
-        );
+        setDuration(Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, entry.duration)));
         setNoReturn(entry.kind === "attack" && !!entry.noReturn);
         if (entry.kind === "attack") {
           setAttackRoidDuration(clampAttackRoidDuration(entry.roidDuration, entry.duration));
@@ -327,12 +307,7 @@ export function PlanEntryDialog({
         return;
       }
       if (entry.kind === "catastrophe") {
-        setDuration(
-          Math.min(
-            CATASTROPHE_DURATION_MAX,
-            Math.max(CATASTROPHE_DURATION_MIN, entry.duration),
-          ),
-        );
+        setDuration(Math.min(CATASTROPHE_DURATION_MAX, Math.max(CATASTROPHE_DURATION_MIN, entry.duration)));
         return;
       }
       if (entry.kind === "snapshot") {
@@ -370,27 +345,15 @@ export function PlanEntryDialog({
       setExtractorKrisCount(Math.max(0, target.defaultExtractorsKris));
       setAsteroidCount(Math.max(0, target.defaultAsteroids));
     } else if (target.kind === "catastrophe") {
-      setDuration(
-        Math.min(
-          CATASTROPHE_DURATION_MAX,
-          Math.max(CATASTROPHE_DURATION_MIN, target.defaultDuration),
-        ),
-      );
+      setDuration(Math.min(CATASTROPHE_DURATION_MAX, Math.max(CATASTROPHE_DURATION_MIN, target.defaultDuration)));
     } else if (target.kind === "roid" || target.kind === "attack") {
       setNoReturn(target.kind === "attack" && target.defaultNoReturn);
       if (target.kind === "attack") {
-        setAttackRoidDuration(
-          clampAttackRoidDuration(target.defaultRoidDuration, target.defaultDuration),
-        );
+        setAttackRoidDuration(clampAttackRoidDuration(target.defaultRoidDuration, target.defaultDuration));
       }
       setTargetMet(Math.max(0, target.defaultTargetMet));
       setTargetKris(Math.max(0, target.defaultTargetKris));
-      setDuration(
-        Math.min(
-          ROID_DURATION_MAX,
-          Math.max(ROID_DURATION_MIN, target.defaultDuration),
-        ),
-      );
+      setDuration(Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, target.defaultDuration)));
       setMultiEnabled(!!target.defaultMulti);
       setOwnCleptors(target.defaultMulti?.ownCleptors ?? 0);
       setCoAttackers(target.defaultMulti?.attackers.map((a) => ({ ...a })) ?? []);
@@ -471,11 +434,8 @@ export function PlanEntryDialog({
   }, [target, liveEconomy, asteroidCount, extractorMetCount, extractorKrisCount]);
 
   const roidMulti = useMemo<RoidMulti | undefined>(
-    () =>
-      (target?.kind === "roid" || target?.kind === "attack") && multiEnabled
-        ? { ownCleptors, attackers: coAttackers }
-        : undefined,
-    [target, multiEnabled, ownCleptors, coAttackers],
+    () => ((target?.kind === "roid" || target?.kind === "attack") && multiEnabled ? { ownCleptors, attackers: coAttackers } : undefined),
+    [target, multiEnabled, ownCleptors, coAttackers]
   );
 
   // Beim Angriffsflug wird nur in den letzten `roidTicks` Kampfticks geroidet.
@@ -483,20 +443,17 @@ export function PlanEntryDialog({
 
   const roidLoot = useMemo(
     () => (roidMulti ? computeRoidLoot(targetMet, targetKris, roidTicks, roidMulti) : null),
-    [roidMulti, targetMet, targetKris, roidTicks],
+    [roidMulti, targetMet, targetKris, roidTicks]
   );
 
-  const updateCoAttacker = (index: number, patch: Partial<RoidCoAttacker>) => {
+  function updateCoAttacker(index: number, patch: Partial<RoidCoAttacker>) {
     setCoAttackers((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
-  };
+  }
 
   if (!target) return null;
 
   // Erster Roid-Tick; beim Angriffsflug zählt nur ein Kampf mit Ziel-Exen als Roid.
-  const roidStartTick =
-    target.kind === "attack"
-      ? attackRoidStartTick(startTick, duration, roidTicks)
-      : startTick;
+  const roidStartTick = target.kind === "attack" ? attackRoidStartTick(startTick, duration, roidTicks) : startTick;
 
   const timeRows =
     entryDuration > 0 ? (
@@ -506,30 +463,24 @@ export function PlanEntryDialog({
         {target.kind === "attack" && (
           <>
             <dt className="text-muted-foreground">Ankunft</dt>
-            <dd className="tabular-nums">
-              {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS)}
-            </dd>
+            <dd className="tabular-nums">{clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS)}</dd>
             <dt className="text-muted-foreground">Kampf</dt>
             <dd className="tabular-nums">
-              {clockLabel(startCfg, attackFirstCombatTick(startTick))} –{" "}
-              {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS + duration)} (Tick{" "}
-              {attackFirstCombatTick(startTick)}–{startTick + ATTACK_FLIGHT_TICKS + duration})
+              {clockLabel(startCfg, attackFirstCombatTick(startTick))} – {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS + duration)}{" "}
+              (Tick {attackFirstCombatTick(startTick)}–{startTick + ATTACK_FLIGHT_TICKS + duration})
             </dd>
             {(targetMet > 0 || targetKris > 0) && (
               <>
                 <dt className="text-muted-foreground">Roid</dt>
                 <dd className="tabular-nums">
-                  {clockLabel(startCfg, roidStartTick)} –{" "}
-                  {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS + duration)} (Tick{" "}
+                  {clockLabel(startCfg, roidStartTick)} – {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS + duration)} (Tick{" "}
                   {roidStartTick}–{startTick + ATTACK_FLIGHT_TICKS + duration})
                 </dd>
               </>
             )}
           </>
         )}
-        <dt className="text-muted-foreground">
-          {target.kind === "attack" && !noReturn ? "Rückkehr" : "Ende"}
-        </dt>
+        <dt className="text-muted-foreground">{target.kind === "attack" && !noReturn ? "Rückkehr" : "Ende"}</dt>
         <dd className="tabular-nums">{clockLabel(startCfg, endTick)}</dd>
       </>
     ) : (
@@ -539,12 +490,7 @@ export function PlanEntryDialog({
       </>
     );
 
-  const lengthField = (
-    labelText: string,
-    value: number,
-    max: number,
-    apply: (n: number) => void,
-  ) => {
+  function lengthField(labelText: string, value: number, max: number, apply: (n: number) => void) {
     const items = ROID_DURATION_ITEMS.slice(0, max);
     return (
       <Field className="w-32">
@@ -571,13 +517,11 @@ export function PlanEntryDialog({
         </Combobox>
       </Field>
     );
-  };
+  }
 
   const tickField = (
     <Field className={target.kind === "economy" ? "w-full" : "w-auto"}>
-      <FieldLabel htmlFor="plan-start-tick">
-        {editsEndTick ? "End-Tick" : "Start-Tick"}
-      </FieldLabel>
+      <FieldLabel htmlFor="plan-start-tick">{editsEndTick ? "End-Tick" : "Start-Tick"}</FieldLabel>
       <div className="flex items-center gap-2">
         <InputGroup className={target.kind === "economy" ? undefined : "w-28"}>
           <InputGroupInput
@@ -595,7 +539,7 @@ export function PlanEntryDialog({
         </InputGroup>
         {entryDuration > 0 && (
           <>
-            <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+            <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
               {editsEndTick ? `Start: Tick ${startTick}` : `Ende: Tick ${endTick}`}
             </span>
             <Button
@@ -619,14 +563,10 @@ export function PlanEntryDialog({
     if (target.kind === "unit" || target.kind === "recon") return target.name;
     if (target.kind === "custom") return label.trim() || "Custom-Ausgabe";
     if (target.kind === "trade") {
-      return giveAmount > 0 || receiveAmount > 0
-        ? formatTradePlanLabel(give, giveAmount, receiveAmount)
-        : "Trade";
+      return giveAmount > 0 || receiveAmount > 0 ? formatTradePlanLabel(give, giveAmount, receiveAmount) : "Trade";
     }
     if (target.kind === "roid") {
-      return targetMet > 0 || targetKris > 0
-        ? formatRoidPlanLabel(targetMet, targetKris)
-        : "Roid";
+      return targetMet > 0 || targetKris > 0 ? formatRoidPlanLabel(targetMet, targetKris) : "Roid";
     }
     if (target.kind === "catastrophe") {
       return formatCatastrophePlanLabel(duration);
@@ -646,14 +586,10 @@ export function PlanEntryDialog({
     return "Asteroiden & Extraktoren";
   })();
 
-  const checksRoidOverlap =
-    target.kind === "roid" ||
-    (target.kind === "attack" && (targetMet > 0 || targetKris > 0));
+  const checksRoidOverlap = target.kind === "roid" || (target.kind === "attack" && (targetMet > 0 || targetKris > 0));
   const overlappingRoid =
     checksRoidOverlap && (target.kind === "roid" || target.kind === "attack")
-      ? target.occupiedRoids.find((r) =>
-          roidsOverlap(roidStartTick, roidTicks, r.startTick, r.duration),
-        ) ?? null
+      ? (target.occupiedRoids.find((r) => roidsOverlap(roidStartTick, roidTicks, r.startTick, r.duration)) ?? null)
       : null;
 
   const canSubmit = (() => {
@@ -698,8 +634,8 @@ export function PlanEntryDialog({
     return false;
   })();
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
+  function handleSubmit() {
+    if (!canSubmit || !target) return;
     if (target.kind === "tech") {
       onSubmit({ startTick });
     } else if (target.kind === "economy") {
@@ -754,27 +690,19 @@ export function PlanEntryDialog({
       onSubmit({ startTick, count: Math.max(1, count) });
     }
     onOpenChange(false);
-  };
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={
-          target.kind === "roid" || target.kind === "attack" ? "sm:max-w-xl" : "sm:max-w-md"
-        }
-      >
+      <DialogContent className={target.kind === "roid" || target.kind === "attack" ? "sm:max-w-xl" : "sm:max-w-md"}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            {mode === "edit" ? "Plan-Eintrag bearbeiten" : "Zum Plan hinzufügen"}
-          </DialogDescription>
+          <DialogDescription>{mode === "edit" ? "Plan-Eintrag bearbeiten" : "Zum Plan hinzufügen"}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3 text-sm">
           {target.kind !== "tech" && target.kind !== "unit" && target.kind !== "recon" && (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              {timeRows}
-            </dl>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">{timeRows}</dl>
           )}
 
           {target.kind === "tech" && (
@@ -789,11 +717,7 @@ export function PlanEntryDialog({
                 {formatRes(target.tech.cost.met)} M · {formatRes(target.tech.cost.kris)} K
               </dd>
               <dt className="text-muted-foreground">Voraussetzungen</dt>
-              <dd>
-                {target.tech.dependencies.length
-                  ? target.tech.dependencies.join(", ")
-                  : "—"}
-              </dd>
+              <dd>{target.tech.dependencies.length ? target.tech.dependencies.join(", ") : "—"}</dd>
             </dl>
           )}
 
@@ -809,42 +733,33 @@ export function PlanEntryDialog({
               {unitTotalCost && (
                 <>
                   <dt className="text-muted-foreground">Gesamtkosten</dt>
-                  <dd className="tabular-nums font-medium text-foreground">
+                  <dd className="font-medium text-foreground tabular-nums">
                     {formatRes(unitTotalCost.met)} M · {formatRes(unitTotalCost.kris)} K
                   </dd>
                 </>
               )}
               <dt className="text-muted-foreground">Voraussetzungen</dt>
-              <dd>
-                {target.dependencies.length ? target.dependencies.join(", ") : "—"}
-              </dd>
+              <dd>{target.dependencies.length ? target.dependencies.join(", ") : "—"}</dd>
             </dl>
           )}
 
           {target.kind === "economy" && (
             <div className="space-y-2 text-xs text-muted-foreground">
               <p className="tabular-nums">
-                Besitzt: {liveEconomy?.asteroids ?? 0} Asteroiden ·{" "}
-                {liveEconomy?.alreadyBuilt ?? 0} Extraktoren ·{" "}
+                Besitzt: {liveEconomy?.asteroids ?? 0} Asteroiden · {liveEconomy?.alreadyBuilt ?? 0} Extraktoren ·{" "}
                 {liveEconomy?.freeSlots ?? 0} freie Slots
               </p>
               {economyCosts && (
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                   <dt>Asteroiden-Kosten</dt>
-                  <dd className="tabular-nums font-medium text-foreground">
-                    {formatRes(economyCosts.totalKris)} K
-                  </dd>
+                  <dd className="font-medium text-foreground tabular-nums">{formatRes(economyCosts.totalKris)} K</dd>
                   <dt>Extraktor-Kosten</dt>
-                  <dd className="tabular-nums font-medium text-foreground">
+                  <dd className="font-medium text-foreground tabular-nums">
                     {formatRes(economyCosts.totalMet)} M
-                    {extractorMetCount + extractorKrisCount > 0
-                      ? ` (nächster ${formatRes(economyCosts.nextCost)} M)`
-                      : ""}
+                    {extractorMetCount + extractorKrisCount > 0 ? ` (nächster ${formatRes(economyCosts.nextCost)} M)` : ""}
                   </dd>
                   <dt>Slots nach Asteroiden</dt>
-                  <dd className="tabular-nums font-medium text-foreground">
-                    {economyCosts.freeAfterAst}
-                  </dd>
+                  <dd className="font-medium text-foreground tabular-nums">{economyCosts.freeAfterAst}</dd>
                 </dl>
               )}
               {extractorMetCount + extractorKrisCount > 0 &&
@@ -854,9 +769,7 @@ export function PlanEntryDialog({
                     Mehr Extraktoren als Slots/Metall bei diesem Tick — ohne Asteroidenplatz liefern sie keine Rohstoffe.
                   </p>
                 )}
-              {asteroidCount > 0 && !target.canAsteroids && (
-                <p className="text-amber-500">Observatorium fehlt im Plan.</p>
-              )}
+              {asteroidCount > 0 && !target.canAsteroids && <p className="text-amber-500">Observatorium fehlt im Plan.</p>}
               {(extractorMetCount > 0 || extractorKrisCount > 0) && !target.canExtractors && (
                 <p className="text-amber-500">Extraktor-Tech fehlt im Plan.</p>
               )}
@@ -878,16 +791,16 @@ export function PlanEntryDialog({
 
           {target.kind === "snapshot" && (
             <p className="text-xs text-muted-foreground">
-              Ab diesem Tick gelten diese Werte statt der berechneten Rohstoffe und Extraktoren.
-              Einkommen der neuen Exen startet im nächsten Tick.
+              Ab diesem Tick gelten diese Werte statt der berechneten Rohstoffe und Extraktoren. Einkommen der neuen Exen startet im
+              nächsten Tick.
             </p>
           )}
 
           {target.kind === "catastrophe" && (
             <div className="flex flex-col gap-2 text-xs text-muted-foreground">
               <p>
-                Pro Tick 10% der restlichen eigenen Extraktoren (immer abgerundet).
-                Bestand bei Tick {startTick}: {liveEconomy?.alreadyBuilt ?? "—"} Extraktoren.
+                Pro Tick 10% der restlichen eigenen Extraktoren (immer abgerundet). Bestand bei Tick {startTick}:{" "}
+                {liveEconomy?.alreadyBuilt ?? "—"} Extraktoren.
               </p>
             </div>
           )}
@@ -895,23 +808,27 @@ export function PlanEntryDialog({
           {(target.kind === "roid" || target.kind === "attack") && (
             <div className="flex flex-col gap-2 text-xs text-muted-foreground">
               <p>
-                Pro Tick 10% der restlichen Ziel-Exen (immer abgerundet).
-                Ertrag ab dem nächsten Tick, Asteroidenplätze werden gebraucht.
+                Pro Tick 10% der restlichen Ziel-Exen (immer abgerundet). Ertrag ab dem nächsten Tick, Asteroidenplätze werden gebraucht.
               </p>
               {overlappingRoid && (
                 <p className="text-amber-500">
-                  Überlappt mit{" "}
-                  {formatRoidPlanLabel(
-                    overlappingRoid.targetMet,
-                    overlappingRoid.targetKris,
-                  )}
-                  .
+                  Überlappt mit {formatRoidPlanLabel(overlappingRoid.targetMet, overlappingRoid.targetKris)}.
                 </p>
               )}
             </div>
           )}
 
-          <div className={target.kind === "economy" || target.kind === "trade" || target.kind === "snapshot" || target.kind === "roid" || target.kind === "attack" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
+          <div
+            className={
+              target.kind === "economy" ||
+              target.kind === "trade" ||
+              target.kind === "snapshot" ||
+              target.kind === "roid" ||
+              target.kind === "attack"
+                ? "flex flex-col gap-3"
+                : "flex flex-wrap items-end gap-3"
+            }
+          >
             {target.kind !== "trade" && target.kind !== "roid" && target.kind !== "attack" && tickField}
 
             {(target.kind === "unit" || target.kind === "recon") && (
@@ -977,9 +894,7 @@ export function PlanEntryDialog({
                     </InputGroup>
                   </Field>
                   <Field className="min-w-28 flex-1">
-                    <FieldLabel htmlFor="plan-trade-to">
-                      Nach Rohstoff ({give === "met" ? "Kristall" : "Metall"})
-                    </FieldLabel>
+                    <FieldLabel htmlFor="plan-trade-to">Nach Rohstoff ({give === "met" ? "Kristall" : "Metall"})</FieldLabel>
                     <InputGroup>
                       <InputGroupInput
                         id="plan-trade-to"
@@ -1160,14 +1075,10 @@ export function PlanEntryDialog({
               <>
                 <div className="flex flex-wrap items-end gap-3">
                   {tickField}
-                  {target.kind === "roid" &&
-                    lengthField("Angriffslänge", duration, ROID_DURATION_MAX, setDuration)}
+                  {target.kind === "roid" && lengthField("Angriffslänge", duration, ROID_DURATION_MAX, setDuration)}
                   {target.kind === "attack" && (
                     <label className="flex h-7 items-center gap-2 text-xs">
-                      <Checkbox
-                        checked={noReturn}
-                        onCheckedChange={(checked) => setNoReturn(checked)}
-                      />
+                      <Checkbox checked={noReturn} onCheckedChange={(checked) => setNoReturn(checked)} />
                       Ohne Rückflug
                     </label>
                   )}
@@ -1175,12 +1086,7 @@ export function PlanEntryDialog({
                 {target.kind === "attack" && (
                   <div className="flex flex-wrap items-end gap-3">
                     {lengthField("Angriffslänge", duration, ATTACK_DURATION_MAX, setDuration)}
-                    {lengthField(
-                      "Roidlänge",
-                      roidTicks,
-                      duration,
-                      setAttackRoidDuration,
-                    )}
+                    {lengthField("Roidlänge", roidTicks, duration, setAttackRoidDuration)}
                   </div>
                 )}
                 <div className="flex flex-wrap items-end gap-3">
@@ -1266,9 +1172,7 @@ export function PlanEntryDialog({
                               index={i}
                               attacker={a}
                               onChange={(patch) => updateCoAttacker(i, patch)}
-                              onRemove={() =>
-                                setCoAttackers((prev) => prev.filter((_, j) => j !== i))
-                              }
+                              onRemove={() => setCoAttackers((prev) => prev.filter((_, j) => j !== i))}
                             />
                           ))}
                         </div>
@@ -1279,27 +1183,20 @@ export function PlanEntryDialog({
                         size="sm"
                         className="self-start"
                         onClick={() =>
-                          setCoAttackers((prev) => [
-                            ...prev,
-                            { startOffset: 0, duration: ROID_DEFAULT_DURATION, cleptors: 0 },
-                          ])
+                          setCoAttackers((prev) => [...prev, { startOffset: 0, duration: ROID_DEFAULT_DURATION, cleptors: 0 }])
                         }
                       >
                         <Plus data-icon="inline-start" />
                         Angreifer
                       </Button>
                       {roidLoot && (
-                        <p className="text-xs tabular-nums text-muted-foreground">
+                        <p className="text-xs text-muted-foreground tabular-nums">
                           {ownCleptors <= 0 ? (
                             <span className="text-amber-500">Eigene Cleptoren angeben.</span>
                           ) : (
                             <>
-                              Ich klaue{" "}
-                              <span className="font-medium text-foreground">
-                                {formatRoidShare(roidLoot)}
-                              </span>{" "}
-                              der erbeuteten Exen ({roidLoot.own.met} M / {roidLoot.own.kris} K
-                              von {roidLoot.total.met} M / {roidLoot.total.kris} K).
+                              Ich klaue <span className="font-medium text-foreground">{formatRoidShare(roidLoot)}</span> der erbeuteten Exen
+                              ({roidLoot.own.met} M / {roidLoot.own.kris} K von {roidLoot.total.met} M / {roidLoot.total.kris} K).
                             </>
                           )}
                         </p>
@@ -1379,8 +1276,7 @@ export function PlanEntryDialog({
 
           {target.kind === "economy" && economyCosts && (
             <p className="text-[11px] text-muted-foreground tabular-nums">
-              Max. Extraktoren bei Tick {startTick} (Slots + Metall, nach Asteroiden-Kosten):{" "}
-              {economyCosts.maxExtractors}
+              Max. Extraktoren bei Tick {startTick} (Slots + Metall, nach Asteroiden-Kosten): {economyCosts.maxExtractors}
               {" · "}Slots: {economyCosts.freeAfterAst}
             </p>
           )}
@@ -1415,11 +1311,7 @@ export function PlanEntryDialog({
 }
 
 /** Dauer eines Eintrags in Ticks (0 = sofort); `duration` nur für Roid/Katastrophe. */
-function targetDuration(
-  target: PlanEntryDialogTarget,
-  duration: number,
-  noReturn: boolean,
-): number {
+function targetDuration(target: PlanEntryDialogTarget, duration: number, noReturn: boolean): number {
   if (target.kind === "tech") return target.tech.ticks;
   if (target.kind === "unit" || target.kind === "recon") return target.ticks;
   if (target.kind === "roid") {
@@ -1450,61 +1342,39 @@ function AttackerRow({
   onChange: (patch: Partial<RoidCoAttacker>) => void;
   onRemove: () => void;
 }) {
-  const numberInput = (
-    value: number,
-    min: number,
-    max: number | undefined,
-    apply: (n: number) => void,
-    label: string,
-  ) => (
-    <InputGroup>
-      <InputGroupInput
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        aria-label={label}
-        onChange={(e) => {
-          const n = Number(e.target.value);
-          if (!Number.isFinite(n)) return;
-          const clamped = Math.max(min, Math.floor(n));
-          apply(max === undefined ? clamped : Math.min(max, clamped));
-        }}
-        className="tabular-nums"
-      />
-    </InputGroup>
-  );
+  function numberInput(value: number, min: number, max: number | undefined, apply: (n: number) => void, label: string) {
+    return (
+      <InputGroup>
+        <InputGroupInput
+          type="number"
+          min={min}
+          max={max}
+          value={value}
+          aria-label={label}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (!Number.isFinite(n)) return;
+            const clamped = Math.max(min, Math.floor(n));
+            apply(max === undefined ? clamped : Math.min(max, clamped));
+          }}
+          className="tabular-nums"
+        />
+      </InputGroup>
+    );
+  }
   return (
     <>
       <span className="text-muted-foreground tabular-nums">#{index + 1}</span>
-      {numberInput(
-        attacker.startOffset,
-        0,
-        ROID_DURATION_MAX - 1,
-        (n) => onChange({ startOffset: n }),
-        `Angreifer ${index + 1} Start`,
-      )}
+      {numberInput(attacker.startOffset, 0, ROID_DURATION_MAX - 1, (n) => onChange({ startOffset: n }), `Angreifer ${index + 1} Start`)}
       {numberInput(
         attacker.duration,
         ROID_DURATION_MIN,
         ROID_DURATION_MAX,
         (n) => onChange({ duration: n }),
-        `Angreifer ${index + 1} Dauer`,
+        `Angreifer ${index + 1} Dauer`
       )}
-      {numberInput(
-        attacker.cleptors,
-        0,
-        undefined,
-        (n) => onChange({ cleptors: n }),
-        `Angreifer ${index + 1} Cleptoren`,
-      )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={`Angreifer ${index + 1} entfernen`}
-        onClick={onRemove}
-      >
+      {numberInput(attacker.cleptors, 0, undefined, (n) => onChange({ cleptors: n }), `Angreifer ${index + 1} Cleptoren`)}
+      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Angreifer ${index + 1} entfernen`} onClick={onRemove}>
         <X />
       </Button>
     </>
@@ -1512,19 +1382,11 @@ function AttackerRow({
 }
 
 /** Helper to build tech dialog target from TechTreeEntry. */
-export function techDialogTarget(
-  tech: TechTreeEntry,
-  defaultTick: number,
-): TechTarget {
+export function techDialogTarget(tech: TechTreeEntry, defaultTick: number): TechTarget {
   return { kind: "tech", tech, defaultTick };
 }
 
-export function shipDialogTarget(
-  ship: Ship | Defense,
-  defaultTick: number,
-  defaultCount: number,
-  maxCount: number,
-): CountableTarget {
+export function shipDialogTarget(ship: Ship | Defense, defaultTick: number, defaultCount: number, maxCount: number): CountableTarget {
   return {
     kind: "unit",
     name: ship.name,
@@ -1537,12 +1399,7 @@ export function shipDialogTarget(
   };
 }
 
-export function reconDialogTarget(
-  item: Utility,
-  defaultTick: number,
-  defaultCount: number,
-  maxCount: number,
-): CountableTarget {
+export function reconDialogTarget(item: Utility, defaultTick: number, defaultCount: number, maxCount: number): CountableTarget {
   return {
     kind: "recon",
     name: item.name,

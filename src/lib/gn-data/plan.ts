@@ -1,5 +1,5 @@
-import { balanced } from "@/gn-data/plan-template/balanced";
-import { empty } from "@/gn-data/plan-template/empty";
+import { balanced } from "@/lib/gn-data/plan-template/balanced.ts";
+import { empty } from "@/lib/gn-data/plan-template/empty.ts";
 
 /** Weiterer Angreifer beim Roid, relativ zum eigenen Angriffsbeginn. */
 export type RoidCoAttacker = {

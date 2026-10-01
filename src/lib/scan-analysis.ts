@@ -1,8 +1,8 @@
-import { defenses } from "@/gn-data/defense";
-import { getExtractorYield } from "@/gn-data/extractor";
-import { defaults } from "@/gn-data/plan";
-import { ships } from "@/gn-data/ships";
-import type { SectorScan, TargetScans } from "@/lib/scan-parser";
+import { defenses } from "@/lib/gn-data/defense.ts";
+import { getExtractorYield } from "@/lib/gn-data/extractor.ts";
+import { defaults } from "@/lib/gn-data/plan.ts";
+import { ships } from "@/lib/gn-data/ships.ts";
+import { type SectorScan, type TargetScans } from "@/lib/scan-parser.ts";
 
 /**
  * Auswertungen auf Basis geparster Scans.
@@ -30,9 +30,7 @@ export const EARLY_GAME_SHIP_COST = 2_500;
 
 const TICK_MS = defaults.tick_minutes * 60_000;
 
-const UNIT_COST = new Map<string, number>(
-  [...ships, ...defenses].map((u) => [u.name, u.cost.met + u.cost.kris]),
-);
+const UNIT_COST = new Map<string, number>([...ships, ...defenses].map((u) => [u.name, u.cost.met + u.cost.kris]));
 const HORUS_COST = UNIT_COST.get("Horus")!;
 const RUBIUM_COST = UNIT_COST.get("Rubium")!;
 
@@ -105,9 +103,12 @@ export function estimateResources(entry: TargetScans, earlyGame = false): Resour
   if (!defense && sector.defense > 0) return null;
   const shipCount = units ? sumCounts(units.units) : 0;
   const defenseCount = defense ? sumCounts(defense.units) : 0;
-  const shipsMatch = (s: SectorScan) => (units || !earlyGame ? s.ships === shipCount : true);
-  const shipValue = (s: SectorScan) =>
-    units ? unitValue(units.units) : earlyGame ? s.ships * EARLY_GAME_SHIP_COST : 0;
+  function shipsMatch(s: SectorScan) {
+    return units || !earlyGame ? s.ships === shipCount : true;
+  }
+  function shipValue(s: SectorScan) {
+    return units ? unitValue(units.units) : earlyGame ? s.ships * EARLY_GAME_SHIP_COST : 0;
+  }
   const candidates = [...sectorHistory].reverse();
   if (!candidates.includes(sector)) candidates.unshift(sector);
   const matching = candidates.find((s) => shipsMatch(s) && s.defense === defenseCount);
@@ -230,9 +231,7 @@ export function buildHistory(entry: TargetScans): HistoryPoint[] {
       source: "points",
     };
   });
-  return [...fromSectors, ...fromPoints].sort(
-    (a, b) => a.time - b.time || (a.source === "sector" ? -1 : 1),
-  );
+  return [...fromSectors, ...fromPoints].sort((a, b) => a.time - b.time || (a.source === "sector" ? -1 : 1));
 }
 
 function delta(a: number | undefined, b: number | undefined) {
@@ -249,8 +248,7 @@ type Comparison = Omit<HistoryStep, "extractorsDelta" | "shipsDelta" | "defenseD
  */
 export function comparePoints(from: HistoryPoint, to: HistoryPoint): Comparison {
   const ticks = tickIndex(to.time) - tickIndex(from.time);
-  const pointsDelta =
-    to.points - to.extractors * POINTS_PER_EXTRACTOR - (from.points - from.extractors * POINTS_PER_EXTRACTOR);
+  const pointsDelta = to.points - to.extractors * POINTS_PER_EXTRACTOR - (from.points - from.extractors * POINTS_PER_EXTRACTOR);
   const perTick = (ASSUMED_MINE_INCOME + getExtractorYield(from.extractors)) * RESOURCE_POINT_SHARE;
   const expected = ticks * perTick;
   const lower = expected * (1 - MAX_TAX_RATE);
@@ -307,10 +305,7 @@ export type CurrentResources = {
  * der Rohstoffberechnung. Annahme: Einheiten unverändert. Ob das plausibel ist,
  * sagt der Vergleich; weicht er ab, sollte neu gescannt werden.
  */
-export function currentResources(
-  entry: TargetScans,
-  estimate: ResourceEstimate,
-): CurrentResources | null {
+export function currentResources(entry: TargetScans, estimate: ResourceEstimate): CurrentResources | null {
   const reference = estimate.sector;
   if (reference.time === undefined) return null;
   const history = buildHistory(entry);
@@ -325,9 +320,7 @@ export function currentResources(
     source: "sector",
   };
   return {
-    resources:
-      (latest.points - latest.extractors * POINTS_PER_EXTRACTOR - estimate.fleetValue) /
-      RESOURCE_POINT_SHARE,
+    resources: (latest.points - latest.extractors * POINTS_PER_EXTRACTOR - estimate.fleetValue) / RESOURCE_POINT_SHARE,
     point: latest,
     comparison: comparePoints(from, latest),
   };

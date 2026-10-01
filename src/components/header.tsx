@@ -1,10 +1,10 @@
-import { ExtractorsDialog } from "@/components/extractors-dialog";
-import { JobList } from "@/components/overview/actionplan";
-import { SettingsDialog } from "@/components/settings-dialog";
-import type { ReactNode } from "react";
-import type { HistoryWindow } from "@/lib/history-window";
-import { Badge } from "@/components/shadcn/badge";
-import { Separator } from "@/components/shadcn/separator";
+import { ExtractorsDialog } from "@/components/extractors-dialog.tsx";
+import { JobList } from "@/components/overview/actionplan.tsx";
+import { SettingsDialog } from "@/components/settings-dialog.tsx";
+import { type ReactNode } from "react";
+import { type HistoryWindow } from "@/lib/history-window.ts";
+import { Badge } from "@/components/shadcn/badge.tsx";
+import { Separator } from "@/components/shadcn/separator.tsx";
 import {
   clockLabel,
   formatRes,
@@ -13,7 +13,7 @@ import {
   type PlanResult,
   type StartConfig,
   type TickSnapshot,
-} from "@/lib/calculateFastestWayToGoal";
+} from "@/lib/calculate-fastest-way-to-goal.ts";
 
 export type HeaderProps = {
   now: Date;
@@ -27,11 +27,7 @@ export type HeaderProps = {
   planSwitcher?: ReactNode;
 };
 
-function resourcesAtCurrentTick(
-  plan: PlanResult | null,
-  startCfg: StartConfig,
-  currentTick: number,
-) {
+function resourcesAtCurrentTick(plan: PlanResult | null, startCfg: StartConfig, currentTick: number) {
   if (!plan || currentTick < 0) {
     return {
       met: startCfg.starting_resources.metall,
@@ -65,16 +61,12 @@ export function Header({
 }: HeaderProps) {
   const extractorJob = plan?.steps.find((s) => s.name === "Extraktor");
   const extractorTick = extractorJob?.endTick;
-  const isPlayableJob = (job: { type: string }) =>
-    job.type !== "custom" && job.type !== "trade" && job.type !== "snapshot";
+  function isPlayableJob(job: { type: string }) {
+    return job.type !== "custom" && job.type !== "trade" && job.type !== "snapshot";
+  }
   const nextJobs = nextAction?.started.filter(isPlayableJob) ?? [];
   const followingAction =
-    plan && nextAction
-      ? plan.ticks.find(
-          (tick) =>
-            tick.tick > nextAction.tick && tick.started.some(isPlayableJob),
-        ) ?? null
-      : null;
+    plan && nextAction ? (plan.ticks.find((tick) => tick.tick > nextAction.tick && tick.started.some(isPlayableJob)) ?? null) : null;
   const resources = resourcesAtCurrentTick(plan, startCfg, currentTick);
 
   return (
@@ -96,9 +88,7 @@ export function Header({
           <div className="flex flex-col gap-0.5">
             <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Uhrzeit</span>
             <span className="flex items-baseline gap-1.5 tabular-nums">
-              <span className="font-heading text-xl font-semibold tracking-tight">
-                {formatWallClock(now).split(" ")[1]}
-              </span>
+              <span className="font-heading text-xl font-semibold tracking-tight">{formatWallClock(now).split(" ")[1]}</span>
               <span className="text-xs text-muted-foreground">{formatWallClock(now).split(" ")[0]}</span>
             </span>
           </div>
@@ -127,10 +117,7 @@ export function Header({
                 <div className="flex shrink-0 items-baseline gap-2">
                   <span className="text-sm font-medium tabular-nums">T{nextAction.tick}</span>
                   <span className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-                    {nextAction.clockLabel} ·{" "}
-                    <span className="text-foreground">
-                      {formatTimeUntilTick(startCfg, nextAction.tick, now)}
-                    </span>
+                    {nextAction.clockLabel} · <span className="text-foreground">{formatTimeUntilTick(startCfg, nextAction.tick, now)}</span>
                   </span>
                 </div>
                 <JobList items={nextJobs} />
@@ -141,9 +128,7 @@ export function Header({
           </div>
 
           <div className="flex shrink-0 flex-col justify-center gap-0.5">
-            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-              Danach
-            </span>
+            <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Danach</span>
             {followingAction ? (
               <span className="text-xs text-muted-foreground tabular-nums">
                 T{followingAction.tick} · {followingAction.clockLabel}
@@ -156,12 +141,9 @@ export function Header({
           <div className="flex shrink-0 items-stretch gap-4">
             <Separator orientation="vertical" />
             <div className="flex min-w-28 flex-col justify-center gap-0.5">
-              <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                Aktuelle Ressourcen
-              </span>
+              <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Aktuelle Ressourcen</span>
               <span className="text-sm font-medium tabular-nums">
-                {formatRes(resources.met)} M
-                <span className="ml-1.5">{formatRes(resources.kris)} K</span>
+                {formatRes(resources.met)} M<span className="ml-1.5">{formatRes(resources.kris)} K</span>
               </span>
             </div>
             <Separator orientation="vertical" />
@@ -170,15 +152,11 @@ export function Header({
                 <span className="text-sm font-medium text-sky-500">Extraktoren</span>
               ) : (
                 <>
-                  <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                    Extraktoren
-                  </span>
+                  <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">Extraktoren</span>
                   {extractorTick !== undefined ? (
                     <span className="text-sm font-medium tabular-nums">
                       ab Tick {extractorTick}
-                      <span className="ml-1.5 font-normal text-muted-foreground">
-                        {clockLabel(startCfg, extractorTick)}
-                      </span>
+                      <span className="ml-1.5 font-normal text-muted-foreground">{clockLabel(startCfg, extractorTick)}</span>
                     </span>
                   ) : (
                     <span className="text-sm text-muted-foreground">nicht im Plan</span>

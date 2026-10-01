@@ -1,7 +1,7 @@
-import { jobTypeClass } from "@/components/overview/actionplan";
-import { StatusDot } from "@/components/sidebar/status-dot";
-import type { JobKind } from "@/lib/calculateFastestWayToGoal";
-import { cn } from "@/lib/utils/cn";
+import { jobTypeClass } from "@/components/overview/actionplan.tsx";
+import { StatusDot } from "@/components/sidebar/status-dot.tsx";
+import { type JobKind } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 const TYPES: { type: JobKind; label: string }[] = [
   { type: "building", label: "Gebäude" },
@@ -26,9 +26,7 @@ export function Legend() {
               className={cn(
                 "size-2 rounded-[2px]",
                 // Angriffsflug: dunkles Grau mit blauem Rand wie in der Timeline.
-                type === "attack"
-                  ? "bg-zinc-900 ring-1 ring-blue-500"
-                  : cn("bg-current", jobTypeClass(type)),
+                type === "attack" ? "bg-zinc-900 ring-1 ring-blue-500" : cn("bg-current", jobTypeClass(type))
               )}
             />
             {label}

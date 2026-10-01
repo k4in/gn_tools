@@ -1,5 +1,5 @@
-import { defaults } from "@/gn-data/plan";
-import type { NewsEntry, NewsScan } from "@/lib/scan-parser";
+import { defaults } from "@/lib/gn-data/plan.ts";
+import { type NewsEntry, type NewsScan } from "@/lib/scan-parser.ts";
 
 /**
  * Auswertung eines Newsscans: wann welche Flotte ankommt und in welchen Ticks
@@ -100,12 +100,10 @@ export function analyzeNews(
   news: NewsScan,
   fleetTicks: Record<string, number>,
   retreatChoices: Record<string, string[]>,
-  now = Date.now(),
+  now = Date.now()
 ): NewsAnalysis {
   const reference = now;
-  const entries = news.entries
-    .filter((e) => e.time >= reference - NEWS_WINDOW_MS && e.time <= reference)
-    .sort((a, b) => a.time - b.time);
+  const entries = news.entries.filter((e) => e.time >= reference - NEWS_WINDOW_MS && e.time <= reference).sort((a, b) => a.time - b.time);
   const targetGalaxy = news.target.galaxy;
 
   const fleets: Fleet[] = entries
@@ -114,16 +112,11 @@ export function analyzeNews(
       const role = e.type === "attack" ? "attacker" : "defender";
       const sameGalaxy = e.galaxy === targetGalaxy;
       const flightTicks =
-        role === "attacker"
-          ? ATTACK_FLIGHT_TICKS
-          : sameGalaxy
-            ? DEFENSE_FLIGHT_TICKS_SAME_GALAXY
-            : DEFENSE_FLIGHT_TICKS_OTHER_GALAXY;
+        role === "attacker" ? ATTACK_FLIGHT_TICKS : sameGalaxy ? DEFENSE_FLIGHT_TICKS_SAME_GALAXY : DEFENSE_FLIGHT_TICKS_OTHER_GALAXY;
       const maxCombatTicks = role === "attacker" ? MAX_ATTACK_COMBAT_TICKS : MAX_DEFENSE_COMBAT_TICKS;
       const id = `${coordsKey(e)}#${e.fleet ?? "-"}@${e.time}`;
       const chosen = fleetTicks[id];
-      const combatTicks =
-        typeof chosen === "number" ? Math.min(maxCombatTicks, Math.max(1, chosen)) : maxCombatTicks;
+      const combatTicks = typeof chosen === "number" ? Math.min(maxCombatTicks, Math.max(1, chosen)) : maxCombatTicks;
       const departureTick = floorTick(e.time);
       const arrival = departureTick + flightTicks * TICK_MS;
       const firstCombat = arrival + TICK_MS;
@@ -150,9 +143,7 @@ export function analyzeNews(
   const recalledIds = new Set<string>();
   const retreats: Retreat[] = retreatEntries.map((e, index) => {
     const id = `${coordsKey(e)}@${e.time}`;
-    const own = fleets.filter(
-      (f) => coordsKey(f) === coordsKey(e) && (e.fleet === null || f.fleet === e.fleet),
-    );
+    const own = fleets.filter((f) => coordsKey(f) === coordsKey(e) && (e.fleet === null || f.fleet === e.fleet));
     const candidates = own.filter((f) => f.departure <= e.time && !recalledIds.has(f.id));
     // Gibt es ab hier so viele Rückzüge wie noch offene Flotten, sind alle zurückgezogen.
     const remaining = retreatEntries.slice(index).filter((r) => coordsKey(r) === coordsKey(e));
@@ -229,15 +220,10 @@ export type DefenseDeadline = {
  * eine Angriffsflotte zu kämpfen. Abflug zählt wie bei den Flotten ab dem letzten
  * vollen Tick, erster Kampftick ist der Tick nach der Ankunft.
  */
-export function defenseDeadline(
-  attacker: Pick<Fleet, "firstCombat" | "lastCombat">,
-  flightTicks: number,
-  now: number,
-): DefenseDeadline {
+export function defenseDeadline(attacker: Pick<Fleet, "firstCombat" | "lastCombat">, flightTicks: number, now: number): DefenseDeadline {
   const onTimeBefore = attacker.firstCombat - flightTicks * TICK_MS;
   const lateBefore = attacker.lastCombat - flightTicks * TICK_MS;
-  const timing: DefenseTiming =
-    now < onTimeBefore ? "onTime" : now < lateBefore ? "late" : "tooLate";
+  const timing: DefenseTiming = now < onTimeBefore ? "onTime" : now < lateBefore ? "late" : "tooLate";
   return { flightTicks, onTimeBefore, lateBefore, timing };
 }
 

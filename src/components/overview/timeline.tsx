@@ -1,17 +1,8 @@
 import { useEffect, useRef } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/shadcn/tooltip";
-import { StatusDot } from "@/components/sidebar/status-dot";
-import {
-  attackFirstCombatTick,
-  type Job,
-  type JobKind,
-  type TickSnapshot,
-} from "@/lib/calculateFastestWayToGoal";
-import { cn } from "@/lib/utils/cn";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip.tsx";
+import { StatusDot } from "@/components/sidebar/status-dot.tsx";
+import { attackFirstCombatTick, type Job, type JobKind, type TickSnapshot } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 /** Sichtbare Breite der Timeline in Ticks (Viewport): 2 Tage bei 15-Minuten-Ticks. */
 const TIMELINE_VIEWPORT_TICKS = 192;
@@ -42,12 +33,7 @@ function snapshotAtOrBefore(ticks: TickSnapshot[] | undefined, tick: number) {
   return best;
 }
 
-function tickFromClick(
-  el: HTMLElement,
-  clientX: number,
-  rangeStart: number,
-  domainLength: number,
-) {
+function tickFromClick(el: HTMLElement, clientX: number, rangeStart: number, domainLength: number) {
   const rect = el.getBoundingClientRect();
   if (rect.width <= 0) return rangeStart;
   const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
@@ -65,18 +51,13 @@ function laneOf(type: JobKind): TimelineLane {
 }
 
 function packRows(jobs: Job[]): Job[][] {
-  const sorted = [...jobs].sort(
-    (a, b) => a.startTick - b.startTick || a.endTick - b.endTick,
-  );
+  const sorted = [...jobs].sort((a, b) => a.startTick - b.startTick || a.endTick - b.endTick);
   const rows: Job[][] = [];
   for (const job of sorted) {
     let placed = false;
     for (const row of rows) {
       const last = row[row.length - 1];
-      const lastEnd = Math.max(
-        last.endTick,
-        last.startTick + (last.endTick === last.startTick ? 0.5 : 0),
-      );
+      const lastEnd = Math.max(last.endTick, last.startTick + (last.endTick === last.startTick ? 0.5 : 0));
       if (lastEnd <= job.startTick) {
         row.push(job);
         placed = true;
@@ -115,10 +96,7 @@ export function Timeline({
       if (!scroller) return;
       const maxScroll = scroller.scrollWidth - scroller.clientWidth;
       if (maxScroll <= 0) return;
-      scroller.scrollLeft = Math.max(
-        0,
-        (tick / total) * scroller.scrollWidth - scroller.clientWidth / 2,
-      );
+      scroller.scrollLeft = Math.max(0, (tick / total) * scroller.scrollWidth - scroller.clientWidth / 2);
     });
     return () => cancelAnimationFrame(id);
     // Nur beim Öffnen des Tabs / Wechsel des Verlaufsfensters.
@@ -130,10 +108,7 @@ export function Timeline({
 
   // Group multi-unit/economy micro-jobs that share planEntryId into one bar
   const grouped = new Map<string, Job>();
-  const economyParts = new Map<
-    string,
-    { asteroids: number; metExt: number; krisExt: number }
-  >();
+  const economyParts = new Map<string, { asteroids: number; metExt: number; krisExt: number }>();
   for (const s of steps) {
     const key = s.planEntryId ?? `${s.name}@${s.startTick}`;
     if (s.type === "economy" && s.planEntryId) {
@@ -154,9 +129,7 @@ export function Timeline({
       endTick: Math.max(prev.endTick, s.endTick),
       blocked: Boolean(prev.blocked || s.blocked),
       delayed: Boolean(prev.delayed || s.delayed),
-      name: prev.planEntryId
-        ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "")
-        : prev.name,
+      name: prev.planEntryId ? prev.name.replace(/ \(\d+\/\d+\)$/, "").replace(/ #\d+$/, "") : prev.name,
     });
   }
   for (const [key, parts] of economyParts) {
@@ -164,21 +137,13 @@ export function Timeline({
     if (!job) continue;
     const labels: string[] = [];
     if (parts.asteroids > 0) {
-      labels.push(
-        parts.asteroids === 1
-          ? "1 Asteroid"
-          : `${parts.asteroids} Asteroiden`,
-      );
+      labels.push(parts.asteroids === 1 ? "1 Asteroid" : `${parts.asteroids} Asteroiden`);
     }
     if (parts.metExt > 0) {
-      labels.push(
-        parts.metExt === 1 ? "1 Met-Ext" : `${parts.metExt} Met-Ext`,
-      );
+      labels.push(parts.metExt === 1 ? "1 Met-Ext" : `${parts.metExt} Met-Ext`);
     }
     if (parts.krisExt > 0) {
-      labels.push(
-        parts.krisExt === 1 ? "1 Kris-Ext" : `${parts.krisExt} Kris-Ext`,
-      );
+      labels.push(parts.krisExt === 1 ? "1 Kris-Ext" : `${parts.krisExt} Kris-Ext`);
     }
     if (labels.length) job.name = labels.join(" + ");
   }
@@ -189,12 +154,7 @@ export function Timeline({
     if (displayEnd <= rangeStart || job.startTick >= domainEnd) continue;
     byLane[laneOf(job.type)].push(job);
   }
-  const laneRows = ([
-    "tech",
-    "fleet",
-    "econ",
-    "attack",
-  ] as const).map((lane) => packRows(byLane[lane])).filter((rows) => rows.length > 0);
+  const laneRows = (["tech", "fleet", "econ", "attack"] as const).map((lane) => packRows(byLane[lane])).filter((rows) => rows.length > 0);
 
   const rowHeight = 32;
   const laneGap = 10;
@@ -223,258 +183,226 @@ export function Timeline({
   if (markers[markers.length - 1] !== domainEnd) markers.push(domainEnd);
   // Skalenzahlen unter der Tick-/Inspektionsmarke ausblenden, sonst überlappen sie.
   const highlighted = [currentTick, inspectTick].filter((t): t is number => t != null);
-  const axisLabels = markers.filter((t) =>
-    highlighted.every((h) => Math.abs(t - h) >= step * 0.4),
-  );
-  const xPct = (tick: number) => ((tick - rangeStart) / domainLength) * 100;
+  const axisLabels = markers.filter((t) => highlighted.every((h) => Math.abs(t - h) >= step * 0.4));
+  function xPct(tick: number) {
+    return ((tick - rangeStart) / domainLength) * 100;
+  }
 
   return (
     <div ref={xScrollRef} className="overflow-x-auto px-3 pt-3 pb-2">
       <div
-            className="relative cursor-crosshair"
-            style={{
-              width: `calc(100% * ${domainLength} / ${TIMELINE_VIEWPORT_TICKS})`,
-            }}
-            onClick={(event) => {
-              if (!onInspectTick) return;
-              onInspectTick(
-                tickFromClick(event.currentTarget, event.clientX, rangeStart, domainLength),
-              );
-            }}
-          >
+        className="relative cursor-crosshair"
+        style={{
+          width: `calc(100% * ${domainLength} / ${TIMELINE_VIEWPORT_TICKS})`,
+        }}
+        onClick={(event) => {
+          if (!onInspectTick) return;
+          onInspectTick(tickFromClick(event.currentTarget, event.clientX, rangeStart, domainLength));
+        }}
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0" style={{ height: trackHeight }}>
+          {markers.map((t) => (
+            <div key={`grid-${t}`} className="absolute inset-y-0 w-px bg-border/60" style={{ left: `${xPct(t)}%` }} />
+          ))}
+          {currentTick >= rangeStart && currentTick <= domainEnd && (
             <div
-              className="pointer-events-none absolute inset-x-0 top-0"
-              style={{ height: trackHeight }}
-            >
-              {markers.map((t) => (
-                <div
-                  key={`grid-${t}`}
-                  className="absolute inset-y-0 w-px bg-border/60"
-                  style={{ left: `${xPct(t)}%` }}
-                />
-              ))}
-              {currentTick >= rangeStart && currentTick <= domainEnd && (
-                <div
-                  title={`Aktueller Tick ${currentTick}`}
-                  className="absolute inset-y-0 z-10 w-0.5 bg-green-500"
-                  style={{ left: `${xPct(currentTick)}%` }}
-                />
-              )}
-              {inspectTick != null && inspectTick >= rangeStart && inspectTick <= domainEnd && (
-                <div
-                  title={`Inspektion Tick ${inspectTick}`}
-                  className="absolute inset-y-0 z-10 w-0.5 bg-primary"
-                  style={{ left: `${xPct(inspectTick)}%` }}
-                />
-              )}
-              {separators.map((top) => (
-                <div
-                  key={`lane-${top}`}
-                  className="absolute inset-x-0 h-px bg-border"
-                  style={{ top }}
-                />
-              ))}
-            </div>
+              title={`Aktueller Tick ${currentTick}`}
+              className="absolute inset-y-0 z-10 w-0.5 bg-green-500"
+              style={{ left: `${xPct(currentTick)}%` }}
+            />
+          )}
+          {inspectTick != null && inspectTick >= rangeStart && inspectTick <= domainEnd && (
+            <div
+              title={`Inspektion Tick ${inspectTick}`}
+              className="absolute inset-y-0 z-10 w-0.5 bg-primary"
+              style={{ left: `${xPct(inspectTick)}%` }}
+            />
+          )}
+          {separators.map((top) => (
+            <div key={`lane-${top}`} className="absolute inset-x-0 h-px bg-border" style={{ top }} />
+          ))}
+        </div>
 
-            <div className="relative" style={{ height: trackHeight }}>
-              {packedRows.map((row) =>
-                row.jobs.map((s) => {
-                  const start = Math.max(rangeStart, Math.min(s.startTick, domainEnd));
-                  const displayEnd = s.endTick === s.startTick ? s.startTick + 0.5 : s.endTick;
-                  const endClamped = Math.max(start, Math.min(displayEnd, domainEnd));
-                  const left = xPct(start);
-                  const widthPct = Math.max(((endClamped - start) / domainLength) * 100, 0.25);
-                  const isBuilding = s.type === "building";
-                  const isResearch = s.type === "research";
-                  const top = row.top;
-                  const clickable = !!s.planEntryId && !!onEditJob;
-                  const clockAt = (tick: number) =>
-                    tickClock ? tickClock(tick) : snapshotAtOrBefore(ticks, tick)?.clockLabel;
-                  const startClock = clockAt(s.startTick);
-                  const endClock = s.endTick === s.startTick ? startClock : clockAt(s.endTick);
-                  // Kampfphase relativ zum (ggf. abgeschnittenen) Balken einfärben:
-                  // dunkelblau = Flottenkampf, hellblau = Roid (immer die letzten Kampfticks).
-                  const barTicks = Math.max(endClamped - start, 1);
-                  const band = (from: number, to: number) => {
-                    const a = Math.max(start, Math.min(from, endClamped));
-                    const b = Math.max(a, Math.min(to, endClamped));
-                    return b > a
-                      ? {
-                          left: ((a - start) / barTicks) * 100,
-                          width: ((b - a) / barTicks) * 100,
-                        }
-                      : null;
-                  };
-                  const roidFrom = s.combat?.roidStartTick ?? s.combat?.endTick ?? 0;
-                  const fightBand = s.combat ? band(s.combat.startTick, roidFrom) : null;
-                  const roidBand = s.combat ? band(roidFrom, s.combat.endTick) : null;
-                  return (
-                    <Tooltip key={`${s.name}-${s.startTick}-${s.planEntryId ?? ""}`}>
-                      <TooltipTrigger
-                        render={
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              if (clickable) onEditJob?.(s.planEntryId);
-                            }}
-                            className={cn(
-                              "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight",
-                              isBuilding && "bg-amber-500/20 text-amber-300",
-                              isResearch && "bg-fuchsia-500/20 text-fuchsia-300",
-                              (s.type === "unit" || s.type === "recon") &&
-                                "bg-emerald-500/20 text-emerald-300",
-                              s.type === "economy" && "bg-cyan-500/20 text-cyan-300",
-                              s.type === "roid" && "bg-blue-800/35 text-blue-400",
-                              s.type === "catastrophe" && "bg-red-800/35 text-red-400",
-                              s.type === "attack" && "bg-zinc-900 text-zinc-300",
-                              s.type === "snapshot" && "bg-foreground/10 text-foreground",
-                              s.type === "custom" && "bg-silver-500/20 text-silver-500",
-                              s.type === "trade" && "bg-zinc-500/20 text-zinc-400",
-                              s.blocked
-                                ? "ring-2 ring-destructive"
-                                : cn(
-                                    "ring-1 ring-inset",
-                                    isBuilding && "ring-amber-500/40",
-                                    isResearch && "ring-fuchsia-500/40",
-                                    (s.type === "unit" || s.type === "recon") &&
-                                      "ring-emerald-500/40",
-                                    s.type === "economy" && "ring-cyan-500/40",
-                                    s.type === "roid" && "ring-blue-700/50",
-                                    s.type === "catastrophe" && "ring-red-700/50",
-                                    s.type === "attack" && "ring-blue-500",
-                                    s.type === "snapshot" && "ring-0 outline-1 -outline-offset-1 outline-dashed outline-foreground/50",
-                                    s.type === "custom" && "ring-silver-500/40",
-                                    s.type === "trade" && "ring-zinc-500/40",
-                                  ),
-                              clickable && "cursor-pointer hover:brightness-125",
-                              !clickable && "cursor-default",
-                            )}
-                            style={{
-                              left: `${left}%`,
-                              width: `${widthPct}%`,
-                              top,
-                              height: rowHeight - 8,
-                            }}
-                          />
-                        }
-                      >
-                        {fightBand && (
-                          <span
-                            aria-hidden
-                            className="pointer-events-none absolute inset-y-0 bg-blue-700"
-                            style={{ left: `${fightBand.left}%`, width: `${fightBand.width}%` }}
-                          />
+        <div className="relative" style={{ height: trackHeight }}>
+          {packedRows.map((row) =>
+            row.jobs.map((s) => {
+              const start = Math.max(rangeStart, Math.min(s.startTick, domainEnd));
+              const displayEnd = s.endTick === s.startTick ? s.startTick + 0.5 : s.endTick;
+              const endClamped = Math.max(start, Math.min(displayEnd, domainEnd));
+              const left = xPct(start);
+              const widthPct = Math.max(((endClamped - start) / domainLength) * 100, 0.25);
+              const isBuilding = s.type === "building";
+              const isResearch = s.type === "research";
+              const top = row.top;
+              const clickable = !!s.planEntryId && !!onEditJob;
+              function clockAt(tick: number) {
+                return tickClock ? tickClock(tick) : snapshotAtOrBefore(ticks, tick)?.clockLabel;
+              }
+              const startClock = clockAt(s.startTick);
+              const endClock = s.endTick === s.startTick ? startClock : clockAt(s.endTick);
+              // Kampfphase relativ zum (ggf. abgeschnittenen) Balken einfärben:
+              // dunkelblau = Flottenkampf, hellblau = Roid (immer die letzten Kampfticks).
+              const barTicks = Math.max(endClamped - start, 1);
+              function band(from: number, to: number) {
+                const a = Math.max(start, Math.min(from, endClamped));
+                const b = Math.max(a, Math.min(to, endClamped));
+                return b > a
+                  ? {
+                      left: ((a - start) / barTicks) * 100,
+                      width: ((b - a) / barTicks) * 100,
+                    }
+                  : null;
+              }
+              const roidFrom = s.combat?.roidStartTick ?? s.combat?.endTick ?? 0;
+              const fightBand = s.combat ? band(s.combat.startTick, roidFrom) : null;
+              const roidBand = s.combat ? band(roidFrom, s.combat.endTick) : null;
+              return (
+                <Tooltip key={`${s.name}-${s.startTick}-${s.planEntryId ?? ""}`}>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (clickable) onEditJob?.(s.planEntryId);
+                        }}
+                        className={cn(
+                          "absolute overflow-hidden rounded-sm px-1.5 py-0.5 text-left text-[10px] leading-tight",
+                          isBuilding && "bg-amber-500/20 text-amber-300",
+                          isResearch && "bg-fuchsia-500/20 text-fuchsia-300",
+                          (s.type === "unit" || s.type === "recon") && "bg-emerald-500/20 text-emerald-300",
+                          s.type === "economy" && "bg-cyan-500/20 text-cyan-300",
+                          s.type === "roid" && "bg-blue-800/35 text-blue-400",
+                          s.type === "catastrophe" && "bg-red-800/35 text-red-400",
+                          s.type === "attack" && "bg-zinc-900 text-zinc-300",
+                          s.type === "snapshot" && "bg-foreground/10 text-foreground",
+                          s.type === "custom" && "bg-silver-500/20 text-silver-500",
+                          s.type === "trade" && "bg-zinc-500/20 text-zinc-400",
+                          s.blocked
+                            ? "ring-2 ring-destructive"
+                            : cn(
+                                "ring-1 ring-inset",
+                                isBuilding && "ring-amber-500/40",
+                                isResearch && "ring-fuchsia-500/40",
+                                (s.type === "unit" || s.type === "recon") && "ring-emerald-500/40",
+                                s.type === "economy" && "ring-cyan-500/40",
+                                s.type === "roid" && "ring-blue-700/50",
+                                s.type === "catastrophe" && "ring-red-700/50",
+                                s.type === "attack" && "ring-blue-500",
+                                s.type === "snapshot" && "ring-0 outline-1 -outline-offset-1 outline-foreground/50 outline-dashed",
+                                s.type === "custom" && "ring-silver-500/40",
+                                s.type === "trade" && "ring-zinc-500/40"
+                              ),
+                          clickable && "cursor-pointer hover:brightness-125",
+                          !clickable && "cursor-default"
                         )}
-                        {roidBand && (
-                          <span
-                            aria-hidden
-                            className="pointer-events-none absolute inset-y-0 bg-sky-400/70"
-                            style={{ left: `${roidBand.left}%`, width: `${roidBand.width}%` }}
-                          />
-                        )}
-                        <span className="relative flex min-w-0 items-center">
-                          <span className="truncate font-medium">{s.name}</span>
-                          {s.delayed ? <StatusDot kind="delayed" /> : null}
+                        style={{
+                          left: `${left}%`,
+                          width: `${widthPct}%`,
+                          top,
+                          height: rowHeight - 8,
+                        }}
+                      />
+                    }
+                  >
+                    {fightBand && (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-y-0 bg-blue-700"
+                        style={{ left: `${fightBand.left}%`, width: `${fightBand.width}%` }}
+                      />
+                    )}
+                    {roidBand && (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-y-0 bg-sky-400/70"
+                        style={{ left: `${roidBand.left}%`, width: `${roidBand.width}%` }}
+                      />
+                    )}
+                    <span className="relative flex min-w-0 items-center">
+                      <span className="truncate font-medium">{s.name}</span>
+                      {s.delayed ? <StatusDot kind="delayed" /> : null}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="flex-col items-start gap-0.5 text-left">
+                    <span className="font-medium">{s.name}</span>
+                    {s.endTick === s.startTick ? (
+                      <span className="text-muted-foreground tabular-nums">
+                        Tick {s.startTick}
+                        {startClock ? ` – ${startClock}` : ""}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-muted-foreground tabular-nums">
+                          Start: Tick {s.startTick}
+                          {startClock ? ` – ${startClock}` : ""}
                         </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="flex-col items-start gap-0.5 text-left"
-                      >
-                        <span className="font-medium">{s.name}</span>
-                        {s.endTick === s.startTick ? (
-                          <span className="tabular-nums text-muted-foreground">
-                            Tick {s.startTick}
-                            {startClock ? ` – ${startClock}` : ""}
+                        {s.combat && (
+                          <span className="text-blue-400 tabular-nums">
+                            Kampf: Tick {attackFirstCombatTick(s.startTick)}–{s.combat.endTick}
+                            {clockAt(attackFirstCombatTick(s.startTick))
+                              ? ` – ${clockAt(attackFirstCombatTick(s.startTick))} bis ${clockAt(s.combat.endTick)}`
+                              : ""}
                           </span>
-                        ) : (
-                          <>
-                            <span className="tabular-nums text-muted-foreground">
-                              Start: Tick {s.startTick}
-                              {startClock ? ` – ${startClock}` : ""}
-                            </span>
-                            {s.combat && (
-                              <span className="tabular-nums text-blue-400">
-                                Kampf: Tick {attackFirstCombatTick(s.startTick)}–{s.combat.endTick}
-                                {clockAt(attackFirstCombatTick(s.startTick))
-                                  ? ` – ${clockAt(attackFirstCombatTick(s.startTick))} bis ${clockAt(s.combat.endTick)}`
-                                  : ""}
-                              </span>
-                            )}
-                            {s.combat?.roidStartTick != null && (
-                              <span className="tabular-nums text-sky-400">
-                                Roid: Tick {s.combat.roidStartTick + 1}–{s.combat.endTick}
-                                {clockAt(s.combat.roidStartTick + 1)
-                                  ? ` – ${clockAt(s.combat.roidStartTick + 1)} bis ${clockAt(s.combat.endTick)}`
-                                  : ""}
-                              </span>
-                            )}
-                            <span className="tabular-nums text-muted-foreground">
-                              Ende: Tick {s.endTick}
-                              {endClock ? ` – ${endClock}` : ""}
-                            </span>
-                          </>
                         )}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }),
-              )}
-            </div>
+                        {s.combat?.roidStartTick != null && (
+                          <span className="text-sky-400 tabular-nums">
+                            Roid: Tick {s.combat.roidStartTick + 1}–{s.combat.endTick}
+                            {clockAt(s.combat.roidStartTick + 1)
+                              ? ` – ${clockAt(s.combat.roidStartTick + 1)} bis ${clockAt(s.combat.endTick)}`
+                              : ""}
+                          </span>
+                        )}
+                        <span className="text-muted-foreground tabular-nums">
+                          Ende: Tick {s.endTick}
+                          {endClock ? ` – ${endClock}` : ""}
+                        </span>
+                      </>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })
+          )}
+        </div>
 
-            <div className="relative mt-1 h-4 border-t border-border pt-1">
-              {axisLabels.map((t) => (
-                <span
-                  key={t}
-                  className="absolute text-[10px] text-muted-foreground tabular-nums"
-                  style={{
-                    left: `${xPct(t)}%`,
-                    transform:
-                      t === rangeStart
-                        ? "none"
-                        : t === domainEnd
-                          ? "translateX(-100%)"
-                          : "translateX(-50%)",
-                  }}
-                >
-                  {t}
-                </span>
-              ))}
-              {currentTick >= rangeStart && currentTick <= domainEnd && (
-                <span
-                  className="absolute z-10 text-[10px] text-green-500 tabular-nums"
-                  style={{
-                    left: `${xPct(currentTick)}%`,
-                    transform:
-                      currentTick === rangeStart
-                        ? "none"
-                        : currentTick === domainEnd
-                          ? "translateX(-100%)"
-                          : "translateX(-50%)",
-                  }}
-                >
-                  {currentTick}
-                </span>
-              )}
-              {inspectTick != null && inspectTick >= rangeStart && inspectTick <= domainEnd && (
-                <span
-                  className="absolute z-10 text-[10px] text-primary tabular-nums"
-                  style={{
-                    left: `${xPct(inspectTick)}%`,
-                    transform:
-                      inspectTick === rangeStart
-                        ? "none"
-                        : inspectTick === domainEnd
-                          ? "translateX(-100%)"
-                          : "translateX(-50%)",
-                  }}
-                >
-                  {inspectTick}
-                </span>
-              )}
-            </div>
-          </div>
+        <div className="relative mt-1 h-4 border-t border-border pt-1">
+          {axisLabels.map((t) => (
+            <span
+              key={t}
+              className="absolute text-[10px] text-muted-foreground tabular-nums"
+              style={{
+                left: `${xPct(t)}%`,
+                transform: t === rangeStart ? "none" : t === domainEnd ? "translateX(-100%)" : "translateX(-50%)",
+              }}
+            >
+              {t}
+            </span>
+          ))}
+          {currentTick >= rangeStart && currentTick <= domainEnd && (
+            <span
+              className="absolute z-10 text-[10px] text-green-500 tabular-nums"
+              style={{
+                left: `${xPct(currentTick)}%`,
+                transform: currentTick === rangeStart ? "none" : currentTick === domainEnd ? "translateX(-100%)" : "translateX(-50%)",
+              }}
+            >
+              {currentTick}
+            </span>
+          )}
+          {inspectTick != null && inspectTick >= rangeStart && inspectTick <= domainEnd && (
+            <span
+              className="absolute z-10 text-[10px] text-primary tabular-nums"
+              style={{
+                left: `${xPct(inspectTick)}%`,
+                transform: inspectTick === rangeStart ? "none" : inspectTick === domainEnd ? "translateX(-100%)" : "translateX(-50%)",
+              }}
+            >
+              {inspectTick}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

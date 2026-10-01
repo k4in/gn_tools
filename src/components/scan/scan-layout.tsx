@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/shadcn/tabs.tsx";
 
 const TABS = [
   { label: "Newsscan-Analyse", to: "/scan/news" },

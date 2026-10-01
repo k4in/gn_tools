@@ -1,5 +1,5 @@
-import { TickTable } from "@/components/overview/actionplan";
-import type { TickSnapshot } from "@/lib/calculateFastestWayToGoal";
+import { TickTable } from "@/components/overview/actionplan.tsx";
+import { type TickSnapshot } from "@/lib/calculate-fastest-way-to-goal.ts";
 
 export type ProtocolProps = {
   ticks: TickSnapshot[];
@@ -9,22 +9,9 @@ export type ProtocolProps = {
   isActive?: boolean;
 };
 
-export function Protocol({
-  ticks,
-  currentTick,
-  inspectTick = null,
-  hasPlan,
-  isActive = false,
-}: ProtocolProps) {
+export function Protocol({ ticks, currentTick, inspectTick = null, hasPlan, isActive = false }: ProtocolProps) {
   if (!hasPlan) {
     return <p className="p-4 text-sm text-muted-foreground">Kein Plan berechenbar.</p>;
   }
-  return (
-    <TickTable
-      ticks={ticks}
-      currentTick={currentTick}
-      inspectTick={inspectTick}
-      isActive={isActive}
-    />
-  );
+  return <TickTable ticks={ticks} currentTick={currentTick} inspectTick={inspectTick} isActive={isActive} />;
 }

@@ -1,9 +1,9 @@
-import type { ComponentType } from "react";
+import { type ComponentType } from "react";
 import { Link, type LinkProps } from "@tanstack/react-router";
 import { CalendarClock, ScanText, Swords } from "lucide-react";
-import { InfoDialog } from "@/components/info-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
-import { cn } from "@/lib/utils/cn";
+import { InfoDialog } from "@/components/info-dialog.tsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip.tsx";
+import { cn } from "@/lib/utils/cn.ts";
 
 type RailTool = {
   label: string;
@@ -23,10 +23,7 @@ const ITEM_CLASS =
 /** App-weite Tool-Navigation. */
 export function AppRail() {
   return (
-    <nav
-      aria-label="Tools"
-      className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-3"
-    >
+    <nav aria-label="Tools" className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-3">
       {TOOLS.map((tool) => {
         const Icon = tool.icon;
         return (
@@ -42,7 +39,7 @@ export function AppRail() {
                     ITEM_CLASS,
                     "hover:bg-muted/60 hover:text-foreground",
                     "data-[status=active]:bg-muted data-[status=active]:text-foreground",
-                    "data-[status=active]:before:absolute data-[status=active]:before:top-2 data-[status=active]:before:bottom-2 data-[status=active]:before:-left-2 data-[status=active]:before:w-0.5 data-[status=active]:before:rounded-full data-[status=active]:before:bg-primary",
+                    "data-[status=active]:before:absolute data-[status=active]:before:top-2 data-[status=active]:before:bottom-2 data-[status=active]:before:-left-2 data-[status=active]:before:w-0.5 data-[status=active]:before:rounded-full data-[status=active]:before:bg-primary"
                   )}
                 />
               }

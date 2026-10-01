@@ -1,7 +1,7 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip";
-import { formatNumber, formatRatio, formatShare, ratioStyle } from "@/components/kampfwerte/format";
-import { combatUnits, valueRatio, type CombatUnit } from "@/gn-data/kampfwerte";
-import { cn } from "@/lib/utils/cn";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip.tsx";
+import { formatNumber, formatRatio, formatShare, ratioStyle } from "@/lib/utils/kampfwerte-format.ts";
+import { combatUnits, valueRatio, type CombatUnit } from "@/lib/gn-data/kampfwerte.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 const GROUPS: { kind: CombatUnit["kind"]; label: string }[] = [
   { kind: "defense", label: "Geschütze" },
@@ -41,7 +41,7 @@ export function KillMatrix() {
                 colSpan={combatUnits.filter((u) => u.kind === group.kind).length}
                 className={cn(
                   "px-2 pt-3 pb-1.5 text-center text-[10px] font-medium tracking-wider text-muted-foreground uppercase",
-                  i > 0 && DIVIDER_LEFT,
+                  i > 0 && DIVIDER_LEFT
                 )}
               >
                 {group.label}
@@ -54,7 +54,7 @@ export function KillMatrix() {
                 key={target.name}
                 className={cn(
                   "border-b border-border px-1 pb-2.5 text-center text-[11px] font-medium",
-                  startsGroup(combatUnits, i) && DIVIDER_LEFT,
+                  startsGroup(combatUnits, i) && DIVIDER_LEFT
                 )}
               >
                 {target.name}
@@ -68,10 +68,7 @@ export function KillMatrix() {
             // Horizontale Trennlinie an den Zellen, tr-Rahmen sind mit rowSpan unzuverlässig.
             const top = startsGroup(shooters, row) && DIVIDER_TOP;
             return (
-              <tr
-                key={shooter.name}
-                className="border-b border-border/50 last:border-b-0"
-              >
+              <tr key={shooter.name} className="border-b border-border/50 last:border-b-0">
                 {groupStart ? (
                   <th
                     rowSpan={shooters.filter((u) => u.kind === shooter.kind).length}

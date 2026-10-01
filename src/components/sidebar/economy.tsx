@@ -1,18 +1,14 @@
-import { jobTypeClass } from "@/components/overview/actionplan";
-import { ScrollArea } from "@/components/shadcn/scroll-area";
-import { SidebarRow, SidebarSectionLabel } from "@/components/sidebar/sidebar-row";
-import { StatusDot } from "@/components/sidebar/status-dot";
+import { jobTypeClass } from "@/components/overview/actionplan.tsx";
+import { ScrollArea } from "@/components/shadcn/scroll-area.tsx";
+import { SidebarRow, SidebarSectionLabel } from "@/components/sidebar/sidebar-row.tsx";
+import { StatusDot } from "@/components/sidebar/status-dot.tsx";
 
 export type EconomyProps = {
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
   attackBlocked?: boolean;
   hasInterstellarerHandel: boolean;
-  onAddEconomy: (preset?: {
-    asteroids?: number;
-    extractorsMet?: number;
-    extractorsKris?: number;
-  }) => void;
+  onAddEconomy: (preset?: { asteroids?: number; extractorsMet?: number; extractorsKris?: number }) => void;
   onAddCatastrophe: () => void;
   onAddAttack: () => void;
   onAddCustom: () => void;

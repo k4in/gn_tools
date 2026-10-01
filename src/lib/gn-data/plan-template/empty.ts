@@ -1,4 +1,4 @@
-import type { PlanTemplate } from "@/gn-data/plan";
+import { type PlanTemplate } from "@/lib/gn-data/plan.ts";
 
 export const empty: PlanTemplate = {
   id: "empty",

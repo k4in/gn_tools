@@ -1,11 +1,11 @@
-import { jobTypeClass } from "@/components/overview/actionplan";
-import { ScrollArea } from "@/components/shadcn/scroll-area";
-import { SidebarRow, SidebarSectionLabel } from "@/components/sidebar/sidebar-row";
-import { StatusDot } from "@/components/sidebar/status-dot";
-import { formatRes } from "@/lib/calculateFastestWayToGoal";
-import type { Defense } from "@/gn-data/defense";
-import type { Ship } from "@/gn-data/ships";
-import type { Utility } from "@/gn-data/utility";
+import { jobTypeClass } from "@/components/overview/actionplan.tsx";
+import { ScrollArea } from "@/components/shadcn/scroll-area.tsx";
+import { SidebarRow, SidebarSectionLabel } from "@/components/sidebar/sidebar-row.tsx";
+import { StatusDot } from "@/components/sidebar/status-dot.tsx";
+import { formatRes } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { type Defense } from "@/lib/gn-data/defense.ts";
+import { type Ship } from "@/lib/gn-data/ships.ts";
+import { type Utility } from "@/lib/gn-data/utility.ts";
 
 export type UnitsProps = {
   ships: Ship[];
@@ -23,15 +23,7 @@ type Buildable = {
   dependencies: string[];
 };
 
-function UnitRows({
-  items,
-  planned,
-  onAdd,
-}: {
-  items: Buildable[];
-  planned: Set<string>;
-  onAdd: (name: string) => void;
-}) {
+function UnitRows({ items, planned, onAdd }: { items: Buildable[]; planned: Set<string>; onAdd: (name: string) => void }) {
   return (
     <ul className="flex flex-col px-1.5">
       {items.map((item) => (
@@ -42,9 +34,7 @@ function UnitRows({
           title={
             <>
               {item.name}
-              {item.dependencies.some((dep) => !planned.has(dep)) ? (
-                <StatusDot kind="blocked" />
-              ) : null}
+              {item.dependencies.some((dep) => !planned.has(dep)) ? <StatusDot kind="blocked" /> : null}
             </>
           }
           meta={`${item.ticks} T · ${formatRes(item.cost.met)} M · ${formatRes(item.cost.kris)} K`}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Percent, Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
+import { Button } from "@/components/shadcn/button.tsx";
 import {
   Dialog,
   DialogContent,
@@ -9,15 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/shadcn/dialog";
-import { Input } from "@/components/shadcn/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group";
-import {
-  normalizeTaxes,
-  taxRatesAt,
-  type TaxSegment,
-} from "@/lib/calculateFastestWayToGoal";
-import { cn } from "@/lib/utils/cn";
+} from "@/components/shadcn/dialog.tsx";
+import { Input } from "@/components/shadcn/input.tsx";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group.tsx";
+import { normalizeTaxes, taxRatesAt, type TaxSegment } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { cn } from "@/lib/utils/cn.ts";
 
 export type TaxesDialogProps = {
   taxes: TaxSegment[];
@@ -102,28 +98,24 @@ export function TaxesDialog({ taxes, currentTick, onApply }: TaxesDialogProps) {
   const dirty = parsed.ok && JSON.stringify(parsed.taxes) !== JSON.stringify(normalizeTaxes(taxes));
   const canApply = parsed.ok && dirty;
 
-  const updateRow = (id: string, patch: Partial<DraftRow>) => {
+  function updateRow(id: string, patch: Partial<DraftRow>) {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
     setError(null);
-  };
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button type="button" variant="outline" />}>
         <Percent data-icon="inline-start" />
         Steuern
-        {hasTaxes ? (
-          <span className="font-normal text-muted-foreground tabular-nums">
-            {formatRates(currentRates)}
-          </span>
-        ) : null}
+        {hasTaxes ? <span className="font-normal text-muted-foreground tabular-nums">{formatRates(currentRates)}</span> : null}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Steuern</DialogTitle>
           <DialogDescription>
-            Ab Tick 0 gelten immer 0%. Jeder Abschnitt gilt bis zum nächsten Eintrag, der letzte bis zum
-            Planende. Steuern reduzieren das Metall- und Kristall-Einkommen (Minen und Extraktoren).
+            Ab Tick 0 gelten immer 0%. Jeder Abschnitt gilt bis zum nächsten Eintrag, der letzte bis zum Planende. Steuern reduzieren das
+            Metall- und Kristall-Einkommen (Minen und Extraktoren).
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
@@ -146,10 +138,7 @@ export function TaxesDialog({ taxes, currentTick, onApply }: TaxesDialogProps) {
             <span className="size-7" />
           </div>
           {rows.map((row) => (
-            <div
-              key={row.id}
-              className="grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2"
-            >
+            <div key={row.id} className="grid grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2">
               <Input
                 type="number"
                 min={1}

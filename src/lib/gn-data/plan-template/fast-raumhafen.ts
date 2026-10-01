@@ -1,4 +1,4 @@
-import type { PlanEntry, PlanTemplate } from "@/gn-data/plan";
+import { type PlanEntry, type PlanTemplate } from "@/lib/gn-data/plan.ts";
 
 export const fastRaumhafen: PlanTemplate = {
   id: "fast_raumhafen",

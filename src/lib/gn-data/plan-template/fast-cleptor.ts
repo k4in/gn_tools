@@ -1,8 +1,8 @@
-import type { PlanEntry, PlanTemplate } from "@/gn-data/plan";
+import { type PlanEntry, type PlanTemplate } from "@/lib/gn-data/plan.ts";
 
-export const balanced: PlanTemplate = {
-  id: "balanced",
-  label: "Balanced",
+export const fastCleptor: PlanTemplate = {
+  id: "fast_cleptor",
+  label: "Fast Cleptor",
   plan: [
     {
       id: "default_koloniezentrum",

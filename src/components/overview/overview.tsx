@@ -1,28 +1,18 @@
 import { useMemo, useState } from "react";
-import { ExportPlanDialog } from "@/components/export-plan-dialog";
-import { ImportPlanDialog } from "@/components/import-plan-dialog";
-import { ResetPlanDialog, type ResetPlanSource } from "@/components/reset-plan-dialog";
-import { TaxesDialog } from "@/components/taxes-dialog";
-import type { PlanEntry } from "@/gn-data/plan";
-import { ActionPlan } from "@/components/overview/actionplan";
-import { Protocol } from "@/components/overview/protocol";
-import { Timeline } from "@/components/overview/timeline";
+import { ExportPlanDialog } from "@/components/export-plan-dialog.tsx";
+import { ImportPlanDialog } from "@/components/import-plan-dialog.tsx";
+import { ResetPlanDialog, type ResetPlanSource } from "@/components/reset-plan-dialog.tsx";
+import { TaxesDialog } from "@/components/taxes-dialog.tsx";
+import { type PlanEntry } from "@/lib/gn-data/plan.ts";
+import { ActionPlan } from "@/components/overview/actionplan.tsx";
+import { Protocol } from "@/components/overview/protocol.tsx";
+import { Timeline } from "@/components/overview/timeline.tsx";
 import { CircleDot, Crosshair } from "lucide-react";
-import { Button } from "@/components/shadcn/button";
-import { Separator } from "@/components/shadcn/separator";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/shadcn/tabs";
-import type {
-  ExtractorSlotShortage,
-  Job,
-  TaxSegment,
-  TickSnapshot,
-} from "@/lib/calculateFastestWayToGoal";
-import { historyRangeStart, type HistoryWindow } from "@/lib/history-window";
+import { Button } from "@/components/shadcn/button.tsx";
+import { Separator } from "@/components/shadcn/separator.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn/tabs.tsx";
+import { type ExtractorSlotShortage, type Job, type TaxSegment, type TickSnapshot } from "@/lib/calculate-fastest-way-to-goal.ts";
+import { historyRangeStart, type HistoryWindow } from "@/lib/history-window.ts";
 
 type OverviewTab = "compact" | "detailed";
 
@@ -37,9 +27,7 @@ export type OverviewProps = {
   exportJson?: string;
   exportPlanSlot?: number;
   onImportPlan?: (imported: { plan: PlanEntry[]; taxes: TaxSegment[] }) => void;
-  parseImportPlan?: (json: string) =>
-    | { ok: true; plan: PlanEntry[]; taxes: TaxSegment[] }
-    | { ok: false; error: string };
+  parseImportPlan?: (json: string) => { ok: true; plan: PlanEntry[]; taxes: TaxSegment[] } | { ok: false; error: string };
   onEditJob?: (planEntryId: string | undefined) => void;
   slotShortage?: ExtractorSlotShortage | null;
   resetSources?: ResetPlanSource[];
@@ -84,7 +72,7 @@ export function Overview({
   const historyStart = historyRangeStart(currentTick, historyWindow);
   const visibleLogTicks = useMemo(
     () => (historyStart <= 0 ? logTicks : logTicks.filter((t) => t.tick >= historyStart)),
-    [logTicks, historyStart],
+    [logTicks, historyStart]
   );
 
   return (
@@ -102,9 +90,7 @@ export function Overview({
               <TabsTrigger value="compact">Kompakt</TabsTrigger>
               <TabsTrigger value="detailed">Detailliert</TabsTrigger>
             </TabsList>
-            {onApplyTaxes && (
-              <TaxesDialog taxes={taxes} currentTick={currentTick} onApply={onApplyTaxes} />
-            )}
+            {onApplyTaxes && <TaxesDialog taxes={taxes} currentTick={currentTick} onApply={onApplyTaxes} />}
             {onAddSnapshot && (
               <Button type="button" variant="outline" onClick={onAddSnapshot}>
                 <Crosshair data-icon="inline-start" />
@@ -113,17 +99,13 @@ export function Overview({
             )}
             {slotShortage && (
               <p role="alert" className="min-w-0 truncate text-xs text-destructive">
-                Zu wenig Asteroidenplätze: {slotShortage.extractors} Extraktoren, aber nur{" "}
-                {slotShortage.slots} Plätze ({slotShortage.asteroids}{" "}
-                {slotShortage.asteroids === 1 ? "Asteroid" : "Asteroiden"}).{" "}
-                {slotShortage.unslotted}{" "}
-                {slotShortage.unslotted === 1 ? "Extraktor steht" : "Extraktoren stehen"} ohne
-                Platz und {slotShortage.unslotted === 1 ? "liefert" : "liefern"} keine Rohstoffe
+                Zu wenig Asteroidenplätze: {slotShortage.extractors} Extraktoren, aber nur {slotShortage.slots} Plätze (
+                {slotShortage.asteroids} {slotShortage.asteroids === 1 ? "Asteroid" : "Asteroiden"}). {slotShortage.unslotted}{" "}
+                {slotShortage.unslotted === 1 ? "Extraktor steht" : "Extraktoren stehen"} ohne Platz und{" "}
+                {slotShortage.unslotted === 1 ? "liefert" : "liefern"} keine Rohstoffe
                 {slotShortage.asteroidsNeeded > 0
                   ? ` — es ${
-                      slotShortage.asteroidsNeeded === 1
-                        ? "fehlt 1 Asteroid"
-                        : `fehlen ${slotShortage.asteroidsNeeded} Asteroiden`
+                      slotShortage.asteroidsNeeded === 1 ? "fehlt 1 Asteroid" : `fehlen ${slotShortage.asteroidsNeeded} Asteroiden`
                     }.`
                   : "."}
               </p>
@@ -144,13 +126,9 @@ export function Overview({
                   </Button>
                 ))}
               <Separator orientation="vertical" className="mx-1 my-2" />
-              {parseImportPlan && onImportPlan && (
-                <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />
-              )}
+              {parseImportPlan && onImportPlan && <ImportPlanDialog parse={parseImportPlan} onReplace={onImportPlan} />}
               <ExportPlanDialog json={exportJson} planSlot={exportPlanSlot ?? 1} />
-              {resetSources && onResetPlan && (
-                <ResetPlanDialog sources={resetSources} onReset={onResetPlan} />
-              )}
+              {resetSources && onResetPlan && <ResetPlanDialog sources={resetSources} onReset={onResetPlan} />}
             </div>
           )}
         </div>
@@ -171,10 +149,7 @@ export function Overview({
           />
         </div>
 
-        <TabsContent
-          value="compact"
-          className="min-h-0 flex-1 overflow-hidden data-hidden:hidden"
-        >
+        <TabsContent value="compact" className="min-h-0 flex-1 overflow-hidden data-hidden:hidden">
           <ActionPlan
             ticks={actionTicks}
             currentTick={currentTick}
@@ -184,18 +159,9 @@ export function Overview({
           />
         </TabsContent>
 
-        <TabsContent
-          value="detailed"
-          className="min-h-0 flex-1 overflow-hidden data-hidden:hidden"
-        >
+        <TabsContent value="detailed" className="min-h-0 flex-1 overflow-hidden data-hidden:hidden">
           {tab === "detailed" ? (
-            <Protocol
-              ticks={visibleLogTicks}
-              currentTick={currentTick}
-              inspectTick={inspectTick}
-              hasPlan={hasPlan}
-              isActive
-            />
+            <Protocol ticks={visibleLogTicks} currentTick={currentTick} inspectTick={inspectTick} hasPlan={hasPlan} isActive />
           ) : null}
         </TabsContent>
       </Tabs>
