@@ -16,6 +16,8 @@ import {
 } from "@/components/shadcn/table";
 import {
   ASTEROID_SLOT_CAPACITY,
+  attackRoidStartTick,
+  clampAttackRoidDuration,
   clockLabel,
   type PlanResult,
   type StartConfig,
@@ -173,10 +175,20 @@ function buildRows(plan: PlanResult, startCfg: StartConfig): ExtractorEventRow[]
   }
 
   for (const entry of startCfg.plan) {
-    if (entry.kind !== "roid") continue;
+    const isAttackRoid =
+      entry.kind === "attack" && (entry.targetMet > 0 || entry.targetKris > 0);
+    if (entry.kind !== "roid" && !isAttackRoid) continue;
     const loot = roids.get(entry.id);
-    const start = loot?.start ?? entry.startTick;
-    const end = loot?.end ?? entry.startTick + Math.max(0, entry.duration - 1);
+    const roidStart =
+      entry.kind === "attack"
+        ? attackRoidStartTick(entry.startTick, entry.duration, entry.roidDuration)
+        : entry.startTick;
+    const roidTicks =
+      entry.kind === "attack"
+        ? clampAttackRoidDuration(entry.roidDuration, entry.duration)
+        : entry.duration;
+    const start = loot?.start ?? roidStart;
+    const end = loot?.end ?? roidStart + Math.max(0, roidTicks - 1);
     rows.push({
       sortTick: start,
       tickLabel: start === end ? String(start) : `${start}–${end}`,

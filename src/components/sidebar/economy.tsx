@@ -6,15 +6,15 @@ import { StatusDot } from "@/components/sidebar/status-dot";
 export type EconomyProps = {
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
-  roidBlocked?: boolean;
+  attackBlocked?: boolean;
   hasInterstellarerHandel: boolean;
   onAddEconomy: (preset?: {
     asteroids?: number;
     extractorsMet?: number;
     extractorsKris?: number;
   }) => void;
-  onAddRoid: () => void;
   onAddCatastrophe: () => void;
+  onAddAttack: () => void;
   onAddCustom: () => void;
   onAddTrade: () => void;
 };
@@ -23,11 +23,11 @@ export type EconomyProps = {
 export function Economy({
   hasObservatorium,
   hasExtraktorTech,
-  roidBlocked = false,
+  attackBlocked = false,
   hasInterstellarerHandel,
   onAddEconomy,
-  onAddRoid,
   onAddCatastrophe,
+  onAddAttack,
   onAddCustom,
   onAddTrade,
 }: EconomyProps) {
@@ -50,15 +50,15 @@ export function Economy({
             meta="Asteroiden scannen und/oder Exen bauen"
           />
           <SidebarRow
-            onClick={onAddRoid}
-            titleClassName={jobTypeClass("roid")}
+            onClick={onAddAttack}
+            titleClassName={jobTypeClass("attack")}
             title={
               <>
-                Roid
-                {roidBlocked ? <StatusDot kind="blocked" /> : null}
+                Angriffsflug
+                {attackBlocked ? <StatusDot kind="blocked" /> : null}
               </>
             }
-            meta="Exen bei einem Angriff in 1–10 Ticks erbeuten"
+            meta="Extraktoren erbeuten in 1–10 Ticks"
           />
           <SidebarRow
             onClick={onAddCatastrophe}

@@ -24,12 +24,20 @@ import {
 import {
   ASTEROID_COST,
   ASTEROID_SLOT_CAPACITY,
+  ATTACK_DURATION_MAX,
+  ATTACK_DURATION_MIN,
+  ATTACK_FLIGHT_TICKS,
+  attackFirstCombatTick,
+  attackRoidStartTick,
+  attackTotalTicks,
+  clampAttackRoidDuration,
   computeRoidLoot,
   extractorBatchCost,
   extractorUnitCost,
   CATASTROPHE_DURATION_MAX,
   CATASTROPHE_DURATION_MIN,
   clockLabel,
+  formatAttackPlanLabel,
   formatCatastrophePlanLabel,
   formatRes,
   formatRoidPlanLabel,
@@ -135,6 +143,19 @@ type CatastropheTarget = {
   defaultDuration: number;
 };
 
+type AttackTarget = {
+  kind: "attack";
+  defaultTick: number;
+  defaultDuration: number;
+  defaultRoidDuration: number;
+  defaultTargetMet: number;
+  defaultTargetKris: number;
+  defaultMulti?: RoidMulti;
+  defaultNoReturn: boolean;
+  /** Kampffenster anderer Roids (Start = erster Kampftick). */
+  occupiedRoids: OccupiedRoid[];
+};
+
 type SnapshotTarget = {
   kind: "snapshot";
   defaultTick: number;
@@ -153,6 +174,7 @@ export type PlanEntryDialogTarget =
   | TradeTarget
   | RoidTarget
   | CatastropheTarget
+  | AttackTarget
   | SnapshotTarget;
 
 export type PlanEntryDialogSubmit = {
@@ -169,8 +191,12 @@ export type PlanEntryDialogSubmit = {
   targetMet?: number;
   targetKris?: number;
   duration?: number;
-  /** Nur Roid: weitere Angreifer; fehlt = alleine. */
+  /** Nur Roid/Angriffsflug: weitere Angreifer; fehlt = alleine. */
   multi?: RoidMulti;
+  /** Nur Angriffsflug: kein Rückflug. */
+  noReturn?: boolean;
+  /** Nur Angriffsflug: Roid-Ticks (die letzten Kampfticks). */
+  roidDuration?: number;
 };
 
 export type PlanEntryDialogProps = {
@@ -226,13 +252,15 @@ export function PlanEntryDialog({
   const [multiEnabled, setMultiEnabled] = useState(false);
   const [ownCleptors, setOwnCleptors] = useState(0);
   const [coAttackers, setCoAttackers] = useState<RoidCoAttacker[]>([]);
+  const [noReturn, setNoReturn] = useState(false);
+  const [attackRoidDuration, setAttackRoidDuration] = useState(ROID_DURATION_MIN);
   /** Ob das Tick-Feld den Start- oder den End-Tick bearbeitet (bleibt zwischen Dialogen erhalten). */
   const [tickInputMode, setTickInputMode] = useState<"start" | "end">("start");
   // Nur beim Öffnen gelesen: Umschalten soll den Feldwert nicht neu setzen.
   const tickInputModeRef = useRef(tickInputMode);
   tickInputModeRef.current = tickInputMode;
 
-  const entryDuration = target ? targetDuration(target, duration) : 0;
+  const entryDuration = target ? targetDuration(target, duration, noReturn) : 0;
   const editsEndTick = entryDuration > 0 && tickInputMode === "end";
   const startTick = editsEndTick ? Math.max(0, tickInput - entryDuration) : tickInput;
   const endTick = startTick + entryDuration;
@@ -241,9 +269,13 @@ export function PlanEntryDialog({
     if (!open || !target) return;
     if (mode === "edit" && entry) {
       const entryDur =
-        entry.kind === "roid" || entry.kind === "catastrophe"
-          ? targetDuration(target, entry.duration)
-          : targetDuration(target, 0);
+        entry.kind === "roid" || entry.kind === "catastrophe" || entry.kind === "attack"
+          ? targetDuration(
+              target,
+              entry.duration,
+              entry.kind === "attack" && !!entry.noReturn,
+            )
+          : targetDuration(target, 0, false);
       setTickInput(
         tickInputModeRef.current === "end" && entryDur > 0
           ? entry.startTick + entryDur
@@ -279,12 +311,16 @@ export function PlanEntryDialog({
         setReceiveAmount(Math.max(0, entry.receiveAmount));
         return;
       }
-      if (entry.kind === "roid") {
+      if (entry.kind === "roid" || entry.kind === "attack") {
         setTargetMet(Math.max(0, entry.targetMet));
         setTargetKris(Math.max(0, entry.targetKris));
         setDuration(
           Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, entry.duration)),
         );
+        setNoReturn(entry.kind === "attack" && !!entry.noReturn);
+        if (entry.kind === "attack") {
+          setAttackRoidDuration(clampAttackRoidDuration(entry.roidDuration, entry.duration));
+        }
         setMultiEnabled(!!entry.multi);
         setOwnCleptors(entry.multi?.ownCleptors ?? 0);
         setCoAttackers(entry.multi?.attackers.map((a) => ({ ...a })) ?? []);
@@ -340,7 +376,13 @@ export function PlanEntryDialog({
           Math.max(CATASTROPHE_DURATION_MIN, target.defaultDuration),
         ),
       );
-    } else if (target.kind === "roid") {
+    } else if (target.kind === "roid" || target.kind === "attack") {
+      setNoReturn(target.kind === "attack" && target.defaultNoReturn);
+      if (target.kind === "attack") {
+        setAttackRoidDuration(
+          clampAttackRoidDuration(target.defaultRoidDuration, target.defaultDuration),
+        );
+      }
       setTargetMet(Math.max(0, target.defaultTargetMet));
       setTargetKris(Math.max(0, target.defaultTargetKris));
       setDuration(
@@ -430,15 +472,18 @@ export function PlanEntryDialog({
 
   const roidMulti = useMemo<RoidMulti | undefined>(
     () =>
-      target?.kind === "roid" && multiEnabled
+      (target?.kind === "roid" || target?.kind === "attack") && multiEnabled
         ? { ownCleptors, attackers: coAttackers }
         : undefined,
     [target, multiEnabled, ownCleptors, coAttackers],
   );
 
+  // Beim Angriffsflug wird nur in den letzten `roidTicks` Kampfticks geroidet.
+  const roidTicks = target?.kind === "attack" ? Math.min(attackRoidDuration, duration) : duration;
+
   const roidLoot = useMemo(
-    () => (roidMulti ? computeRoidLoot(targetMet, targetKris, duration, roidMulti) : null),
-    [roidMulti, targetMet, targetKris, duration],
+    () => (roidMulti ? computeRoidLoot(targetMet, targetKris, roidTicks, roidMulti) : null),
+    [roidMulti, targetMet, targetKris, roidTicks],
   );
 
   const updateCoAttacker = (index: number, patch: Partial<RoidCoAttacker>) => {
@@ -447,12 +492,44 @@ export function PlanEntryDialog({
 
   if (!target) return null;
 
+  // Erster Roid-Tick; beim Angriffsflug zählt nur ein Kampf mit Ziel-Exen als Roid.
+  const roidStartTick =
+    target.kind === "attack"
+      ? attackRoidStartTick(startTick, duration, roidTicks)
+      : startTick;
+
   const timeRows =
     entryDuration > 0 ? (
       <>
         <dt className="text-muted-foreground">Start</dt>
         <dd className="tabular-nums">{clockLabel(startCfg, startTick)}</dd>
-        <dt className="text-muted-foreground">Ende</dt>
+        {target.kind === "attack" && (
+          <>
+            <dt className="text-muted-foreground">Ankunft</dt>
+            <dd className="tabular-nums">
+              {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS)}
+            </dd>
+            <dt className="text-muted-foreground">Kampf</dt>
+            <dd className="tabular-nums">
+              {clockLabel(startCfg, attackFirstCombatTick(startTick))} –{" "}
+              {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS + duration)} (Tick{" "}
+              {attackFirstCombatTick(startTick)}–{startTick + ATTACK_FLIGHT_TICKS + duration})
+            </dd>
+            {(targetMet > 0 || targetKris > 0) && (
+              <>
+                <dt className="text-muted-foreground">Roid</dt>
+                <dd className="tabular-nums">
+                  {clockLabel(startCfg, roidStartTick)} –{" "}
+                  {clockLabel(startCfg, startTick + ATTACK_FLIGHT_TICKS + duration)} (Tick{" "}
+                  {roidStartTick}–{startTick + ATTACK_FLIGHT_TICKS + duration})
+                </dd>
+              </>
+            )}
+          </>
+        )}
+        <dt className="text-muted-foreground">
+          {target.kind === "attack" && !noReturn ? "Rückkehr" : "Ende"}
+        </dt>
         <dd className="tabular-nums">{clockLabel(startCfg, endTick)}</dd>
       </>
     ) : (
@@ -461,6 +538,40 @@ export function PlanEntryDialog({
         <dd className="tabular-nums">{clockLabel(startCfg, startTick)}</dd>
       </>
     );
+
+  const lengthField = (
+    labelText: string,
+    value: number,
+    max: number,
+    apply: (n: number) => void,
+  ) => {
+    const items = ROID_DURATION_ITEMS.slice(0, max);
+    return (
+      <Field className="w-32">
+        <FieldLabel>{labelText}</FieldLabel>
+        <Combobox
+          items={items}
+          value={String(value)}
+          onValueChange={(v) => {
+            if (v == null) return;
+            const n = Number(v);
+            if (n >= 1 && n <= max) apply(n);
+          }}
+        >
+          <ComboboxInput showTrigger className="w-32" />
+          <ComboboxContent>
+            <ComboboxList>
+              {items.map((item) => (
+                <ComboboxItem key={item} value={item}>
+                  {item} {item === "1" ? "Tick" : "Ticks"}
+                </ComboboxItem>
+              ))}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
+      </Field>
+    );
+  };
 
   const tickField = (
     <Field className={target.kind === "economy" ? "w-full" : "w-auto"}>
@@ -520,6 +631,9 @@ export function PlanEntryDialog({
     if (target.kind === "catastrophe") {
       return formatCatastrophePlanLabel(duration);
     }
+    if (target.kind === "attack") {
+      return formatAttackPlanLabel({ duration, targetMet, targetKris });
+    }
     if (target.kind === "snapshot") {
       return formatSnapshotPlanLabel({
         met,
@@ -531,6 +645,16 @@ export function PlanEntryDialog({
     }
     return "Asteroiden & Extraktoren";
   })();
+
+  const checksRoidOverlap =
+    target.kind === "roid" ||
+    (target.kind === "attack" && (targetMet > 0 || targetKris > 0));
+  const overlappingRoid =
+    checksRoidOverlap && (target.kind === "roid" || target.kind === "attack")
+      ? target.occupiedRoids.find((r) =>
+          roidsOverlap(roidStartTick, roidTicks, r.startTick, r.duration),
+        ) ?? null
+      : null;
 
   const canSubmit = (() => {
     if (startTick < 0) return false;
@@ -558,26 +682,21 @@ export function PlanEntryDialog({
       if (targetMet <= 0 && targetKris <= 0) return false;
       if (duration < ROID_DURATION_MIN || duration > ROID_DURATION_MAX) return false;
       if (multiEnabled && ownCleptors <= 0) return false;
-      const overlaps = target.occupiedRoids.some((r) =>
-        roidsOverlap(startTick, duration, r.startTick, r.duration),
-      );
-      return !overlaps;
+      return !overlappingRoid;
     }
     if (target.kind === "catastrophe") {
       return duration >= CATASTROPHE_DURATION_MIN && duration <= CATASTROPHE_DURATION_MAX;
+    }
+    if (target.kind === "attack") {
+      if (duration < ATTACK_DURATION_MIN || duration > ATTACK_DURATION_MAX) return false;
+      if (multiEnabled && ownCleptors <= 0) return false;
+      return !overlappingRoid;
     }
     if (target.kind === "snapshot") {
       return met >= 0 && kris >= 0 && extractorMetCount >= 0 && extractorKrisCount >= 0 && asteroidCount >= 0;
     }
     return false;
   })();
-
-  const overlappingRoid =
-    target.kind === "roid"
-      ? target.occupiedRoids.find((r) =>
-          roidsOverlap(startTick, duration, r.startTick, r.duration),
-        ) ?? null
-      : null;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -611,6 +730,16 @@ export function PlanEntryDialog({
         duration,
         multi: roidMulti,
       });
+    } else if (target.kind === "attack") {
+      onSubmit({
+        startTick,
+        targetMet: Math.max(0, targetMet),
+        targetKris: Math.max(0, targetKris),
+        duration,
+        roidDuration: roidTicks,
+        multi: roidMulti,
+        noReturn,
+      });
     } else if (target.kind === "catastrophe") {
       onSubmit({ startTick, duration });
     } else if (target.kind === "snapshot") {
@@ -629,7 +758,11 @@ export function PlanEntryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className={
+          target.kind === "roid" || target.kind === "attack" ? "sm:max-w-xl" : "sm:max-w-md"
+        }
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -759,7 +892,7 @@ export function PlanEntryDialog({
             </div>
           )}
 
-          {target.kind === "roid" && (
+          {(target.kind === "roid" || target.kind === "attack") && (
             <div className="flex flex-col gap-2 text-xs text-muted-foreground">
               <p>
                 Pro Tick 10% der restlichen Ziel-Exen (immer abgerundet).
@@ -778,8 +911,8 @@ export function PlanEntryDialog({
             </div>
           )}
 
-          <div className={target.kind === "economy" || target.kind === "trade" || target.kind === "snapshot" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
-            {target.kind !== "trade" && tickField}
+          <div className={target.kind === "economy" || target.kind === "trade" || target.kind === "snapshot" || target.kind === "roid" || target.kind === "attack" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
+            {target.kind !== "trade" && target.kind !== "roid" && target.kind !== "attack" && tickField}
 
             {(target.kind === "unit" || target.kind === "recon") && (
               <Field className="w-28">
@@ -1023,86 +1156,88 @@ export function PlanEntryDialog({
               </Field>
             )}
 
-            {target.kind === "roid" && (
+            {(target.kind === "roid" || target.kind === "attack") && (
               <>
-                <Field className="w-28">
-                  <FieldLabel htmlFor="plan-roid-met">Target M-Exen</FieldLabel>
-                  <InputGroup>
-                    <InputGroupInput
-                      id="plan-roid-met"
-                      type="number"
-                      min={0}
-                      value={targetMet}
-                      onChange={(e) => {
-                        const n = Number(e.target.value);
-                        if (!Number.isFinite(n)) return;
-                        setTargetMet(Math.max(0, Math.floor(n)));
-                      }}
-                      className="tabular-nums"
-                    />
-                  </InputGroup>
-                </Field>
-                <Field className="w-28">
-                  <FieldLabel htmlFor="plan-roid-kris">Target K-Exen</FieldLabel>
-                  <InputGroup>
-                    <InputGroupInput
-                      id="plan-roid-kris"
-                      type="number"
-                      min={0}
-                      value={targetKris}
-                      onChange={(e) => {
-                        const n = Number(e.target.value);
-                        if (!Number.isFinite(n)) return;
-                        setTargetKris(Math.max(0, Math.floor(n)));
-                      }}
-                      className="tabular-nums"
-                    />
-                  </InputGroup>
-                </Field>
-                <Field className="w-32">
-                  <FieldLabel>Angriffslänge</FieldLabel>
-                  <Combobox
-                    items={ROID_DURATION_ITEMS}
-                    value={String(duration)}
-                    onValueChange={(value) => {
-                      if (value == null) return;
-                      const n = Number(value);
-                      if (n >= ROID_DURATION_MIN && n <= ROID_DURATION_MAX) {
-                        setDuration(n);
-                      }
-                    }}
-                  >
-                    <ComboboxInput showTrigger className="w-32" />
-                    <ComboboxContent>
-                      <ComboboxList>
-                        {ROID_DURATION_ITEMS.map((item) => (
-                          <ComboboxItem key={item} value={item}>
-                            {item} {item === "1" ? "Tick" : "Ticks"}
-                          </ComboboxItem>
-                        ))}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                </Field>
-                {multiEnabled && (
-                  <Field className="w-32">
-                    <FieldLabel htmlFor="plan-roid-own-clep">Eigene Cleptoren</FieldLabel>
+                <div className="flex flex-wrap items-end gap-3">
+                  {tickField}
+                  {target.kind === "roid" &&
+                    lengthField("Angriffslänge", duration, ROID_DURATION_MAX, setDuration)}
+                  {target.kind === "attack" && (
+                    <label className="flex h-7 items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={noReturn}
+                        onCheckedChange={(checked) => setNoReturn(checked)}
+                      />
+                      Ohne Rückflug
+                    </label>
+                  )}
+                </div>
+                {target.kind === "attack" && (
+                  <div className="flex flex-wrap items-end gap-3">
+                    {lengthField("Angriffslänge", duration, ATTACK_DURATION_MAX, setDuration)}
+                    {lengthField(
+                      "Roidlänge",
+                      roidTicks,
+                      duration,
+                      setAttackRoidDuration,
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field className="w-28">
+                    <FieldLabel htmlFor="plan-roid-met">Target M-Exen</FieldLabel>
                     <InputGroup>
                       <InputGroupInput
-                        id="plan-roid-own-clep"
+                        id="plan-roid-met"
                         type="number"
                         min={0}
-                        value={ownCleptors}
+                        value={targetMet}
                         onChange={(e) => {
                           const n = Number(e.target.value);
                           if (!Number.isFinite(n)) return;
-                          setOwnCleptors(Math.max(0, Math.floor(n)));
+                          setTargetMet(Math.max(0, Math.floor(n)));
                         }}
                         className="tabular-nums"
                       />
                     </InputGroup>
                   </Field>
-                )}
+                  <Field className="w-28">
+                    <FieldLabel htmlFor="plan-roid-kris">Target K-Exen</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        id="plan-roid-kris"
+                        type="number"
+                        min={0}
+                        value={targetKris}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (!Number.isFinite(n)) return;
+                          setTargetKris(Math.max(0, Math.floor(n)));
+                        }}
+                        className="tabular-nums"
+                      />
+                    </InputGroup>
+                  </Field>
+                  {multiEnabled && (
+                    <Field className="w-32">
+                      <FieldLabel htmlFor="plan-roid-own-clep">Eigene Cleptoren</FieldLabel>
+                      <InputGroup>
+                        <InputGroupInput
+                          id="plan-roid-own-clep"
+                          type="number"
+                          min={0}
+                          value={ownCleptors}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            if (!Number.isFinite(n)) return;
+                            setOwnCleptors(Math.max(0, Math.floor(n)));
+                          }}
+                          className="tabular-nums"
+                        />
+                      </InputGroup>
+                    </Field>
+                  )}
+                </div>
                 <div className="flex basis-full flex-col gap-2">
                   <label className="flex items-center gap-2 text-xs">
                     <Checkbox
@@ -1280,7 +1415,11 @@ export function PlanEntryDialog({
 }
 
 /** Dauer eines Eintrags in Ticks (0 = sofort); `duration` nur für Roid/Katastrophe. */
-function targetDuration(target: PlanEntryDialogTarget, duration: number): number {
+function targetDuration(
+  target: PlanEntryDialogTarget,
+  duration: number,
+  noReturn: boolean,
+): number {
   if (target.kind === "tech") return target.tech.ticks;
   if (target.kind === "unit" || target.kind === "recon") return target.ticks;
   if (target.kind === "roid") {
@@ -1289,6 +1428,7 @@ function targetDuration(target: PlanEntryDialogTarget, duration: number): number
   if (target.kind === "catastrophe") {
     return Math.min(CATASTROPHE_DURATION_MAX, Math.max(CATASTROPHE_DURATION_MIN, duration));
   }
+  if (target.kind === "attack") return attackTotalTicks(duration, noReturn);
   return 0;
 }
 

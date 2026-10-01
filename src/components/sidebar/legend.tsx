@@ -10,6 +10,7 @@ const TYPES: { type: JobKind; label: string }[] = [
   { type: "economy", label: "Extraktoren" },
   { type: "roid", label: "Roid" },
   { type: "catastrophe", label: "Katastrophe" },
+  { type: "attack", label: "Angriffsflug" },
   { type: "trade", label: "Trade/Custom" },
   { type: "snapshot", label: "Stand" },
 ];
@@ -21,7 +22,15 @@ export function Legend() {
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {TYPES.map(({ type, label }) => (
           <span key={type} className="inline-flex items-center gap-1.5">
-            <span className={cn("size-2 rounded-[2px] bg-current", jobTypeClass(type))} />
+            <span
+              className={cn(
+                "size-2 rounded-[2px]",
+                // Angriffsflug: dunkles Grau mit blauem Rand wie in der Timeline.
+                type === "attack"
+                  ? "bg-zinc-900 ring-1 ring-blue-500"
+                  : cn("bg-current", jobTypeClass(type)),
+              )}
+            />
             {label}
           </span>
         ))}

@@ -43,6 +43,7 @@ export function jobTypeClass(type: JobKind) {
   if (type === "trade") return "text-zinc-400";
   if (type === "roid") return "text-blue-400";
   if (type === "catastrophe") return "text-red-400";
+  if (type === "attack") return "text-blue-300";
   if (type === "snapshot") return "text-foreground";
   return "text-sky-500";
 }

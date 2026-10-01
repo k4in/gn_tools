@@ -160,6 +160,7 @@ export type JobKind =
   | "custom"
   | "roid"
   | "catastrophe"
+  | "attack"
   | "trade"
   | "snapshot";
 
@@ -175,6 +176,11 @@ export type Job = {
   blocked?: boolean;
   /** Start nach desiredTick, weil Rohstoffe nicht gereicht haben. */
   delayed?: boolean;
+  /**
+   * Nur Angriffsflug: Kampfphase [startTick, endTick] für die Timeline; ab `roidStartTick`
+   * wird geroidet (fehlt = kein Roid).
+   */
+  combat?: { startTick: number; endTick: number; roidStartTick?: number };
 };
 
 export type NamedJob = {
@@ -520,6 +526,8 @@ export function formatPlanEntryLabel(entry: PlanEntry): string {
       return formatRoidPlanLabel(entry.targetMet, entry.targetKris);
     case "catastrophe":
       return formatCatastrophePlanLabel(entry.duration);
+    case "attack":
+      return formatAttackPlanLabel(entry);
     case "snapshot":
       return formatSnapshotPlanLabel(entry);
   }
@@ -540,6 +548,59 @@ export const ROID_DURATION_MIN = 1;
 export const ROID_DURATION_MAX = 10;
 export const CATASTROPHE_DURATION_MIN = 1;
 export const CATASTROPHE_DURATION_MAX = 25;
+/** Hin- bzw. Rückflug eines Angriffs in Ticks. */
+export const ATTACK_FLIGHT_TICKS = 30;
+export const ATTACK_DURATION_MIN = 1;
+export const ATTACK_DURATION_MAX = 10;
+
+export function clampAttackDuration(n: number): number {
+  if (!Number.isFinite(n)) return ATTACK_DURATION_MIN;
+  return Math.min(ATTACK_DURATION_MAX, Math.max(ATTACK_DURATION_MIN, Math.floor(n)));
+}
+
+/**
+ * Erster Kampftick: der Tick nach der Ankunft. Abflug 08:00 → Ankunft 15:30 (+30) →
+ * erster Kampf 15:45 (+31); letzter Kampftick +30+Dauer, Rückkehr +60+Dauer.
+ */
+export function attackFirstCombatTick(startTick: number): number {
+  return startTick + ATTACK_FLIGHT_TICKS + 1;
+}
+
+/** Roid-Ticks eines Angriffs: 1 bis Kampfdauer, ohne Angabe der ganze Kampf. */
+export function clampAttackRoidDuration(roidDuration: number | undefined, duration: number) {
+  const d = clampAttackDuration(duration);
+  if (roidDuration === undefined || !Number.isFinite(roidDuration)) return d;
+  return Math.min(d, Math.max(1, Math.floor(roidDuration)));
+}
+
+/** Erster Roid-Tick: der Roid liegt immer auf den letzten Kampfticks. */
+export function attackRoidStartTick(
+  startTick: number,
+  duration: number,
+  roidDuration: number | undefined,
+): number {
+  return (
+    attackFirstCombatTick(startTick) +
+    clampAttackDuration(duration) -
+    clampAttackRoidDuration(roidDuration, duration)
+  );
+}
+
+/** Gesamtdauer eines Angriffsflugs: Hinflug + Kampf (+ Rückflug). */
+export function attackTotalTicks(duration: number, noReturn = false): number {
+  return (noReturn ? 1 : 2) * ATTACK_FLIGHT_TICKS + clampAttackDuration(duration);
+}
+
+export function formatAttackPlanLabel(entry: {
+  duration: number;
+  targetMet: number;
+  targetKris: number;
+}): string {
+  const d = clampAttackDuration(entry.duration);
+  return entry.targetMet > 0 || entry.targetKris > 0
+    ? `Angriffsflug ${entry.targetMet}/${entry.targetKris} · ${d} T`
+    : `Angriffsflug ${d} T`;
+}
 
 export function clampRoidDuration(n: number): number {
   if (!Number.isFinite(n)) return ROID_DURATION_MIN;
@@ -1122,6 +1183,8 @@ function simulatePlan(
   const extractorQueue: Array<"met" | "kris"> = [];
   let scanverstaerker = 0;
   let firstRoidStartTick: number | null = null;
+  /** Angriffsflüge, bei deren erstem Kampftick noch kein Cleptor fertig war. */
+  const attackMissingCleptor = new Set<string>();
   let cancri = 0;
 
   const entryActualStart: Record<string, number> = {};
@@ -1238,6 +1301,21 @@ function simulatePlan(
         loot: computeRoidLoot(targetMet, targetKris, e.duration, e.multi).perTick,
         desiredTick: e.startTick,
         duration: clampRoidDuration(e.duration),
+        ticksDone: 0,
+      });
+    } else if (e.kind === "attack") {
+      // Angriff ohne Ziel-Exen beeinflusst die Simulation nicht.
+      const targetMet = Math.max(0, Math.floor(e.targetMet));
+      const targetKris = Math.max(0, Math.floor(e.targetKris));
+      if (targetMet <= 0 && targetKris <= 0) continue;
+      const roidDuration = clampAttackRoidDuration(e.roidDuration, e.duration);
+      pendingRoids.push({
+        entryId: e.id,
+        targetMet,
+        targetKris,
+        loot: computeRoidLoot(targetMet, targetKris, roidDuration, e.multi).perTick,
+        desiredTick: attackRoidStartTick(e.startTick, e.duration, e.roidDuration),
+        duration: roidDuration,
         ticksDone: 0,
       });
     } else if (e.kind === "catastrophe") {
@@ -1630,13 +1708,18 @@ function simulatePlan(
         continue;
       }
 
-      if (entry.kind === "roid") {
+      if (entry.kind === "roid" || entry.kind === "attack") {
         const pending = pendingRoids.find((p) => p.entryId === entry.id);
         if (!pending || pending.ticksDone >= pending.duration) continue;
         if (tick < pending.desiredTick) continue;
         if (tick !== pending.desiredTick + pending.ticksDone) continue;
 
-        if (pending.ticksDone === 0) {
+        if (pending.ticksDone === 0 && entry.kind === "attack") {
+          // Balken kommt aus attackSteps(); hier nur festhalten, ob Cleptoren fehlen.
+          if (!completedUnits.has("Cleptor")) attackMissingCleptor.add(entry.id);
+          markEntryStart(entry.id, tick);
+          if (firstRoidStartTick === null) firstRoidStartTick = tick;
+        } else if (pending.ticksDone === 0) {
           steps.push({
             name: formatRoidPlanLabel(pending.targetMet, pending.targetKris),
             type: "roid",
@@ -1814,12 +1897,49 @@ function simulatePlan(
   };
   };
 
+  // Angriffsflug-Balken: keine started/finished-Events → nicht in den Tabellen.
+  // Die Roid-Beute läuft über pendingRoids und erscheint wie gewohnt als Exen-Gewinn.
+  const attackSteps = (): Job[] => {
+    const academyAt = completedAt.get("Marineakademie");
+    return plan.flatMap((e): Job[] => {
+      if (e.kind !== "attack") return [];
+      const combatEnd = e.startTick + ATTACK_FLIGHT_TICKS + clampAttackDuration(e.duration);
+      const hasRoid = e.targetMet > 0 || e.targetKris > 0;
+      return [
+        {
+          name: formatAttackPlanLabel(e),
+          type: "attack",
+          startTick: e.startTick,
+          endTick: e.startTick + attackTotalTicks(e.duration, e.noReturn),
+          cost: { met: 0, kris: 0 },
+          planEntryId: e.id,
+          blocked:
+            academyAt === undefined ||
+            academyAt > e.startTick ||
+            attackMissingCleptor.has(e.id),
+          // Kampfticks liegen auf (Ankunft, Ankunft + Dauer]: 08:00 ab → 15:45–16:45.
+          // Roid-Teil wie die Kampfticks als (Tick − 1, Tick] gezeichnet.
+          combat: {
+            startTick: e.startTick + ATTACK_FLIGHT_TICKS,
+            endTick: combatEnd,
+            ...(hasRoid
+              ? {
+                  roidStartTick:
+                    attackRoidStartTick(e.startTick, e.duration, e.roidDuration) - 1,
+                }
+              : {}),
+          },
+        },
+      ];
+    });
+  };
+
   const resultAt = (finishTick: number) => {
     const slotted = slottedExtractorStats(extractorQueue, extractorSlots);
     return {
       goal: techEntries.at(-1)?.name ?? (plan.length ? formatPlanEntryLabel(plan[plan.length - 1]!) : "Plan"),
       finishTick,
-      steps,
+      steps: [...steps, ...attackSteps()],
       ticks,
       targetSet: techEntries.map((e) => e.name),
       peakWaitTicks,

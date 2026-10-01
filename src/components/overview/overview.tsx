@@ -51,6 +51,8 @@ export type OverviewProps = {
   onSetLivePlan?: () => void;
   inspectTick?: number | null;
   onInspectTick?: (tick: number) => void;
+  /** Uhrzeit zu einem Tick, auch über das Simulationsende hinaus. */
+  tickClock?: (tick: number) => string;
 };
 
 export function Overview({
@@ -76,6 +78,7 @@ export function Overview({
   onSetLivePlan,
   inspectTick = null,
   onInspectTick,
+  tickClock,
 }: OverviewProps) {
   const [tab, setTab] = useState<OverviewTab>("compact");
   const historyStart = historyRangeStart(currentTick, historyWindow);
@@ -164,6 +167,7 @@ export function Overview({
             isActive
             onEditJob={onEditJob}
             onInspectTick={onInspectTick}
+            tickClock={tickClock}
           />
         </div>
 

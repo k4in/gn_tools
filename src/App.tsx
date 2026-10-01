@@ -32,6 +32,10 @@ import {
   getReconItems,
   getResourcesAtTick,
   getShips,
+  attackRoidStartTick,
+  clampAttackDuration,
+  clampAttackRoidDuration,
+  clockLabel,
   hasTechInPlan,
   missingRequiredTechs,
   newPlanEntryId,
@@ -161,6 +165,27 @@ function isPlanEntry(raw: unknown): raw is PlanEntry {
       const duration = o.duration;
       if (typeof duration !== "number" || !Number.isFinite(duration)) return false;
       o.duration = Math.min(25, Math.max(1, Math.floor(duration)));
+      return true;
+    }
+    case "attack": {
+      const duration = o.duration;
+      if (typeof duration !== "number" || !Number.isFinite(duration)) return false;
+      o.duration = clampAttackDuration(duration);
+      if (typeof o.roidDuration === "number" && Number.isFinite(o.roidDuration)) {
+        o.roidDuration = clampAttackRoidDuration(o.roidDuration, o.duration as number);
+      } else {
+        delete o.roidDuration;
+      }
+      // Ziel-Exen sind optional (ältere Angriffsflüge hatten keine).
+      const exen = (v: unknown) =>
+        typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+      o.targetMet = exen(o.targetMet);
+      o.targetKris = exen(o.targetKris);
+      const multi = normalizeRoidMulti(o.multi);
+      if (multi) o.multi = multi;
+      else delete o.multi;
+      if (o.noReturn === true) o.noReturn = true;
+      else delete o.noReturn;
       return true;
     }
     case "snapshot": {
@@ -328,6 +353,20 @@ function collectPlanEntries(raw: unknown): PlanEntry[] | null {
         kind: "catastrophe",
         startTick: Math.max(0, Math.floor(e.startTick)),
         duration: Math.min(25, Math.max(1, Math.floor(e.duration))),
+      });
+      continue;
+    }
+    if (e.kind === "attack") {
+      out.push({
+        id: e.id,
+        kind: "attack",
+        startTick: Math.max(0, Math.floor(e.startTick)),
+        duration: clampAttackDuration(e.duration),
+        roidDuration: clampAttackRoidDuration(e.roidDuration, e.duration),
+        targetMet: Math.max(0, Math.floor(e.targetMet)),
+        targetKris: Math.max(0, Math.floor(e.targetKris)),
+        ...(e.multi ? { multi: normalizeRoidMulti(e.multi) } : {}),
+        ...(e.noReturn ? { noReturn: true } : {}),
       });
       continue;
     }
@@ -703,11 +742,15 @@ export default function App() {
   const hasObservatorium = hasTechInPlan(startCfg.plan, "Observatorium");
   const hasExtraktorTech = hasTechInPlan(startCfg.plan, "Extraktor");
   const hasInterstellarerHandel = hasTechInPlan(startCfg.plan, "Interstellarer Handel");
-  const roidBlocked =
-    !hasTechInPlan(startCfg.plan, "Marineakademie") ||
-    !startCfg.plan.some((e) => e.kind === "unit" && e.name === "Cleptor");
 
-  const maxTick = Math.max(plan?.finishTick ?? 1, 1);
+  const attackBlocked = !hasTechInPlan(startCfg.plan, "Marineakademie");
+
+  // Angriffsflüge zählen nicht zum Planende, sollen in der Timeline aber ganz sichtbar sein.
+  const maxTick = Math.max(
+    plan?.finishTick ?? 1,
+    ...(plan?.steps ?? []).filter((s) => s.type === "attack").map((s) => s.endTick),
+    1,
+  );
   const actionTicks = useMemo(
     () => (plan ? plan.ticks.filter((t) => t.started.length > 0) : []),
     [plan],
@@ -861,32 +904,32 @@ export default function App() {
     setDialogOpen(true);
   };
 
+  // Kampffenster aller Roids (alte Roid-Einträge + Angriffsflüge mit Ziel-Exen).
   const occupiedRoids = (exceptId?: string) =>
-    startCfg.plan
-      .filter(
-        (e): e is Extract<PlanEntry, { kind: "roid" }> =>
-          e.kind === "roid" && e.id !== exceptId,
-      )
-      .map((e) => ({
-        startTick: e.startTick,
-        duration: e.duration,
-        targetMet: e.targetMet,
-        targetKris: e.targetKris,
-      }));
-
-  const openAddRoid = () => {
-    setDialogMode("add");
-    setEditingEntry(null);
-    setDialogTarget({
-      kind: "roid",
-      defaultTick: defaultAddTick(inspectTick, currentTick),
-      defaultTargetMet: 0,
-      defaultTargetKris: 0,
-      defaultDuration: 5,
-      occupiedRoids: occupiedRoids(),
+    startCfg.plan.flatMap((e) => {
+      if (e.id === exceptId) return [];
+      if (e.kind === "roid") {
+        return [
+          {
+            startTick: e.startTick,
+            duration: e.duration,
+            targetMet: e.targetMet,
+            targetKris: e.targetKris,
+          },
+        ];
+      }
+      if (e.kind === "attack" && (e.targetMet > 0 || e.targetKris > 0)) {
+        return [
+          {
+            startTick: attackRoidStartTick(e.startTick, e.duration, e.roidDuration),
+            duration: clampAttackRoidDuration(e.roidDuration, e.duration),
+            targetMet: e.targetMet,
+            targetKris: e.targetKris,
+          },
+        ];
+      }
+      return [];
     });
-    setDialogOpen(true);
-  };
 
   const openAddCatastrophe = () => {
     setDialogMode("add");
@@ -895,6 +938,22 @@ export default function App() {
       kind: "catastrophe",
       defaultTick: defaultAddTick(inspectTick, currentTick),
       defaultDuration: 1,
+    });
+    setDialogOpen(true);
+  };
+
+  const openAddAttack = () => {
+    setDialogMode("add");
+    setEditingEntry(null);
+    setDialogTarget({
+      kind: "attack",
+      defaultTick: defaultAddTick(inspectTick, currentTick),
+      defaultDuration: 5,
+      defaultRoidDuration: 5,
+      defaultTargetMet: 0,
+      defaultTargetKris: 0,
+      defaultNoReturn: false,
+      occupiedRoids: occupiedRoids(),
     });
     setDialogOpen(true);
   };
@@ -1053,6 +1112,18 @@ export default function App() {
         defaultTick: entry.startTick,
         defaultDuration: entry.duration,
       });
+    } else if (entry.kind === "attack") {
+      setDialogTarget({
+        kind: "attack",
+        defaultTick: entry.startTick,
+        defaultDuration: entry.duration,
+        defaultRoidDuration: clampAttackRoidDuration(entry.roidDuration, entry.duration),
+        defaultTargetMet: entry.targetMet,
+        defaultTargetKris: entry.targetKris,
+        defaultMulti: entry.multi,
+        defaultNoReturn: !!entry.noReturn,
+        occupiedRoids: occupiedRoids(entry.id),
+      });
     } else if (entry.kind === "snapshot") {
       setDialogTarget({
         kind: "snapshot",
@@ -1082,6 +1153,8 @@ export default function App() {
     targetKris?: number;
     duration?: number;
     multi?: RoidMulti;
+    noReturn?: boolean;
+    roidDuration?: number;
   }) => {
     if (!dialogTarget) return;
 
@@ -1145,6 +1218,22 @@ export default function App() {
               ...e,
               startTick: values.startTick,
               duration: Math.min(25, Math.max(1, values.duration ?? e.duration)),
+            };
+          }
+          if (e.kind === "attack") {
+            return {
+              id: e.id,
+              kind: "attack",
+              startTick: values.startTick,
+              duration: clampAttackDuration(values.duration ?? e.duration),
+              roidDuration: clampAttackRoidDuration(
+                values.roidDuration ?? e.roidDuration,
+                values.duration ?? e.duration,
+              ),
+              targetMet: Math.max(0, values.targetMet ?? e.targetMet),
+              targetKris: Math.max(0, values.targetKris ?? e.targetKris),
+              ...(values.multi ? { multi: values.multi } : {}),
+              ...(values.noReturn ? { noReturn: true } : {}),
             };
           }
           if (e.kind === "snapshot") {
@@ -1289,6 +1378,22 @@ export default function App() {
       return;
     }
 
+    if (dialogTarget.kind === "attack") {
+      const entry: PlanEntry = {
+        id: newPlanEntryId("atk"),
+        kind: "attack",
+        startTick: values.startTick,
+        duration: clampAttackDuration(values.duration ?? 5),
+        roidDuration: clampAttackRoidDuration(values.roidDuration, values.duration ?? 5),
+        targetMet: Math.max(0, values.targetMet ?? 0),
+        targetKris: Math.max(0, values.targetKris ?? 0),
+        ...(values.multi ? { multi: values.multi } : {}),
+        ...(values.noReturn ? { noReturn: true } : {}),
+      };
+      updateCurrentPlan((plan) => [...plan, entry]);
+      return;
+    }
+
     if (dialogTarget.kind === "snapshot") {
       const entry: PlanEntry = {
         id: newPlanEntryId("snap"),
@@ -1370,13 +1475,13 @@ export default function App() {
               recon={allRecon}
               hasObservatorium={hasObservatorium}
               hasExtraktorTech={hasExtraktorTech}
-              roidBlocked={roidBlocked}
+              attackBlocked={attackBlocked}
               onAddTech={openAddTech}
               onAddUnit={openAddUnit}
               onAddRecon={openAddRecon}
               onAddEconomy={openAddEconomy}
-              onAddRoid={openAddRoid}
               onAddCatastrophe={openAddCatastrophe}
+              onAddAttack={openAddAttack}
               onAddCustom={openAddCustom}
               onAddTrade={openAddTrade}
               hasInterstellarerHandel={hasInterstellarerHandel}
@@ -1390,6 +1495,7 @@ export default function App() {
             historyWindow={appState.historyWindow}
             inspectTick={inspectTick}
             onInspectTick={setInspectTick}
+            tickClock={(tick) => clockLabel(startCfg, tick)}
             hasPlan={!!plan}
             slotShortage={plan ? getExtractorSlotShortage(plan) : null}
             exportJson={JSON.stringify({ plan: startCfg.plan, taxes: startCfg.taxes }, null, 2)}

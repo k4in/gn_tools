@@ -22,7 +22,7 @@ export type SidebarProps = {
   recon: Utility[];
   hasObservatorium: boolean;
   hasExtraktorTech: boolean;
-  roidBlocked?: boolean;
+  attackBlocked?: boolean;
   onAddTech: (name: string) => void;
   onAddUnit: (name: string) => void;
   onAddRecon: (name: string) => void;
@@ -31,8 +31,8 @@ export type SidebarProps = {
     extractorsMet?: number;
     extractorsKris?: number;
   }) => void;
-  onAddRoid: () => void;
   onAddCatastrophe: () => void;
+  onAddAttack: () => void;
   onAddCustom: () => void;
   onAddTrade: () => void;
   hasInterstellarerHandel: boolean;
@@ -49,13 +49,13 @@ export function Sidebar({
   recon,
   hasObservatorium,
   hasExtraktorTech,
-  roidBlocked = false,
+  attackBlocked = false,
   onAddTech,
   onAddUnit,
   onAddRecon,
   onAddEconomy,
-  onAddRoid,
   onAddCatastrophe,
+  onAddAttack,
   onAddCustom,
   onAddTrade,
   hasInterstellarerHandel,
@@ -90,11 +90,11 @@ export function Sidebar({
           <Economy
             hasObservatorium={hasObservatorium}
             hasExtraktorTech={hasExtraktorTech}
-            roidBlocked={roidBlocked}
+            attackBlocked={attackBlocked}
             hasInterstellarerHandel={hasInterstellarerHandel}
             onAddEconomy={onAddEconomy}
-            onAddRoid={onAddRoid}
             onAddCatastrophe={onAddCatastrophe}
+            onAddAttack={onAddAttack}
             onAddCustom={onAddCustom}
             onAddTrade={onAddTrade}
           />

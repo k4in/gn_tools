@@ -53,7 +53,10 @@ export type PlanEntry =
       /** Menge die vom anderen Rohstoff ankommt. */
       receiveAmount: number;
     }
-  /** Extraktoren erbeuten (Roid): 10% der Ziel-Exen pro Tick, kostenlos. */
+  /**
+   * Extraktoren erbeuten (Roid): 10% der Ziel-Exen pro Tick, kostenlos.
+   * @deprecated Neue Roids laufen über `attack`; bestehende Einträge bleiben gültig.
+   */
   | {
       id: string;
       kind: "roid";
@@ -74,6 +77,31 @@ export type PlanEntry =
       startTick: number;
       /** Anzahl Angriffs-Ticks (1–25). */
       duration: number;
+    }
+  /**
+   * Angriffsflug: 30 Ticks Hinflug, Kampf (1–10 Ticks), 30 Ticks Rückflug. Mit Ziel-Exen
+   * wird im Kampf wie beim Roid erbeutet; ohne Ziel-Exen nur in der Timeline.
+   */
+  | {
+      id: string;
+      kind: "attack";
+      /** Abflug-Tick. */
+      startTick: number;
+      /** Anzahl Kampf-Ticks (1–10). */
+      duration: number;
+      /**
+       * Roid-Ticks (1–duration), immer die letzten Kampfticks; davor reiner Flottenkampf.
+       * Fehlt = ganzer Kampf ist Roid.
+       */
+      roidDuration?: number;
+      /** Opfer-Bestand Metall-Exen zum Roid-Beginn (0 = kein Roid). */
+      targetMet: number;
+      /** Opfer-Bestand Kristall-Exen zu Kampfbeginn (0 = kein Roid). */
+      targetKris: number;
+      /** Weitere Angreifer gleichzeitig: Beute wird anteilig nach Cleptoren aufgeteilt. */
+      multi?: RoidMulti;
+      /** Angriff endet nach dem Kampf (kein Rückflug). */
+      noReturn?: boolean;
     }
   /** Manueller Ressourcen-/Exen-Stand ab diesem Tick. */
   | {

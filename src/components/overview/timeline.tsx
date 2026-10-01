@@ -5,7 +5,12 @@ import {
   TooltipTrigger,
 } from "@/components/shadcn/tooltip";
 import { StatusDot } from "@/components/sidebar/status-dot";
-import { type Job, type JobKind, type TickSnapshot } from "@/lib/calculateFastestWayToGoal";
+import {
+  attackFirstCombatTick,
+  type Job,
+  type JobKind,
+  type TickSnapshot,
+} from "@/lib/calculateFastestWayToGoal";
 import { cn } from "@/lib/utils/cn";
 
 /** Sichtbare Breite der Timeline in Ticks (Viewport): 2 Tage bei 15-Minuten-Ticks. */
@@ -23,6 +28,8 @@ export type TimelineProps = {
   isActive?: boolean;
   onEditJob?: (planEntryId: string | undefined) => void;
   onInspectTick?: (tick: number) => void;
+  /** Uhrzeit zu einem Tick; ohne wird die Uhrzeit aus den Snapshots genommen. */
+  tickClock?: (tick: number) => string;
 };
 
 function snapshotAtOrBefore(ticks: TickSnapshot[] | undefined, tick: number) {
@@ -47,11 +54,13 @@ function tickFromClick(
   return Math.round(rangeStart + ratio * domainLength);
 }
 
-type TimelineLane = "tech" | "fleet" | "econ";
+type TimelineLane = "tech" | "fleet" | "econ" | "attack";
 
 function laneOf(type: JobKind): TimelineLane {
   if (type === "building" || type === "research") return "tech";
   if (type === "unit" || type === "recon") return "fleet";
+  // Alte Roid-Einträge liegen mit den Angriffsflügen in einer Zeile (rein optisch).
+  if (type === "attack" || type === "roid") return "attack";
   return "econ";
 }
 
@@ -90,6 +99,7 @@ export function Timeline({
   isActive = false,
   onEditJob,
   onInspectTick,
+  tickClock,
 }: TimelineProps) {
   const xScrollRef = useRef<HTMLDivElement>(null);
   const rangeStart = Math.max(0, historyStartTick);
@@ -173,7 +183,7 @@ export function Timeline({
     if (labels.length) job.name = labels.join(" + ");
   }
 
-  const byLane: Record<TimelineLane, Job[]> = { tech: [], fleet: [], econ: [] };
+  const byLane: Record<TimelineLane, Job[]> = { tech: [], fleet: [], econ: [], attack: [] };
   for (const job of grouped.values()) {
     const displayEnd = job.endTick === job.startTick ? job.startTick + 0.5 : job.endTick;
     if (displayEnd <= rangeStart || job.startTick >= domainEnd) continue;
@@ -183,6 +193,7 @@ export function Timeline({
     "tech",
     "fleet",
     "econ",
+    "attack",
   ] as const).map((lane) => packRows(byLane[lane])).filter((rows) => rows.length > 0);
 
   const rowHeight = 32;
@@ -277,11 +288,26 @@ export function Timeline({
                   const isResearch = s.type === "research";
                   const top = row.top;
                   const clickable = !!s.planEntryId && !!onEditJob;
-                  const startSnap = snapshotAtOrBefore(ticks, s.startTick);
-                  const endSnap =
-                    s.endTick === s.startTick
-                      ? startSnap
-                      : snapshotAtOrBefore(ticks, s.endTick);
+                  const clockAt = (tick: number) =>
+                    tickClock ? tickClock(tick) : snapshotAtOrBefore(ticks, tick)?.clockLabel;
+                  const startClock = clockAt(s.startTick);
+                  const endClock = s.endTick === s.startTick ? startClock : clockAt(s.endTick);
+                  // Kampfphase relativ zum (ggf. abgeschnittenen) Balken einfärben:
+                  // dunkelblau = Flottenkampf, hellblau = Roid (immer die letzten Kampfticks).
+                  const barTicks = Math.max(endClamped - start, 1);
+                  const band = (from: number, to: number) => {
+                    const a = Math.max(start, Math.min(from, endClamped));
+                    const b = Math.max(a, Math.min(to, endClamped));
+                    return b > a
+                      ? {
+                          left: ((a - start) / barTicks) * 100,
+                          width: ((b - a) / barTicks) * 100,
+                        }
+                      : null;
+                  };
+                  const roidFrom = s.combat?.roidStartTick ?? s.combat?.endTick ?? 0;
+                  const fightBand = s.combat ? band(s.combat.startTick, roidFrom) : null;
+                  const roidBand = s.combat ? band(roidFrom, s.combat.endTick) : null;
                   return (
                     <Tooltip key={`${s.name}-${s.startTick}-${s.planEntryId ?? ""}`}>
                       <TooltipTrigger
@@ -301,6 +327,7 @@ export function Timeline({
                               s.type === "economy" && "bg-cyan-500/20 text-cyan-300",
                               s.type === "roid" && "bg-blue-800/35 text-blue-400",
                               s.type === "catastrophe" && "bg-red-800/35 text-red-400",
+                              s.type === "attack" && "bg-zinc-900 text-zinc-300",
                               s.type === "snapshot" && "bg-foreground/10 text-foreground",
                               s.type === "custom" && "bg-silver-500/20 text-silver-500",
                               s.type === "trade" && "bg-zinc-500/20 text-zinc-400",
@@ -315,6 +342,7 @@ export function Timeline({
                                     s.type === "economy" && "ring-cyan-500/40",
                                     s.type === "roid" && "ring-blue-700/50",
                                     s.type === "catastrophe" && "ring-red-700/50",
+                                    s.type === "attack" && "ring-blue-500",
                                     s.type === "snapshot" && "ring-0 outline-1 -outline-offset-1 outline-dashed outline-foreground/50",
                                     s.type === "custom" && "ring-silver-500/40",
                                     s.type === "trade" && "ring-zinc-500/40",
@@ -331,7 +359,21 @@ export function Timeline({
                           />
                         }
                       >
-                        <span className="flex min-w-0 items-center">
+                        {fightBand && (
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-y-0 bg-blue-700"
+                            style={{ left: `${fightBand.left}%`, width: `${fightBand.width}%` }}
+                          />
+                        )}
+                        {roidBand && (
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute inset-y-0 bg-sky-400/70"
+                            style={{ left: `${roidBand.left}%`, width: `${roidBand.width}%` }}
+                          />
+                        )}
+                        <span className="relative flex min-w-0 items-center">
                           <span className="truncate font-medium">{s.name}</span>
                           {s.delayed ? <StatusDot kind="delayed" /> : null}
                         </span>
@@ -344,17 +386,33 @@ export function Timeline({
                         {s.endTick === s.startTick ? (
                           <span className="tabular-nums text-muted-foreground">
                             Tick {s.startTick}
-                            {startSnap ? ` – ${startSnap.clockLabel}` : ""}
+                            {startClock ? ` – ${startClock}` : ""}
                           </span>
                         ) : (
                           <>
                             <span className="tabular-nums text-muted-foreground">
                               Start: Tick {s.startTick}
-                              {startSnap ? ` – ${startSnap.clockLabel}` : ""}
+                              {startClock ? ` – ${startClock}` : ""}
                             </span>
+                            {s.combat && (
+                              <span className="tabular-nums text-blue-400">
+                                Kampf: Tick {attackFirstCombatTick(s.startTick)}–{s.combat.endTick}
+                                {clockAt(attackFirstCombatTick(s.startTick))
+                                  ? ` – ${clockAt(attackFirstCombatTick(s.startTick))} bis ${clockAt(s.combat.endTick)}`
+                                  : ""}
+                              </span>
+                            )}
+                            {s.combat?.roidStartTick != null && (
+                              <span className="tabular-nums text-sky-400">
+                                Roid: Tick {s.combat.roidStartTick + 1}–{s.combat.endTick}
+                                {clockAt(s.combat.roidStartTick + 1)
+                                  ? ` – ${clockAt(s.combat.roidStartTick + 1)} bis ${clockAt(s.combat.endTick)}`
+                                  : ""}
+                              </span>
+                            )}
                             <span className="tabular-nums text-muted-foreground">
                               Ende: Tick {s.endTick}
-                              {endSnap ? ` – ${endSnap.clockLabel}` : ""}
+                              {endClock ? ` – ${endClock}` : ""}
                             </span>
                           </>
                         )}
