@@ -80,7 +80,7 @@ export function Overview({
   onInspectTick,
   tickClock,
 }: OverviewProps) {
-  const [tab, setTab] = useState<OverviewTab>("compact");
+  const [tab, setTab] = useState<OverviewTab>("detailed");
   const historyStart = historyRangeStart(currentTick, historyWindow);
   const visibleLogTicks = useMemo(
     () => (historyStart <= 0 ? logTicks : logTicks.filter((t) => t.tick >= historyStart)),
