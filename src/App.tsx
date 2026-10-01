@@ -1441,6 +1441,7 @@ export default function App() {
           onOpenChange={setDialogOpen}
           mode={dialogMode}
           target={dialogTarget}
+          startCfg={startCfg}
           entry={editingEntry}
           onSubmit={handleDialogSubmit}
           onRemove={dialogMode === "edit" ? handleDialogRemove : undefined}

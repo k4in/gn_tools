@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftRight, Plus, X } from "lucide-react";
 import { Button } from "@/components/shadcn/button";
 import {
   Dialog,
@@ -29,6 +29,7 @@ import {
   extractorUnitCost,
   CATASTROPHE_DURATION_MAX,
   CATASTROPHE_DURATION_MIN,
+  clockLabel,
   formatCatastrophePlanLabel,
   formatRes,
   formatRoidPlanLabel,
@@ -41,6 +42,7 @@ import {
   type PlanEntry,
   type RoidCoAttacker,
   type RoidMulti,
+  type StartConfig,
 } from "@/lib/calculateFastestWayToGoal";
 import type { TechTreeEntry } from "@/gn-data/techtree";
 import type { Defense } from "@/gn-data/defense";
@@ -176,6 +178,8 @@ export type PlanEntryDialogProps = {
   onOpenChange: (open: boolean) => void;
   mode: PlanEntryDialogMode;
   target: PlanEntryDialogTarget | null;
+  /** Für Uhrzeit-Anzeige von Start- und End-Tick. */
+  startCfg: StartConfig;
   /** Existing entry when editing. */
   entry?: PlanEntry | null;
   onSubmit: (values: PlanEntryDialogSubmit) => void;
@@ -197,13 +201,15 @@ export function PlanEntryDialog({
   onOpenChange,
   mode,
   target,
+  startCfg,
   entry,
   onSubmit,
   onRemove,
   resolveMaxCount,
   resolveEconomyAtTick,
 }: PlanEntryDialogProps) {
-  const [startTick, setStartTick] = useState(0);
+  /** Wert im Tick-Feld: Start- oder End-Tick, je nach `tickInputMode`. */
+  const [tickInput, setTickInput] = useState(0);
   const [count, setCount] = useState(1);
   const [asteroidCount, setAsteroidCount] = useState(0);
   const [extractorMetCount, setExtractorMetCount] = useState(0);
@@ -220,11 +226,29 @@ export function PlanEntryDialog({
   const [multiEnabled, setMultiEnabled] = useState(false);
   const [ownCleptors, setOwnCleptors] = useState(0);
   const [coAttackers, setCoAttackers] = useState<RoidCoAttacker[]>([]);
+  /** Ob das Tick-Feld den Start- oder den End-Tick bearbeitet (bleibt zwischen Dialogen erhalten). */
+  const [tickInputMode, setTickInputMode] = useState<"start" | "end">("start");
+  // Nur beim Öffnen gelesen: Umschalten soll den Feldwert nicht neu setzen.
+  const tickInputModeRef = useRef(tickInputMode);
+  tickInputModeRef.current = tickInputMode;
+
+  const entryDuration = target ? targetDuration(target, duration) : 0;
+  const editsEndTick = entryDuration > 0 && tickInputMode === "end";
+  const startTick = editsEndTick ? Math.max(0, tickInput - entryDuration) : tickInput;
+  const endTick = startTick + entryDuration;
 
   useEffect(() => {
     if (!open || !target) return;
     if (mode === "edit" && entry) {
-      setStartTick(entry.startTick);
+      const entryDur =
+        entry.kind === "roid" || entry.kind === "catastrophe"
+          ? targetDuration(target, entry.duration)
+          : targetDuration(target, 0);
+      setTickInput(
+        tickInputModeRef.current === "end" && entryDur > 0
+          ? entry.startTick + entryDur
+          : entry.startTick,
+      );
       if (entry.kind === "economy") {
         setAsteroidCount(Math.max(0, entry.asteroids));
         setExtractorMetCount(Math.max(0, entry.extractorsMet));
@@ -287,7 +311,8 @@ export function PlanEntryDialog({
       return;
     }
 
-    setStartTick(target.defaultTick);
+    // Default ist immer der aktuelle/ausgewählte Tick, egal ob Start oder Ende.
+    setTickInput(target.defaultTick);
     if (target.kind === "unit" || target.kind === "recon") {
       setCount(Math.max(1, target.defaultCount));
     } else if (target.kind === "economy") {
@@ -421,6 +446,62 @@ export function PlanEntryDialog({
   };
 
   if (!target) return null;
+
+  const timeRows =
+    entryDuration > 0 ? (
+      <>
+        <dt className="text-muted-foreground">Start</dt>
+        <dd className="tabular-nums">{clockLabel(startCfg, startTick)}</dd>
+        <dt className="text-muted-foreground">Ende</dt>
+        <dd className="tabular-nums">{clockLabel(startCfg, endTick)}</dd>
+      </>
+    ) : (
+      <>
+        <dt className="text-muted-foreground">Zeitpunkt</dt>
+        <dd className="tabular-nums">{clockLabel(startCfg, startTick)}</dd>
+      </>
+    );
+
+  const tickField = (
+    <Field className={target.kind === "economy" ? "w-full" : "w-auto"}>
+      <FieldLabel htmlFor="plan-start-tick">
+        {editsEndTick ? "End-Tick" : "Start-Tick"}
+      </FieldLabel>
+      <div className="flex items-center gap-2">
+        <InputGroup className={target.kind === "economy" ? undefined : "w-28"}>
+          <InputGroupInput
+            id="plan-start-tick"
+            type="number"
+            min={0}
+            value={tickInput}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (!Number.isFinite(n)) return;
+              setTickInput(Math.max(0, Math.floor(n)));
+            }}
+            className="tabular-nums"
+          />
+        </InputGroup>
+        {entryDuration > 0 && (
+          <>
+            <span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+              {editsEndTick ? `Start: Tick ${startTick}` : `Ende: Tick ${endTick}`}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              title={editsEndTick ? "Start-Tick angeben" : "End-Tick angeben"}
+              aria-label={editsEndTick ? "Start-Tick angeben" : "End-Tick angeben"}
+              onClick={() => setTickInputMode(editsEndTick ? "start" : "end")}
+            >
+              <ArrowLeftRight />
+            </Button>
+          </>
+        )}
+      </div>
+    </Field>
+  );
 
   const title = (() => {
     if (target.kind === "tech") return target.tech.name;
@@ -557,8 +638,15 @@ export function PlanEntryDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3 text-sm">
+          {target.kind !== "tech" && target.kind !== "unit" && target.kind !== "recon" && (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              {timeRows}
+            </dl>
+          )}
+
           {target.kind === "tech" && (
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              {timeRows}
               <dt className="text-muted-foreground">Typ</dt>
               <dd>{target.tech.type === "building" ? "Gebäude" : "Forschung"}</dd>
               <dt className="text-muted-foreground">Dauer</dt>
@@ -578,6 +666,7 @@ export function PlanEntryDialog({
 
           {(target.kind === "unit" || target.kind === "recon") && (
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              {timeRows}
               <dt className="text-muted-foreground">Dauer / Stück</dt>
               <dd className="tabular-nums">{target.ticks} Ticks</dd>
               <dt className="text-muted-foreground">Kosten / Stück</dt>
@@ -690,25 +779,7 @@ export function PlanEntryDialog({
           )}
 
           <div className={target.kind === "economy" || target.kind === "trade" || target.kind === "snapshot" ? "flex flex-col gap-3" : "flex flex-wrap items-end gap-3"}>
-            {target.kind !== "trade" && (
-            <Field className={target.kind === "economy" ? "w-full" : "w-28"}>
-              <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
-              <InputGroup>
-                <InputGroupInput
-                  id="plan-start-tick"
-                  type="number"
-                  min={0}
-                  value={startTick}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (!Number.isFinite(n)) return;
-                    setStartTick(Math.max(0, Math.floor(n)));
-                  }}
-                  className="tabular-nums"
-                />
-              </InputGroup>
-            </Field>
-            )}
+            {target.kind !== "trade" && tickField}
 
             {(target.kind === "unit" || target.kind === "recon") && (
               <Field className="w-28">
@@ -733,23 +804,7 @@ export function PlanEntryDialog({
             {target.kind === "trade" && (
               <>
                 <div className="flex w-full flex-wrap items-end gap-3">
-                  <Field className="w-28">
-                    <FieldLabel htmlFor="plan-start-tick">Start-Tick</FieldLabel>
-                    <InputGroup>
-                      <InputGroupInput
-                        id="plan-start-tick"
-                        type="number"
-                        min={0}
-                        value={startTick}
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          if (!Number.isFinite(n)) return;
-                          setStartTick(Math.max(0, Math.floor(n)));
-                        }}
-                        className="tabular-nums"
-                      />
-                    </InputGroup>
-                  </Field>
+                  {tickField}
                   <Field className="min-w-40 flex-1">
                     <FieldLabel>Rohstoff</FieldLabel>
                     <RadioGroup
@@ -1222,6 +1277,19 @@ export function PlanEntryDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Dauer eines Eintrags in Ticks (0 = sofort); `duration` nur für Roid/Katastrophe. */
+function targetDuration(target: PlanEntryDialogTarget, duration: number): number {
+  if (target.kind === "tech") return target.tech.ticks;
+  if (target.kind === "unit" || target.kind === "recon") return target.ticks;
+  if (target.kind === "roid") {
+    return Math.min(ROID_DURATION_MAX, Math.max(ROID_DURATION_MIN, duration));
+  }
+  if (target.kind === "catastrophe") {
+    return Math.min(CATASTROPHE_DURATION_MAX, Math.max(CATASTROPHE_DURATION_MIN, duration));
+  }
+  return 0;
 }
 
 function formatRoidShare(loot: ReturnType<typeof computeRoidLoot>): string {
