@@ -762,8 +762,8 @@ export function StartplanPage() {
           startCfg={startCfg}
           plan={plan}
           nextAction={nextAction}
-          onApplyStart={({ start_date, start_time, tick_minutes }) => {
-            setAppState((prev) => ({ ...prev, start_date, start_time, tick_minutes }));
+          onApplyStart={({ start_date, start_time, tick_minutes, round_end_tick }) => {
+            setAppState((prev) => ({ ...prev, start_date, start_time, tick_minutes, round_end_tick }));
           }}
           historyWindow={appState.historyWindow}
           onHistoryWindowChange={(historyWindow) => {

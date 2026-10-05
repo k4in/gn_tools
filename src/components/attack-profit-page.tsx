@@ -120,7 +120,7 @@ export function AttackProfitPage() {
   const captured = parseAmount(draft.capturedExtractors);
   const costPerExtractor = parseAmount(draft.costPerExtractor);
   const perDay = ticksPerDay(cfg);
-  const roundEndTick = cfg.max_ticks;
+  const roundEndTick = cfg.round_end_tick;
 
   const result = useMemo(() => {
     if (!economy) return null;

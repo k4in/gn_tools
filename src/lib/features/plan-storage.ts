@@ -367,6 +367,7 @@ function normalizeConfig(raw: unknown): StartConfig {
     start_date: defaultConfig.start_date,
     tick_minutes: defaultConfig.tick_minutes,
     max_ticks: defaultConfig.max_ticks,
+    round_end_tick: defaultConfig.round_end_tick,
     starting_resources: {
       metall: defaultConfig.starting_resources.metall,
       kristall: defaultConfig.starting_resources.kristall,
@@ -422,12 +423,18 @@ function normalizeConfig(raw: unknown): StartConfig {
 
   const tick_minutes = typeof obj.tick_minutes === "number" && obj.tick_minutes > 0 ? obj.tick_minutes : base.tick_minutes;
   const max_ticks = typeof obj.max_ticks === "number" && obj.max_ticks > base.max_ticks ? obj.max_ticks : base.max_ticks;
+  // Fehlt in alten Saves → Standard-Rundenende.
+  const round_end_tick =
+    typeof obj.round_end_tick === "number" && Number.isFinite(obj.round_end_tick) && obj.round_end_tick > 0
+      ? Math.floor(obj.round_end_tick)
+      : base.round_end_tick;
 
   return {
     start_time,
     start_date,
     tick_minutes,
     max_ticks,
+    round_end_tick,
     starting_resources: { metall, kristall },
     taxes: normalizeTaxes(obj.taxes),
     plan,
@@ -447,6 +454,7 @@ export type PersistedAppState = {
   start_date: string;
   tick_minutes: number;
   max_ticks: number;
+  round_end_tick: number;
   starting_resources: { metall: number; kristall: number };
   activePlanId: PlanSlotId;
   /** Kosmetisch: welcher Slot gerade gespielt wird. Fehlt in alten Saves. */
@@ -456,12 +464,15 @@ export type PersistedAppState = {
   plans: Record<PlanSlotId, StoredPlan>;
 };
 
-function sharedFromConfig(cfg: Pick<StartConfig, "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "starting_resources">) {
+function sharedFromConfig(
+  cfg: Pick<StartConfig, "start_time" | "start_date" | "tick_minutes" | "max_ticks" | "round_end_tick" | "starting_resources">
+) {
   return {
     start_time: cfg.start_time,
     start_date: cfg.start_date,
     tick_minutes: cfg.tick_minutes,
     max_ticks: cfg.max_ticks,
+    round_end_tick: cfg.round_end_tick,
     starting_resources: {
       metall: cfg.starting_resources.metall,
       kristall: cfg.starting_resources.kristall,

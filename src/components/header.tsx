@@ -1,6 +1,6 @@
 import { ExtractorsDialog } from "@/components/extractors-dialog.tsx";
 import { JobList } from "@/components/overview/actionplan.tsx";
-import { SettingsDialog } from "@/components/settings-dialog.tsx";
+import { SettingsDialog, type AppliedSettings } from "@/components/settings-dialog.tsx";
 import { type ReactNode } from "react";
 import { type HistoryWindow } from "@/lib/history-window.ts";
 import { Badge } from "@/components/shadcn/badge.tsx";
@@ -21,7 +21,7 @@ export type HeaderProps = {
   startCfg: StartConfig;
   plan: PlanResult | null;
   nextAction: TickSnapshot | null;
-  onApplyStart: (next: { start_date: string; start_time: string; tick_minutes: number }) => void;
+  onApplyStart: (next: AppliedSettings) => void;
   historyWindow: HistoryWindow;
   onHistoryWindowChange: (next: HistoryWindow) => void;
   planSwitcher?: ReactNode;
@@ -79,6 +79,7 @@ export function Header({
               startDate={startCfg.start_date}
               startTime={startCfg.start_time}
               tickMinutes={startCfg.tick_minutes}
+              roundEndTick={startCfg.round_end_tick}
               onApplyStart={onApplyStart}
               historyWindow={historyWindow}
               onHistoryWindowChange={onHistoryWindowChange}

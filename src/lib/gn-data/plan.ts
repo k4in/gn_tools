@@ -155,6 +155,8 @@ export const defaults: {
   tick_minutes: number;
   /** Simulations-Horizont / Safety-Cap in Ticks. */
   max_ticks: number;
+  /** Voraussichtliches Rundenende in Ticks. */
+  round_end_tick: number;
   starting_resources: { metall: number; kristall: number };
   taxes: { fromTick: number; met: number; kris: number }[];
   plan: PlanEntry[];
@@ -163,6 +165,7 @@ export const defaults: {
   start_date: "2026-08-28",
   tick_minutes: 15,
   max_ticks: 80 * 96,
+  round_end_tick: 80 * 96,
   starting_resources: {
     metall: 10500,
     kristall: 10500,

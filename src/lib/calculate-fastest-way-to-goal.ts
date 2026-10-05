@@ -59,6 +59,8 @@ export type StartConfig = {
   tick_minutes: number;
   /** Simulations-Horizont / Safety-Cap in Ticks. */
   max_ticks: number;
+  /** Voraussichtliches Rundenende in Ticks; die Simulation läuft mindestens bis hier. */
+  round_end_tick: number;
   starting_resources: { metall: number; kristall: number };
   /** Steuer-Abschnitte; Tick 0 ist immer 0%/0%. */
   taxes: TaxSegment[];
@@ -114,12 +116,12 @@ function projectWithIncome(start: Res, fromTick: number, toTick: number, grossIn
   return { met, kris };
 }
 
-function tickMinutesOf(startCfg: StartConfig) {
+function tickMinutesOf(startCfg: Pick<StartConfig, "tick_minutes">) {
   return startCfg.tick_minutes > 0 ? startCfg.tick_minutes : defaults.tick_minutes;
 }
 
 function maxTicksOf(startCfg: StartConfig) {
-  return startCfg.max_ticks > 0 ? startCfg.max_ticks : defaults.max_ticks;
+  return Math.max(startCfg.max_ticks > 0 ? startCfg.max_ticks : defaults.max_ticks, startCfg.round_end_tick);
 }
 
 export type Res = { met: number; kris: number };
@@ -383,7 +385,7 @@ export function formatTimeUntilTick(startCfg: StartConfig, tick: number, now: Da
   return `in ${hours} ${hours === 1 ? "Stunde" : "Stunden"} und ${String(minutes).padStart(2, "0")} Minuten`;
 }
 
-export function clockLabel(startCfg: StartConfig, tick: number) {
+export function clockLabel(startCfg: Pick<StartConfig, "start_time" | "start_date" | "tick_minutes">, tick: number) {
   const base = parseStartMinutes(startCfg.start_time);
   const total = base + tick * tickMinutesOf(startCfg);
   const dayOffset = Math.floor(total / (24 * 60));
