@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AngriffRouteImport } from './routes/angriff'
 import { Route as KampfwerteRouteImport } from './routes/kampfwerte'
 import { Route as ScanRouteImport } from './routes/scan'
 import { Route as ScanIndexRouteImport } from './routes/scan/index'
@@ -19,6 +20,11 @@ import { Route as ScanSektorRouteImport } from './routes/scan/sektor'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AngriffRoute = AngriffRouteImport.update({
+  id: '/angriff',
+  path: '/angriff',
   getParentRoute: () => rootRouteImport,
 } as any)
 const KampfwerteRoute = KampfwerteRouteImport.update({
@@ -49,6 +55,7 @@ const ScanSektorRoute = ScanSektorRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/angriff': typeof AngriffRoute
   '/kampfwerte': typeof KampfwerteRoute
   '/scan': typeof ScanRouteWithChildren
   '/scan/news': typeof ScanNewsRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/angriff': typeof AngriffRoute
   '/kampfwerte': typeof KampfwerteRoute
   '/scan/news': typeof ScanNewsRoute
   '/scan/sektor': typeof ScanSektorRoute
@@ -65,6 +73,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/angriff': typeof AngriffRoute
   '/kampfwerte': typeof KampfwerteRoute
   '/scan': typeof ScanRouteWithChildren
   '/scan/news': typeof ScanNewsRoute
@@ -74,12 +83,19 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/kampfwerte' | '/scan' | '/scan/news' | '/scan/sektor' | '/scan/'
+    | '/'
+    | '/angriff'
+    | '/kampfwerte'
+    | '/scan'
+    | '/scan/news'
+    | '/scan/sektor'
+    | '/scan/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/kampfwerte' | '/scan/news' | '/scan/sektor' | '/scan'
+  to: '/' | '/angriff' | '/kampfwerte' | '/scan/news' | '/scan/sektor' | '/scan'
   id:
     | '__root__'
     | '/'
+    | '/angriff'
     | '/kampfwerte'
     | '/scan'
     | '/scan/news'
@@ -89,6 +105,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AngriffRoute: typeof AngriffRoute
   KampfwerteRoute: typeof KampfwerteRoute
   ScanRoute: typeof ScanRouteWithChildren
 }
@@ -100,6 +117,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/angriff': {
+      id: '/angriff'
+      path: '/angriff'
+      fullPath: '/angriff'
+      preLoaderRoute: typeof AngriffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/kampfwerte': {
@@ -156,6 +180,7 @@ const ScanRouteWithChildren = ScanRoute._addFileChildren(ScanRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AngriffRoute: AngriffRoute,
   KampfwerteRoute: KampfwerteRoute,
   ScanRoute: ScanRouteWithChildren,
 }

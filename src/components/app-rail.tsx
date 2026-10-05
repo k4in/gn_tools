@@ -1,6 +1,6 @@
 import { type ComponentType } from "react";
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { CalendarClock, ScanText, Swords } from "lucide-react";
+import { CalendarClock, ScanText, Swords, TrendingUp } from "lucide-react";
 import { InfoDialog } from "@/components/info-dialog.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip.tsx";
 import { cn } from "@/lib/utils/cn.ts";
@@ -15,6 +15,7 @@ const TOOLS: RailTool[] = [
   { label: "Planer", icon: CalendarClock, to: "/" },
   { label: "Scan-Auswertung", icon: ScanText, to: "/scan" },
   { label: "Kampfwerte-Matrix", icon: Swords, to: "/kampfwerte" },
+  { label: "Lohnt sich der Angriff?", icon: TrendingUp, to: "/angriff" },
 ];
 
 const ITEM_CLASS =

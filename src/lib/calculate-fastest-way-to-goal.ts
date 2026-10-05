@@ -317,7 +317,7 @@ function criticalPathSet(goal: string, map: Map<string, TechTreeEntry>) {
   return path;
 }
 
-function incomeFrom(completed: Set<string>): Res {
+export function incomeFrom(completed: Set<string>): Res {
   let met = 0;
   let kris = 0;
   for (const name of completed) {
