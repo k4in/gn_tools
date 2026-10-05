@@ -7,8 +7,9 @@ import { type PlanEntry } from "@/lib/gn-data/plan.ts";
 import { ActionPlan } from "@/components/overview/actionplan.tsx";
 import { Protocol } from "@/components/overview/protocol.tsx";
 import { Timeline } from "@/components/overview/timeline.tsx";
-import { CircleDot, Crosshair } from "lucide-react";
+import { CircleDot, Crosshair, Link2, Unlink } from "lucide-react";
 import { Button } from "@/components/shadcn/button.tsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip.tsx";
 import { Separator } from "@/components/shadcn/separator.tsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn/tabs.tsx";
 import { type ExtractorSlotShortage, type Job, type TaxSegment, type TickSnapshot } from "@/lib/calculate-fastest-way-to-goal.ts";
@@ -34,6 +35,9 @@ export type OverviewProps = {
   onResetPlan?: (sourceId: string) => void;
   taxes?: TaxSegment[];
   onAddSnapshot?: () => void;
+  /** Quereinstieg: fehlende Voraussetzungen bei Einheiten und Wirtschaft ignorieren. */
+  ignoreNonTechDeps?: boolean;
+  onIgnoreNonTechDepsChange?: (next: boolean) => void;
   onApplyTaxes?: (taxes: TaxSegment[]) => void;
   isLivePlan?: boolean;
   onSetLivePlan?: () => void;
@@ -61,6 +65,8 @@ export function Overview({
   onResetPlan,
   taxes = [],
   onAddSnapshot,
+  ignoreNonTechDeps = false,
+  onIgnoreNonTechDepsChange,
   onApplyTaxes,
   isLivePlan = false,
   onSetLivePlan,
@@ -96,6 +102,31 @@ export function Overview({
                 <Crosshair data-icon="inline-start" />
                 Stand setzen
               </Button>
+            )}
+            {onIgnoreNonTechDepsChange && (
+              <Tooltip>
+                <TooltipTrigger
+                  // Der Tooltip bleibt beim Umschalten offen, damit die Erklärung zum neuen Zustand sichtbar ist.
+                  closeOnClick={false}
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      aria-pressed={ignoreNonTechDeps}
+                      onClick={() => onIgnoreNonTechDepsChange(!ignoreNonTechDeps)}
+                      className="aria-pressed:border-amber-500/60 aria-pressed:bg-amber-500/10 aria-pressed:text-amber-300 aria-pressed:hover:bg-amber-500/20"
+                    />
+                  }
+                >
+                  {ignoreNonTechDeps ? <Link2 data-icon="inline-start" /> : <Unlink data-icon="inline-start" />}
+                  Quereinstieg
+                </TooltipTrigger>
+                <TooltipContent>
+                  {ignoreNonTechDeps
+                    ? "Aktiv: Fehlende Voraussetzungen bei Einheiten und Wirtschaft werden ignoriert. Gebäude und Forschung werden weiter geprüft."
+                    : "Fehlende Voraussetzungen bei Einheiten und Wirtschaft ignorieren. Gebäude und Forschung werden weiter geprüft."}
+                </TooltipContent>
+              </Tooltip>
             )}
             {slotShortage && (
               <p role="alert" className="min-w-0 truncate text-xs text-destructive">

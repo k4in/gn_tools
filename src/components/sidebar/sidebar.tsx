@@ -27,6 +27,8 @@ export type SidebarProps = {
   onAddCustom: () => void;
   onAddTrade: () => void;
   hasInterstellarerHandel: boolean;
+  /** Quereinstieg: Einheiten und Wirtschaft ohne „Voraussetzung fehlt“-Markierung. */
+  ignoreMissingDeps?: boolean;
 };
 
 const PANEL_CLASS = "flex min-h-0 flex-1 flex-col gap-0 overflow-hidden data-hidden:hidden";
@@ -50,6 +52,7 @@ export function Sidebar({
   onAddCustom,
   onAddTrade,
   hasInterstellarerHandel,
+  ignoreMissingDeps = false,
 }: SidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar/40">
@@ -67,7 +70,15 @@ export function Sidebar({
         </TabsContent>
 
         <TabsContent value="units" className={PANEL_CLASS}>
-          <Units ships={ships} defenses={defenses} recon={recon} planned={plannedTechs} onAdd={onAddUnit} onAddRecon={onAddRecon} />
+          <Units
+            ships={ships}
+            defenses={defenses}
+            recon={recon}
+            planned={plannedTechs}
+            ignoreMissingDeps={ignoreMissingDeps}
+            onAdd={onAddUnit}
+            onAddRecon={onAddRecon}
+          />
         </TabsContent>
 
         <TabsContent value="economy" className={PANEL_CLASS}>
@@ -76,6 +87,7 @@ export function Sidebar({
             hasExtraktorTech={hasExtraktorTech}
             attackBlocked={attackBlocked}
             hasInterstellarerHandel={hasInterstellarerHandel}
+            ignoreMissingDeps={ignoreMissingDeps}
             onAddEconomy={onAddEconomy}
             onAddCatastrophe={onAddCatastrophe}
             onAddAttack={onAddAttack}

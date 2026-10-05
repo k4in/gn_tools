@@ -8,6 +8,8 @@ export type EconomyProps = {
   hasExtraktorTech: boolean;
   attackBlocked?: boolean;
   hasInterstellarerHandel: boolean;
+  /** Quereinstieg: keine „Voraussetzung fehlt“-Markierung. */
+  ignoreMissingDeps?: boolean;
   onAddEconomy: (preset?: { asteroids?: number; extractorsMet?: number; extractorsKris?: number }) => void;
   onAddCatastrophe: () => void;
   onAddAttack: () => void;
@@ -21,13 +23,16 @@ export function Economy({
   hasExtraktorTech,
   attackBlocked = false,
   hasInterstellarerHandel,
+  ignoreMissingDeps = false,
   onAddEconomy,
   onAddCatastrophe,
   onAddAttack,
   onAddCustom,
   onAddTrade,
 }: EconomyProps) {
-  const economyBlocked = !hasObservatorium && !hasExtraktorTech;
+  const economyBlocked = !ignoreMissingDeps && !hasObservatorium && !hasExtraktorTech;
+  const showAttackBlocked = !ignoreMissingDeps && attackBlocked;
+  const tradeBlocked = !ignoreMissingDeps && !hasInterstellarerHandel;
 
   return (
     <ScrollArea className="min-h-0 flex-1">
@@ -51,7 +56,7 @@ export function Economy({
             title={
               <>
                 Angriffsflug
-                {attackBlocked ? <StatusDot kind="blocked" /> : null}
+                {showAttackBlocked ? <StatusDot kind="blocked" /> : null}
               </>
             }
             meta="Extraktoren erbeuten in 1–10 Ticks"
@@ -72,7 +77,7 @@ export function Economy({
             title={
               <>
                 Trade
-                {hasInterstellarerHandel ? null : <StatusDot kind="blocked" />}
+                {tradeBlocked ? <StatusDot kind="blocked" /> : null}
               </>
             }
             meta="Rohstoffe mit Spielern oder Galaxie tauschen"

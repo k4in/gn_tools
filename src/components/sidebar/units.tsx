@@ -12,6 +12,8 @@ export type UnitsProps = {
   defenses: Defense[];
   recon: Utility[];
   planned: Set<string>;
+  /** Quereinstieg: keine „Voraussetzung fehlt“-Markierung. */
+  ignoreMissingDeps?: boolean;
   onAdd: (name: string) => void;
   onAddRecon: (name: string) => void;
 };
@@ -23,7 +25,17 @@ type Buildable = {
   dependencies: string[];
 };
 
-function UnitRows({ items, planned, onAdd }: { items: Buildable[]; planned: Set<string>; onAdd: (name: string) => void }) {
+function UnitRows({
+  items,
+  planned,
+  ignoreMissingDeps,
+  onAdd,
+}: {
+  items: Buildable[];
+  planned: Set<string>;
+  ignoreMissingDeps: boolean;
+  onAdd: (name: string) => void;
+}) {
   return (
     <ul className="flex flex-col px-1.5">
       {items.map((item) => (
@@ -34,7 +46,7 @@ function UnitRows({ items, planned, onAdd }: { items: Buildable[]; planned: Set<
           title={
             <>
               {item.name}
-              {item.dependencies.some((dep) => !planned.has(dep)) ? <StatusDot kind="blocked" /> : null}
+              {!ignoreMissingDeps && item.dependencies.some((dep) => !planned.has(dep)) ? <StatusDot kind="blocked" /> : null}
             </>
           }
           meta={`${item.ticks} T · ${formatRes(item.cost.met)} M · ${formatRes(item.cost.kris)} K`}
@@ -44,16 +56,16 @@ function UnitRows({ items, planned, onAdd }: { items: Buildable[]; planned: Set<
   );
 }
 
-export function Units({ ships, defenses, recon, planned, onAdd, onAddRecon }: UnitsProps) {
+export function Units({ ships, defenses, recon, planned, ignoreMissingDeps = false, onAdd, onAddRecon }: UnitsProps) {
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="pb-2">
         <SidebarSectionLabel>Raumschiffe</SidebarSectionLabel>
-        <UnitRows items={ships} planned={planned} onAdd={onAdd} />
+        <UnitRows items={ships} planned={planned} ignoreMissingDeps={ignoreMissingDeps} onAdd={onAdd} />
         <SidebarSectionLabel>Geschütze</SidebarSectionLabel>
-        <UnitRows items={defenses} planned={planned} onAdd={onAdd} />
+        <UnitRows items={defenses} planned={planned} ignoreMissingDeps={ignoreMissingDeps} onAdd={onAdd} />
         <SidebarSectionLabel>Aufklärung</SidebarSectionLabel>
-        <UnitRows items={recon} planned={planned} onAdd={onAddRecon} />
+        <UnitRows items={recon} planned={planned} ignoreMissingDeps={ignoreMissingDeps} onAdd={onAddRecon} />
       </div>
     </ScrollArea>
   );

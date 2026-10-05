@@ -446,6 +446,8 @@ const STORAGE_VERSION = 3 as const;
 export type StoredPlan = {
   plan: PlanEntry[];
   taxes: TaxSegment[];
+  /** Quereinstieg: fehlende Voraussetzungen bei Einheiten und Wirtschaft ignorieren. Fehlt in alten Saves. */
+  ignoreNonTechDeps?: boolean;
 };
 
 export type PersistedAppState = {
@@ -488,6 +490,7 @@ export function cloneStoredPlan(stored: StoredPlan): StoredPlan {
   return {
     plan: clonePlanEntries(stored.plan),
     taxes: stored.taxes.map((seg) => ({ ...seg })),
+    ...(stored.ignoreNonTechDeps ? { ignoreNonTechDeps: true } : {}),
   };
 }
 
@@ -496,11 +499,12 @@ function normalizeStoredPlan(raw: unknown, fallbackTaxes: TaxSegment[] = []): St
     return { plan: normalizePlan(raw), taxes: fallbackTaxes };
   }
   if (raw && typeof raw === "object") {
-    const o = raw as { plan?: unknown; taxes?: unknown };
+    const o = raw as { plan?: unknown; taxes?: unknown; ignoreNonTechDeps?: unknown };
     if ("plan" in o) {
       return {
         plan: normalizePlan(o.plan),
         taxes: o.taxes !== undefined ? normalizeTaxes(o.taxes) : fallbackTaxes,
+        ...(o.ignoreNonTechDeps === true ? { ignoreNonTechDeps: true } : {}),
       };
     }
   }
@@ -513,6 +517,7 @@ export function configFromState(state: PersistedAppState, planId: PlanSlotId): S
     ...sharedFromConfig(state),
     plan: stored.plan,
     taxes: stored.taxes,
+    ignore_non_tech_deps: stored.ignoreNonTechDeps === true,
   };
 }
 

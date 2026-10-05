@@ -64,6 +64,8 @@ export type StartConfig = {
   starting_resources: { metall: number; kristall: number };
   /** Steuer-Abschnitte; Tick 0 ist immer 0%/0%. */
   taxes: TaxSegment[];
+  /** Quereinstieg: fehlende Voraussetzungen nur bei Gebäuden/Forschung markieren. */
+  ignore_non_tech_deps?: boolean;
   plan: PlanEntry[];
 };
 
@@ -2000,6 +2002,10 @@ export function calculateFastestWayToGoal(startCfg: StartConfig): PlanResult {
 
   return {
     ...sim,
+    // Beim Quereinstieg fehlen Techs bewusst im Plan – nur Gebäude/Forschung bleiben markiert.
+    steps: startCfg.ignore_non_tech_deps
+      ? sim.steps.map((s) => (s.blocked && s.type !== "building" && s.type !== "research" ? { ...s, blocked: false } : s))
+      : sim.steps,
     goal,
     critical,
     start: { ...startCfg, plan },

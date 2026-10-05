@@ -800,6 +800,7 @@ export function StartplanPage() {
             onAddCustom={openAddCustom}
             onAddTrade={openAddTrade}
             hasInterstellarerHandel={hasInterstellarerHandel}
+            ignoreMissingDeps={startCfg.ignore_non_tech_deps}
           />
           <Overview
             actionTicks={actionTicks}
@@ -838,6 +839,13 @@ export function StartplanPage() {
             onResetPlan={resetPlan}
             taxes={startCfg.taxes}
             onAddSnapshot={openAddSnapshot}
+            ignoreNonTechDeps={startCfg.ignore_non_tech_deps}
+            onIgnoreNonTechDepsChange={(ignoreNonTechDeps) => {
+              setAppState((prev) => ({
+                ...prev,
+                plans: { ...prev.plans, [viewId]: { ...prev.plans[viewId], ignoreNonTechDeps } },
+              }));
+            }}
             onApplyTaxes={(next) => {
               setAppState((prev) => {
                 const current = prev.plans[viewId];
