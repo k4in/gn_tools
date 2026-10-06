@@ -176,8 +176,9 @@ export function SettingsDialog({
               </InputGroup>
               <FieldDescription>Dauer eines Ticks in Minuten.</FieldDescription>
             </Field>
-            <Field data-invalid={parsedRoundEndTick === null || undefined}>
+            <Field data-disabled="true">
               <FieldLabel htmlFor="settings-round-end-tick">Voraussichtliche Rundenlänge</FieldLabel>
+              {/* Legacy: Das Angriffs-Tool rechnet mit festen Stichtagen, die Einstellung bleibt für später erhalten. */}
               <InputGroup>
                 <InputGroupInput
                   id="settings-round-end-tick"
@@ -186,14 +187,13 @@ export function SettingsDialog({
                   step={1}
                   inputMode="numeric"
                   value={roundEndTick}
-                  aria-invalid={parsedRoundEndTick === null || undefined}
+                  disabled
                   className="tabular-nums"
-                  onChange={(event) => setRoundEndTick(event.target.value)}
                 />
                 <InputGroupAddon align="inline-end">Ticks</InputGroupAddon>
               </InputGroup>
               <FieldDescription>
-                {roundEndPreview ? `Ergibt ein Enddatum am ${roundEndPreview}.` : "Tick, an dem die Runde endet."}
+                Legacy-Einstellung, derzeit nicht änderbar.{roundEndPreview ? ` Ergibt ein Enddatum am ${roundEndPreview}.` : null}
               </FieldDescription>
             </Field>
           </FieldSet>

@@ -23,8 +23,8 @@ export type AttackProfitResult = {
   incomeWith: number;
   /** Ticks ab Bewertungs-Tick, bis der Flottenverlust wieder eingespielt ist; null = nicht im Horizont. */
   breakEvenTicks: number | null;
-  /** Vorsprung mit Angriff gegenüber ohne Angriff am Rundenende; null = Runde bereits vorbei. */
-  gainAtRoundEnd: number | null;
+  /** Vorsprung mit Angriff gegenüber ohne Angriff je Stichtag (gleiche Reihenfolge wie übergeben); null = Stichtag bereits vorbei. */
+  gainsAt: (number | null)[];
 };
 
 /**
@@ -41,30 +41,34 @@ function netIncome(state: EconomyState, extractors: number, tick: number): numbe
 /**
  * Vergleicht „nichts tun“ mit „angreifen“: Der Angriff kostet sofort `captured × costPerExtractor`,
  * bringt danach aber jeden Tick mehr Einkommen. Gesucht ist der Tick, ab dem die Summe mit Angriff
- * die Summe ohne Angriff einholt. Die Beute gilt vereinfacht ab dem nächsten Tick als produzierend.
+ * die Summe ohne Angriff einholt, sowie der Vorsprung an den übergebenen Stichtagen (absolute Ticks).
+ * Die Beute gilt vereinfacht ab dem nächsten Tick als produzierend.
  */
 export function calculateAttackProfit(
   state: EconomyState,
   input: AttackInput,
-  roundEndTick: number,
+  milestoneTicks: number[],
   horizonTicks: number
 ): AttackProfitResult {
   const captured = Math.max(0, Math.floor(input.capturedExtractors));
   const loss = captured * Math.max(0, input.costPerExtractor);
-  const ticksToRoundEnd = roundEndTick - state.tick;
+  const ticksToMilestones = milestoneTicks.map((tick) => tick - state.tick);
+  const lastMilestone = Math.max(0, ...ticksToMilestones);
 
   let without = 0;
   let withAttack = -loss;
   let breakEvenTicks: number | null = loss <= 0 ? 0 : null;
-  let gainAtRoundEnd: number | null = ticksToRoundEnd <= 0 ? null : 0;
+  const gainsAt: (number | null)[] = ticksToMilestones.map(() => null);
 
-  for (let k = 1; k <= Math.max(horizonTicks, ticksToRoundEnd); k++) {
+  for (let k = 1; k <= Math.max(horizonTicks, lastMilestone); k++) {
     const tick = state.tick + k;
     without += netIncome(state, state.extractors, tick);
     withAttack += netIncome(state, state.extractors + captured, tick);
     if (breakEvenTicks === null && withAttack >= without) breakEvenTicks = k;
-    if (k === ticksToRoundEnd) gainAtRoundEnd = withAttack - without;
-    if (breakEvenTicks !== null && k >= ticksToRoundEnd) break;
+    ticksToMilestones.forEach((ticks, i) => {
+      if (ticks === k) gainsAt[i] = withAttack - without;
+    });
+    if (breakEvenTicks !== null && k >= lastMilestone) break;
   }
 
   return {
@@ -72,6 +76,6 @@ export function calculateAttackProfit(
     incomeWithout: netIncome(state, state.extractors, state.tick + 1),
     incomeWith: netIncome(state, state.extractors + captured, state.tick + 1),
     breakEvenTicks,
-    gainAtRoundEnd,
+    gainsAt,
   };
 }
