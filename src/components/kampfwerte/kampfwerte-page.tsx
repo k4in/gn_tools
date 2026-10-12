@@ -13,7 +13,7 @@ function Formula({ children }: { children: ReactNode }) {
 export function KampfwertePage() {
   return (
     <main className="min-w-0 flex-1 overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
+      <div className="flex flex-col gap-6 px-6 py-8">
         <div>
           <h1 className="font-heading text-xl font-semibold tracking-tight">Kampfwerte-Matrix</h1>
           <p className="mt-1 text-xs text-muted-foreground">
