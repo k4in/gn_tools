@@ -56,12 +56,12 @@ export function NewsScanPage() {
       help={
         <>
           <p>
-            Einfügen lässt sich ein <span className="text-foreground">Newsscan</span>, kopiert aus der Scan-Datenbank oder direkt aus
-            WhatsApp. Die Auswertung zeigt, wann welche Flotte kämpft.
+            Einfügen lässt sich ein <span className="text-foreground">Newsscan</span>, kopiert aus der Scan-Datenbank, direkt aus WhatsApp
+            oder aus der Scan-Ansicht („Newsscan Ergebnis“). Die Auswertung zeigt, wann welche Flotte kämpft.
           </p>
           <p>
             Ausgewertet wird immer ab <span className="text-foreground">jetzt</span>: Es zählen die Einträge der letzten 10 Stunden, eine
-            Zeitmarke braucht es nicht. Zurückgezogene Flotten werden ausgeblendet.
+            Zeitmarke braucht es nicht. Zurückgezogene Flotten werden ausgeblendet, Kampfberichte und Artilleriebeschuss ignoriert.
           </p>
         </>
       }

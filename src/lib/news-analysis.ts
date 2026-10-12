@@ -1,5 +1,5 @@
 import { defaults } from "@/lib/gn-data/plan.ts";
-import { type NewsEntry, type NewsScan } from "@/lib/scan-parser.ts";
+import { type NewsEntry, type NewsNotice, type NewsScan } from "@/lib/scan-parser.ts";
 
 /**
  * Auswertung eines Newsscans: wann welche Flotte ankommt und in welchen Ticks
@@ -80,6 +80,8 @@ export type NewsAnalysis = {
   /** Flotten ohne die zurückgezogenen; die tauchen nur noch in `retreats` auf. */
   fleets: Fleet[];
   retreats: Retreat[];
+  /** Sonstige Meldungen (Reparatur, Spende, Tauschangebot) der letzten 10 Stunden, nur zur Anzeige. */
+  notices: NewsNotice[];
 };
 
 export function coordsKey(e: { galaxy: number; planet: number }) {
@@ -103,7 +105,10 @@ export function analyzeNews(
   now = Date.now()
 ): NewsAnalysis {
   const reference = now;
-  const entries = news.entries.filter((e) => e.time >= reference - NEWS_WINDOW_MS && e.time <= reference).sort((a, b) => a.time - b.time);
+  function inWindow(e: { time: number }) {
+    return e.time >= reference - NEWS_WINDOW_MS && e.time <= reference;
+  }
+  const entries = news.entries.filter(inWindow).sort((a, b) => a.time - b.time);
   const targetGalaxy = news.target.galaxy;
 
   const fleets: Fleet[] = entries
@@ -178,6 +183,7 @@ export function analyzeNews(
     ignoredCount: news.entries.length - entries.length,
     fleets: fleets.filter((f) => !recalledIds.has(f.id)),
     retreats,
+    notices: news.notices.filter(inWindow).sort((a, b) => a.time - b.time),
   };
 }
 

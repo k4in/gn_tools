@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Input } from "@/components/shadcn/input.tsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn/tooltip.tsx";
 import { Separator } from "@/components/shadcn/separator.tsx";
 import {
   ARTILLERY,
@@ -18,7 +19,7 @@ import {
   type Fleet,
   type NewsAnalysis,
 } from "@/lib/news-analysis.ts";
-import { type NewsScan } from "@/lib/scan-parser.ts";
+import { type NewsNotice, type NewsScan } from "@/lib/scan-parser.ts";
 import { useNow } from "@/hooks/useNow.tsx";
 import { cn } from "@/lib/utils/cn.ts";
 
@@ -333,6 +334,38 @@ function CombatClock({ now, start, end }: { now: number; start: number | null; e
   );
 }
 
+/**
+ * Sonstige Meldungen je Art gezählt, z. B. „1× Reparatur“. Ausgewertet wird
+ * nichts; der Tooltip zeigt die Meldungen selbst.
+ */
+function NewsNotices({ notices }: { notices: NewsNotice[] }) {
+  if (notices.length === 0) return null;
+  const byTitle = new Map<string, NewsNotice[]>();
+  for (const n of notices) byTitle.set(n.title, [...(byTitle.get(n.title) ?? []), n]);
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-yellow-300">
+      <span>Weitere Meldungen:</span>
+      {[...byTitle].map(([title, group]) => (
+        <Tooltip key={title}>
+          <TooltipTrigger className="cursor-default rounded-md border border-yellow-300/30 bg-yellow-300/10 px-2 py-0.5 font-medium transition-colors hover:bg-yellow-300/20">
+            {group.length}× {title}
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="start" className="max-w-sm flex-col items-start gap-3">
+            {group.map((n) => (
+              <div key={n.time} className="flex flex-col gap-1">
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {formatDateTime(n.time)} · {n.title}
+                </span>
+                <p className="whitespace-pre-line">{n.text}</p>
+              </div>
+            ))}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
 export type NewsViewState = {
   /** Ticks im Orbit je Flotten-ID; fehlt ein Eintrag, gilt das Maximum. */
   fleetTicks: Record<string, number>;
@@ -357,6 +390,8 @@ export function NewsAnalysisView({
   return (
     <div className="flex flex-col gap-5">
       <CombatClock now={now} start={start} end={end} />
+
+      <NewsNotices notices={analysis.notices} />
 
       {openRetreats.map((r) => (
         <div

@@ -40,6 +40,15 @@ import { type ShipName } from "@/lib/gn-data/ships.ts";
  * variieren. Ohne „Scans von“-Zeile gehören die Scans zum ausgewerteten
  * Spieler (erster Sektor- bzw. Newsscan mit Namen).
  *
+ * Newsscans gibt es zusätzlich im Format der Scan-Ansicht, je Meldung eine
+ * Kopfzeile mit Zeitpunkt und Art, darunter der Text (siehe parseNewsResult):
+ *
+ *   Newsscan Ergebnis (Genauigkeit: 100%)
+ *   Name:	Lavada
+ *   Koordinaten:	30:2
+ *   [12/10-2026 09:32:30] Angriff
+ *   Kommandant! 7:7 KINgBingeling greift Sie mit Flotte 2 an! …
+ *
  * Im klassischen Format steht der Scan-Zeitpunkt nicht im Scan. Dafür gibt es Zeitmarken als eigene
  * Zeile („@ 23.09. 14:30“, „@ 23.09.2026 14:30“ oder „@ 14:30“ für den Tag der
  * vorigen Marke). Eine Marke gilt für alle Scans darunter bis zur nächsten.
@@ -113,9 +122,17 @@ export type NewsEntry = {
   fleet: number | null;
 };
 
+/** Sonstige Meldung im Newsscan: „Reparatur“, „Spende“ oder „Tauschangebot“; wird nur angezeigt, nicht ausgewertet. */
+export type NewsNotice = {
+  title: string;
+  time: number;
+  text: string;
+};
+
 export type NewsScan = ScanBase & {
   kind: "news";
   entries: NewsEntry[];
+  notices: NewsNotice[];
 };
 
 export type Scan = SectorScan | UnitScan | DefenseScan | PointsScan | NewsScan;
@@ -231,6 +248,20 @@ const NEWS_TYPES: Record<string, NewsEntryType> = {
   Angriff: "attack",
   Rückzug: "retreat",
 };
+/** Kopf des Newsscans aus der Scan-Ansicht: „Newsscan Ergebnis (Genauigkeit: 100%)“. */
+const NEWS_RESULT_HEADER_RE = /^Newsscan Ergebnis\s*\(Genauigkeit:\s*(\d{1,3})\s*%\)$/i;
+const NEWS_RESULT_NAME_RE = /^Name:\s*(.+)$/;
+const NEWS_RESULT_COORDS_RE = /^Koordinaten:\s*(\d+):(\d+)$/;
+/** Kopfzeile einer Meldung: „[12/10-2026 09:32:30] Angriff“ oder „… Rückzug (2:7)“. */
+const NEWS_RESULT_ENTRY_RE = /^\[(\d{1,2})\/(\d{1,2})-(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\]\s+(.+)$/;
+/** „Kommandant! 7:7 KINgBingeling greift Sie mit Flotte 2 an! …“ */
+const NEWS_RESULT_ATTACK_RE = /^Kommandant!\s+(\d+):(\d+)\s+(.+?)\s+greift Sie mit Flotte\s+(\d+)\s+an!/;
+/** „30:9 Carolyne wird uns im Kampf mit Flotte 2 zur Seite stehen, …“ */
+const NEWS_RESULT_DEFENSE_RE = /^(\d+):(\d+)\s+(.+?)\s+wird uns im Kampf mit Flotte\s+(\d+)\s+zur Seite stehen/;
+/** „Kommandant! k4in 2:7 hat seine Flotte zurückgerufen!“ */
+const NEWS_RESULT_RETREAT_RE = /^Kommandant!\s+(.+?)\s+(\d+):(\d+)\s+hat\s+\S+\s+Flotte zurückgerufen!/;
+/** Meldungen, die nur angezeigt werden; alle anderen (Kampfberichte, Artillerie, …) fallen weg. */
+const NEWS_RESULT_NOTICE_RE = /^(Reparatur|Spende|Tauschangebot)\b/i;
 const POINTS_RE = /^(\d+):(\d+)\s+(.+?)\s+(\d{1,3}(?:\.\d{3})*)\s+(\d+)$/;
 const MARKER_RE = /^@\s*(?:(\d{1,2})\.(\d{1,2})\.(\d{4})?\s+)?(\d{1,2}):(\d{2})$/;
 
@@ -238,7 +269,13 @@ const MARKER_RE = /^@\s*(?:(\d{1,2})\.(\d{1,2})\.(\d{4})?\s+)?(\d{1,2}):(\d{2})$
 export function containsScan(text: string) {
   return text.split(/\r?\n/).some((raw) => {
     const line = normalizeLine(raw);
-    return HEADER_RE.test(line) || POINTS_RE.test(line) || TIMESTAMPED_HEADER_RE.test(line) || SCANS_FROM_RE.test(line);
+    return (
+      HEADER_RE.test(line) ||
+      POINTS_RE.test(line) ||
+      TIMESTAMPED_HEADER_RE.test(line) ||
+      SCANS_FROM_RE.test(line) ||
+      NEWS_RESULT_HEADER_RE.test(line)
+    );
   });
 }
 
@@ -503,7 +540,76 @@ export function parseNewsScan(base: ScanBase, lines: string[], warnings: string[
       fleet: fleet !== undefined ? Number(fleet) : null,
     });
   }
-  return { ...base, kind: "news", entries };
+  return { ...base, kind: "news", entries, notices: [] };
+}
+
+/** Text einer Meldung im Format der Scan-Ansicht → Angriff, Verteidigung bzw. Rückzug. */
+function parseNewsResultEntry(type: NewsEntryType, time: number, text: string): NewsEntry | null {
+  if (type === "retreat") {
+    const match = NEWS_RESULT_RETREAT_RE.exec(text);
+    if (!match) return null;
+    const [, player, galaxy, planet] = match;
+    return { type, time, galaxy: Number(galaxy), planet: Number(planet), player, fleet: null };
+  }
+  const match = (type === "attack" ? NEWS_RESULT_ATTACK_RE : NEWS_RESULT_DEFENSE_RE).exec(text);
+  if (!match) return null;
+  const [, galaxy, planet, player, fleet] = match;
+  return { type, time, galaxy: Number(galaxy), planet: Number(planet), player, fleet: Number(fleet) };
+}
+
+/**
+ * Newsscan im Format der Scan-Ansicht („Newsscan Ergebnis …“). Ausgewertet
+ * werden Angriff, Verteidigung und Rückzug; Reparatur, Spende und
+ * Tauschangebot werden als Hinweis mitgenommen, alle anderen Meldungen
+ * (Kampfberichte, Artillerie, …) fallen weg. Name und Koordinaten stehen vor der ersten Meldung.
+ */
+export function parseNewsResult(base: ScanBase, lines: string[], warnings: string[]): NewsScan {
+  const entries: NewsEntry[] = [];
+  const notices: NewsNotice[] = [];
+  let player: string | null = null;
+  let coords: { galaxy: number; planet: number } | null = null;
+  let message: { title: string; time: number; lines: string[] } | null = null;
+
+  function finish() {
+    if (!message) return;
+    const text = message.lines.join("\n");
+    // „Rückzug (2:7)“ → „Rückzug“
+    const kind = message.title.replace(/\s*\(.*\)$/, "");
+    const type = NEWS_TYPES[kind];
+    if (type) {
+      const entry = parseNewsResultEntry(type, message.time, text);
+      if (entry) entries.push(entry);
+      else warnings.push(`Newsscan-Meldung nicht erkannt: „${message.title}: ${text}“`);
+    } else {
+      const notice = NEWS_RESULT_NOTICE_RE.exec(kind);
+      if (notice) notices.push({ title: notice[1], time: message.time, text });
+    }
+    message = null;
+  }
+
+  for (const line of lines) {
+    const header = NEWS_RESULT_ENTRY_RE.exec(line);
+    if (header) {
+      finish();
+      const [, day, month, year, h, m, sec, title] = header;
+      const time = new Date(Number(year), Number(month) - 1, Number(day), Number(h), Number(m), Number(sec)).getTime();
+      message = { title: title.trim(), time, lines: [] };
+      continue;
+    }
+    if (message) {
+      message.lines.push(line);
+      continue;
+    }
+    const name = NEWS_RESULT_NAME_RE.exec(line);
+    const coordsMatch = NEWS_RESULT_COORDS_RE.exec(line);
+    if (name) player = name[1].trim();
+    else if (coordsMatch) coords = { galaxy: Number(coordsMatch[1]), planet: Number(coordsMatch[2]) };
+    else warnings.push(`Nicht erkannt: „${line}“`);
+  }
+  finish();
+
+  const target = player !== null && coords !== null ? { player, ...coords } : UNKNOWN_TARGET;
+  return { ...base, target, anonymous: target === UNKNOWN_TARGET, kind: "news", entries, notices };
 }
 
 /** Zerlegt einen eingefügten Text in einzelne Scans und parst jeden davon. */
@@ -517,6 +623,8 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
     timestamped?: boolean;
     /** Datum steht in der nächsten Zeile. */
     awaitingDate?: boolean;
+    /** Newsscan im Format „Newsscan Ergebnis …“. */
+    newsResult?: boolean;
   } | null = null;
   let time: number | undefined;
   /** Spieler aus der letzten „Scans von …“-Zeile, gilt für die folgenden Scans mit Zeitpunkt. */
@@ -524,6 +632,11 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
 
   function flush() {
     if (!current) return;
+    if (current.newsResult) {
+      result.scans.push(parseNewsResult(current.base, current.lines, result.warnings));
+      current = null;
+      return;
+    }
     if (current.timestamped) {
       const scan = parseTimestampedScan(current.base, current.lines, result.warnings);
       if (scan) result.scans.push(scan);
@@ -543,6 +656,24 @@ export function parseScans(text: string, now = new Date()): ScanParseResult {
     const line = normalizeLine(rawLine);
     // Leerzeilen variieren je nach Kopie und beenden keinen Scan.
     if (!line) continue;
+
+    const newsResult = NEWS_RESULT_HEADER_RE.exec(line);
+    if (newsResult) {
+      flush();
+      current = { type: "News", base: { accuracy: Number(newsResult[1]), target: UNKNOWN_TARGET, time }, lines: [], newsResult: true };
+      continue;
+    }
+    // Die Meldungen enthalten Zeilen aller Art (Kampfberichte, …); bis zum nächsten Scan gehören alle dazu.
+    if (
+      current?.newsResult &&
+      !HEADER_RE.test(line) &&
+      !TIMESTAMPED_HEADER_RE.test(line) &&
+      !SCANS_FROM_RE.test(line) &&
+      !MARKER_RE.test(line)
+    ) {
+      current.lines.push(line);
+      continue;
+    }
 
     const scansFrom = SCANS_FROM_RE.exec(line);
     if (scansFrom) {
