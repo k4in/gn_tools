@@ -1,15 +1,5 @@
 import { getExtractorYield } from "@/lib/gn-data/extractor.ts";
-import { taxRatesAt, taxedIncome, type Res, type TaxSegment } from "@/lib/calculate-fastest-way-to-goal.ts";
-
-/** Wirtschaftsstand, von dem aus der Angriff bewertet wird. */
-export type EconomyState = {
-  /** Tick, ab dem gerechnet wird (Steuern gelten ab hier pro Tick). */
-  tick: number;
-  extractors: number;
-  /** Brutto-Einkommen der Minen (inkl. Koloniezentrum) pro Tick. */
-  mineIncome: Res;
-  taxes: TaxSegment[];
-};
+import { taxRatesAt, type TaxSegment } from "@/lib/calculate-fastest-way-to-goal.ts";
 
 export type AttackInput = {
   capturedExtractors: number;
@@ -19,8 +9,8 @@ export type AttackInput = {
 
 export type AttackProfitResult = {
   loss: number;
-  incomeWithout: number;
-  incomeWith: number;
+  /** Netto-Ertrag der erbeuteten Extraktoren im nächsten Tick. */
+  extraIncome: number;
   /** Ticks ab Bewertungs-Tick, bis der Flottenverlust wieder eingespielt ist; null = nicht im Horizont. */
   breakEvenTicks: number | null;
   /** Vorsprung mit Angriff gegenüber ohne Angriff je Stichtag (gleiche Reihenfolge wie übergeben); null = Stichtag bereits vorbei. */
@@ -28,53 +18,49 @@ export type AttackProfitResult = {
 };
 
 /**
- * Netto-Einkommen pro Tick. Für Extraktoren zählt nur die Gesamtzahl, daher wird ihr Ertrag mit dem
- * Mittel aus Met- und Kris-Steuer belegt; die Minen werden je Rohstoff versteuert.
+ * Netto-Ertrag von Extraktoren pro Tick. Für Extraktoren zählt nur die Gesamtzahl, daher wird ihr
+ * Ertrag mit dem Mittel aus Met- und Kris-Steuer belegt.
  */
-function netIncome(state: EconomyState, extractors: number, tick: number): number {
-  const mines = taxedIncome(state.mineIncome, state.taxes, tick);
-  const tax = taxRatesAt(state.taxes, tick);
-  const extractorTax = (tax.met + tax.kris) / 2;
-  return mines.met + mines.kris + (getExtractorYield(extractors) * (100 - extractorTax)) / 100;
+function netExtractorIncome(extractors: number, taxes: TaxSegment[], tick: number): number {
+  const tax = taxRatesAt(taxes, tick);
+  return (getExtractorYield(extractors) * (100 - (tax.met + tax.kris) / 2)) / 100;
 }
 
 /**
  * Vergleicht „nichts tun“ mit „angreifen“: Der Angriff kostet sofort `captured × costPerExtractor`,
- * bringt danach aber jeden Tick mehr Einkommen. Gesucht ist der Tick, ab dem die Summe mit Angriff
- * die Summe ohne Angriff einholt, sowie der Vorsprung an den übergebenen Stichtagen (absolute Ticks).
- * Die Beute gilt vereinfacht ab dem nächsten Tick als produzierend.
+ * bringt danach aber jeden Tick den Ertrag der erbeuteten Extraktoren. Der Ertrag eines Extraktors
+ * hängt nicht von der restlichen Wirtschaft ab, daher zählen nur Beute, Verlust und Steuern.
+ * Gesucht ist der Tick, ab dem der Mehrertrag den Verlust einholt, sowie der Vorsprung an den
+ * übergebenen Stichtagen (absolute Ticks). Die Beute gilt vereinfacht ab dem nächsten Tick als produzierend.
  */
 export function calculateAttackProfit(
-  state: EconomyState,
+  fromTick: number,
+  taxes: TaxSegment[],
   input: AttackInput,
   milestoneTicks: number[],
   horizonTicks: number
 ): AttackProfitResult {
   const captured = Math.max(0, Math.floor(input.capturedExtractors));
   const loss = captured * Math.max(0, input.costPerExtractor);
-  const ticksToMilestones = milestoneTicks.map((tick) => tick - state.tick);
+  const ticksToMilestones = milestoneTicks.map((tick) => tick - fromTick);
   const lastMilestone = Math.max(0, ...ticksToMilestones);
 
-  let without = 0;
-  let withAttack = -loss;
+  let gain = -loss;
   let breakEvenTicks: number | null = loss <= 0 ? 0 : null;
   const gainsAt: (number | null)[] = ticksToMilestones.map(() => null);
 
   for (let k = 1; k <= Math.max(horizonTicks, lastMilestone); k++) {
-    const tick = state.tick + k;
-    without += netIncome(state, state.extractors, tick);
-    withAttack += netIncome(state, state.extractors + captured, tick);
-    if (breakEvenTicks === null && withAttack >= without) breakEvenTicks = k;
+    gain += netExtractorIncome(captured, taxes, fromTick + k);
+    if (breakEvenTicks === null && gain >= 0) breakEvenTicks = k;
     ticksToMilestones.forEach((ticks, i) => {
-      if (ticks === k) gainsAt[i] = withAttack - without;
+      if (ticks === k) gainsAt[i] = gain;
     });
     if (breakEvenTicks !== null && k >= lastMilestone) break;
   }
 
   return {
     loss,
-    incomeWithout: netIncome(state, state.extractors, state.tick + 1),
-    incomeWith: netIncome(state, state.extractors + captured, state.tick + 1),
+    extraIncome: netExtractorIncome(captured, taxes, fromTick + 1),
     breakEvenTicks,
     gainsAt,
   };
