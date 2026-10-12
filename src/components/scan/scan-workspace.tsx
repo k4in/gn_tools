@@ -61,7 +61,7 @@ type ScanWorkspaceProps = {
   children: (primary: TargetScans) => ReactNode;
 };
 
-/** Textfeld links, Auswertung des ausgewerteten Spielers rechts. */
+/** Textfeld links, Auswertung des ausgewerteten Spielers rechts; mobil untereinander, die ganze Seite scrollt. */
 export function ScanWorkspace({
   title,
   text,
@@ -107,8 +107,8 @@ export function ScanWorkspace({
   }
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <section className="flex min-h-0 flex-col gap-4 border-r border-border p-6">
+    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] max-md:flex max-md:flex-col max-md:overflow-y-auto">
+      <section className="flex min-h-0 flex-col gap-4 border-r border-border p-6 max-md:shrink-0 max-md:border-r-0 max-md:border-b max-md:p-4">
         <Textarea
           ref={textareaRef}
           value={text}
@@ -117,13 +117,13 @@ export function ScanWorkspace({
           placeholder={placeholder}
           spellCheck={false}
           aria-label={`Scans für die ${title}`}
-          className="[field-sizing:fixed] min-h-0 flex-1 font-mono placeholder:text-muted-foreground/50 md:text-xs/relaxed"
+          className="[field-sizing:fixed] min-h-0 flex-1 font-mono placeholder:text-muted-foreground/50 max-md:h-48 max-md:flex-none md:text-xs/relaxed"
         />
         <div className="flex flex-col gap-2 text-xs/relaxed text-muted-foreground">{help}</div>
       </section>
 
-      <section className="flex min-h-0 flex-col">
-        <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-6">
+      <section className="flex min-h-0 flex-col max-md:shrink-0">
+        <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-6 max-md:h-auto max-md:min-h-12 max-md:flex-wrap max-md:px-4 max-md:py-2">
           {primary && isUnknownTarget(primary.target) ? (
             <h2 className="font-heading text-base font-semibold text-muted-foreground">Spieler unbekannt</h2>
           ) : primary ? (
@@ -151,7 +151,7 @@ export function ScanWorkspace({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 max-md:overflow-visible max-md:p-4">
           {wrongCount > 0 ? (
             <div className="mb-6 flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0" />

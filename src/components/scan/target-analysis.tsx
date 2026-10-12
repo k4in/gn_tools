@@ -296,44 +296,46 @@ function formatDelta(n: number | null) {
 
 function History({ steps }: { steps: HistoryStep[] }) {
   return (
-    <table className="mt-2 w-full text-xs tabular-nums">
-      <thead className="text-[11px] text-muted-foreground">
-        <tr className="border-b border-border">
-          <th className="py-1 text-left font-normal">Zeitraum</th>
-          <th className="py-1 text-right font-normal">Ticks</th>
-          <th className="py-1 text-right font-normal">Punkte</th>
-          <th className="py-1 text-right font-normal">erwartet</th>
-          <th className="py-1 pl-4 text-left font-normal">Bewertung</th>
-          <th className="py-1 text-right font-normal">Exen</th>
-          <th className="py-1 text-right font-normal">Schiffe</th>
-          <th className="py-1 text-right font-normal">Vert.</th>
-        </tr>
-      </thead>
-      <tbody>
-        {steps.map((step) => (
-          <tr key={`${step.from.time}-${step.to.time}`} className="border-b border-border/50 last:border-b-0">
-            <td className="py-1.5 whitespace-nowrap">
-              <Timestamp time={step.from.time} source={pointSource(step.from)} /> →{" "}
-              <Timestamp time={step.to.time} source={pointSource(step.to)} short />
-            </td>
-            <td className="py-1.5 text-right">{step.ticks}</td>
-            <td className="py-1.5 text-right">{formatSigned(step.pointsDelta)}</td>
-            <td className="py-1.5 text-right text-muted-foreground">
-              {step.ticks > 0 ? `${formatRes(step.lower)}–${formatRes(step.upper)}` : "—"}
-            </td>
-            <td className={cn("py-1.5 pl-4", VERDICT_CLASS[step.verdict])}>
-              {verdictLabel(step)}
-              {step.verdict === "building" ? (
-                <span className="text-muted-foreground"> · bis zu {formatRes(step.spentResources)} Res</span>
-              ) : null}
-            </td>
-            <td className="py-1.5 text-right">{formatDelta(step.extractorsDelta)}</td>
-            <td className="py-1.5 text-right">{formatDelta(step.shipsDelta)}</td>
-            <td className="py-1.5 text-right">{formatDelta(step.defenseDelta)}</td>
+    <div className="max-md:overflow-x-auto">
+      <table className="mt-2 w-full text-xs tabular-nums">
+        <thead className="text-[11px] text-muted-foreground">
+          <tr className="border-b border-border">
+            <th className="py-1 text-left font-normal">Zeitraum</th>
+            <th className="py-1 text-right font-normal">Ticks</th>
+            <th className="py-1 text-right font-normal">Punkte</th>
+            <th className="py-1 text-right font-normal">erwartet</th>
+            <th className="py-1 pl-4 text-left font-normal">Bewertung</th>
+            <th className="py-1 text-right font-normal">Exen</th>
+            <th className="py-1 text-right font-normal">Schiffe</th>
+            <th className="py-1 text-right font-normal">Vert.</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {steps.map((step) => (
+            <tr key={`${step.from.time}-${step.to.time}`} className="border-b border-border/50 last:border-b-0">
+              <td className="py-1.5 whitespace-nowrap">
+                <Timestamp time={step.from.time} source={pointSource(step.from)} /> →{" "}
+                <Timestamp time={step.to.time} source={pointSource(step.to)} short />
+              </td>
+              <td className="py-1.5 text-right">{step.ticks}</td>
+              <td className="py-1.5 text-right">{formatSigned(step.pointsDelta)}</td>
+              <td className="py-1.5 text-right text-muted-foreground">
+                {step.ticks > 0 ? `${formatRes(step.lower)}–${formatRes(step.upper)}` : "—"}
+              </td>
+              <td className={cn("py-1.5 pl-4", VERDICT_CLASS[step.verdict])}>
+                {verdictLabel(step)}
+                {step.verdict === "building" ? (
+                  <span className="text-muted-foreground"> · bis zu {formatRes(step.spentResources)} Res</span>
+                ) : null}
+              </td>
+              <td className="py-1.5 text-right">{formatDelta(step.extractorsDelta)}</td>
+              <td className="py-1.5 text-right">{formatDelta(step.shipsDelta)}</td>
+              <td className="py-1.5 text-right">{formatDelta(step.defenseDelta)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -376,14 +378,14 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
       ) : null}
       <GroupHeading>Scan-Daten</GroupHeading>
       <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-muted/20">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-6 p-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-6 p-4 max-md:grid-cols-1">
           <section>
             <SectionLabel>
               Letzter Sektorscan
               {sector ? <ScanMeta accuracy={sector.accuracy} time={sector.time} /> : null}
             </SectionLabel>
             {sector ? (
-              <div className="mt-2 grid grid-cols-3 gap-x-6 gap-y-3">
+              <div className="mt-2 grid grid-cols-3 gap-x-6 gap-y-3 max-md:gap-x-4">
                 <Stat label="Punkte" value={sector.points} />
                 <Stat label="Schiffe" value={sector.ships} />
                 <Stat label="Verteidigung" value={sector.defense} />
@@ -395,7 +397,7 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
               <Missing>Kein Sektorscan</Missing>
             )}
           </section>
-          <section className="min-w-40 border-l border-border pl-6">
+          <section className="min-w-40 border-l border-border pl-6 max-md:border-t max-md:border-l-0 max-md:pt-4 max-md:pl-0">
             <SectionLabel>
               Letzter Punktestand
               {latestPoints?.time !== undefined ? (
@@ -412,7 +414,7 @@ export function TargetAnalysis({ entry, earlyGame }: { entry: TargetScans; early
             {pointsUpdate ? <p className="mt-1 text-[11px] text-muted-foreground">aus Punktzeile</p> : null}
           </section>
         </div>
-        <div className="grid grid-cols-2 gap-6 p-4">
+        <div className="grid grid-cols-2 gap-6 p-4 max-md:grid-cols-1">
           <section>
             <SectionLabel>
               Schiffe

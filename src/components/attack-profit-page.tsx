@@ -64,8 +64,8 @@ function newRowId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function newRow(capturedExtractors = "200", costPerExtractor = "50000"): AttackRow {
-  return { id: newRowId(), target: "", capturedExtractors, costPerExtractor };
+function newRow(): AttackRow {
+  return { id: newRowId(), target: "", capturedExtractors: "0", costPerExtractor: "0" };
 }
 
 function loadRow(raw: unknown): AttackRow | null {
@@ -153,6 +153,70 @@ function signed(n: number): string {
   return `${n > 0 ? "+" : ""}${formatRes(n)}`;
 }
 
+type AttackResult = ReturnType<typeof calculateAttackProfit>;
+
+function MobileValue({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function AmountInput({ label, unit, value, onChange }: { label: string; unit: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <InputGroup>
+      <InputGroupInput
+        type="number"
+        min={0}
+        inputMode="numeric"
+        aria-label={label}
+        className="tabular-nums"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <InputGroupAddon align="inline-end">{unit}</InputGroupAddon>
+    </InputGroup>
+  );
+}
+
+function LossValue({ result }: { result: AttackResult | null }) {
+  return <CellValue value={result ? formatRes(result.loss) : "–"} hint={result ? `+${formatRes(result.extraIncome)} pro Tick` : null} />;
+}
+
+function BreakEvenValue({
+  result,
+  currentTick,
+  cfg,
+  perDay,
+}: {
+  result: AttackResult | null;
+  currentTick: number;
+  cfg: StartConfig;
+  perDay: number;
+}) {
+  if (!result) return "–";
+  const breakEvenTick = result.breakEvenTicks === null ? null : currentTick + result.breakEvenTicks;
+  return (
+    <CellValue
+      className={breakEvenClass(breakEvenTick, perDay)}
+      value={result.breakEvenTicks === null ? "nie" : formatDuration(result.breakEvenTicks, cfg)}
+      hint={
+        breakEvenTick === null
+          ? "auch nicht innerhalb eines Jahres"
+          : `Tick ${formatRes(breakEvenTick)} · ${clockLabel(cfg, breakEvenTick)}`
+      }
+    />
+  );
+}
+
+function GainValue({ result, index }: { result: AttackResult | null; index: number }) {
+  const gain = result?.gainsAt[index] ?? null;
+  if (gain === null) return <CellValue value="–" hint={result ? "bereits vorbei" : null} />;
+  return <CellValue className={gain >= 0 ? "text-green-500" : "text-destructive"} value={signed(gain)} />;
+}
+
 export function AttackProfitPage() {
   const [appState] = useState(() => loadStoredState());
   // Gerechnet wird immer mit dem aktiven Plan.
@@ -189,13 +253,17 @@ export function AttackProfitPage() {
     setDraft((prev) => ({ ...prev, rows: prev.rows.map((row) => (row.id === id ? { ...row, ...patch } : row)) }));
   }
 
+  function removeRow(id: string) {
+    setDraft((prev) => ({ ...prev, rows: prev.rows.filter((row) => row.id !== id) }));
+  }
+
   function updateManualTaxes(patch: Partial<ManualTaxes>) {
     setDraft((prev) => (prev.manualTaxes ? { ...prev, manualTaxes: { ...prev.manualTaxes, ...patch } } : prev));
   }
 
   return (
     <main className="min-w-0 flex-1 overflow-y-auto bg-background text-foreground">
-      <div className="flex flex-col gap-6 px-6 py-8">
+      <div className="flex flex-col gap-6 px-6 py-8 max-md:px-4 max-md:py-6">
         <h1 className="font-heading text-xl font-semibold tracking-tight">Lohnt sich der Angriff?</h1>
 
         <Card size="sm">
@@ -253,7 +321,7 @@ export function AttackProfitPage() {
             <Button
               type="button"
               variant="outline"
-              className="ml-auto"
+              className="ml-auto max-md:ml-0"
               onClick={() =>
                 setDraft((prev) => ({
                   ...prev,
@@ -275,7 +343,7 @@ export function AttackProfitPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <Table>
+            <Table containerClassName="max-md:hidden">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-56">Ziel</TableHead>
@@ -293,8 +361,7 @@ export function AttackProfitPage() {
               </TableHeader>
               <TableBody>
                 {draft.rows.map((row, index) => {
-                  const result = results?.[index] ?? null;
-                  const breakEvenTick = result?.breakEvenTicks == null ? null : currentTick + result.breakEvenTicks;
+                  const result = results[index] ?? null;
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
@@ -307,74 +374,34 @@ export function AttackProfitPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <InputGroup>
-                          <InputGroupInput
-                            type="number"
-                            min={0}
-                            inputMode="numeric"
-                            aria-label="Erbeutete Extraktoren"
-                            className="tabular-nums"
-                            value={row.capturedExtractors}
-                            onChange={(e) => updateRow(row.id, { capturedExtractors: e.target.value })}
-                          />
-                          <InputGroupAddon align="inline-end">Exen</InputGroupAddon>
-                        </InputGroup>
-                      </TableCell>
-                      <TableCell>
-                        <InputGroup>
-                          <InputGroupInput
-                            type="number"
-                            min={0}
-                            inputMode="numeric"
-                            aria-label="Kosten pro Extraktor"
-                            className="tabular-nums"
-                            value={row.costPerExtractor}
-                            onChange={(e) => updateRow(row.id, { costPerExtractor: e.target.value })}
-                          />
-                          <InputGroupAddon align="inline-end">Res</InputGroupAddon>
-                        </InputGroup>
-                      </TableCell>
-                      <TableCell>
-                        <CellValue
-                          value={result ? formatRes(result.loss) : "–"}
-                          hint={result ? `+${formatRes(result.extraIncome)} pro Tick` : null}
+                        <AmountInput
+                          label="Erbeutete Extraktoren"
+                          unit="Exen"
+                          value={row.capturedExtractors}
+                          onChange={(value) => updateRow(row.id, { capturedExtractors: value })}
                         />
                       </TableCell>
                       <TableCell>
-                        {result ? (
-                          <CellValue
-                            className={breakEvenClass(breakEvenTick, perDay)}
-                            value={result.breakEvenTicks === null ? "nie" : formatDuration(result.breakEvenTicks, cfg)}
-                            hint={
-                              breakEvenTick === null
-                                ? "auch nicht innerhalb eines Jahres"
-                                : `Tick ${formatRes(breakEvenTick)} · ${clockLabel(cfg, breakEvenTick)}`
-                            }
-                          />
-                        ) : (
-                          "–"
-                        )}
+                        <AmountInput
+                          label="Kosten pro Extraktor"
+                          unit="Res"
+                          value={row.costPerExtractor}
+                          onChange={(value) => updateRow(row.id, { costPerExtractor: value })}
+                        />
                       </TableCell>
-                      {gainTicks.map((tick, i) => {
-                        const gain = result?.gainsAt[i] ?? null;
-                        return (
-                          <TableCell key={tick}>
-                            {gain === null ? (
-                              <CellValue value="–" hint={result ? "bereits vorbei" : null} />
-                            ) : (
-                              <CellValue className={gain >= 0 ? "text-green-500" : "text-destructive"} value={signed(gain)} />
-                            )}
-                          </TableCell>
-                        );
-                      })}
                       <TableCell>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Angriff entfernen"
-                          onClick={() => setDraft((prev) => ({ ...prev, rows: prev.rows.filter((item) => item.id !== row.id) }))}
-                        >
+                        <LossValue result={result} />
+                      </TableCell>
+                      <TableCell>
+                        <BreakEvenValue result={result} currentTick={currentTick} cfg={cfg} perDay={perDay} />
+                      </TableCell>
+                      {gainTicks.map((tick, i) => (
+                        <TableCell key={tick}>
+                          <GainValue result={result} index={i} />
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        <Button type="button" variant="ghost" size="icon" aria-label="Angriff entfernen" onClick={() => removeRow(row.id)}>
                           <Trash2 />
                         </Button>
                       </TableCell>
@@ -390,17 +417,63 @@ export function AttackProfitPage() {
                 ) : null}
               </TableBody>
             </Table>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setDraft((prev) => {
-                    const last = prev.rows.at(-1);
-                    return { ...prev, rows: [...prev.rows, last ? newRow(last.capturedExtractors, last.costPerExtractor) : newRow()] };
-                  })
-                }
-              >
+            {/* Mobil: eine Karte pro Angriff statt der breiten Tabelle. */}
+            <div className="flex flex-col gap-3 md:hidden">
+              {draft.rows.map((row, index) => {
+                const result = results[index] ?? null;
+                return (
+                  <div key={row.id} className="flex flex-col gap-3 rounded-lg border border-border p-3">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-label="Ziel"
+                        placeholder="Name, Koordinaten,..."
+                        value={row.target}
+                        onChange={(e) => updateRow(row.id, { target: e.target.value })}
+                      />
+                      <Button type="button" variant="ghost" size="icon" aria-label="Angriff entfernen" onClick={() => removeRow(row.id)}>
+                        <Trash2 />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field>
+                        <FieldLabel>Erbeutete Extraktoren</FieldLabel>
+                        <AmountInput
+                          label="Erbeutete Extraktoren"
+                          unit="Exen"
+                          value={row.capturedExtractors}
+                          onChange={(value) => updateRow(row.id, { capturedExtractors: value })}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel>Kosten pro Extraktor</FieldLabel>
+                        <AmountInput
+                          label="Kosten pro Extraktor"
+                          unit="Res"
+                          value={row.costPerExtractor}
+                          onChange={(value) => updateRow(row.id, { costPerExtractor: value })}
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-3 text-xs">
+                      <MobileValue label="Verlust gesamt">
+                        <LossValue result={result} />
+                      </MobileValue>
+                      <MobileValue label="Profitabel in">
+                        <BreakEvenValue result={result} currentTick={currentTick} cfg={cfg} perDay={perDay} />
+                      </MobileValue>
+                      {gainTicks.map((tick, i) => (
+                        <MobileValue key={tick} label={`Mehrgewinn bis Tick ${formatRes(tick)}`}>
+                          <GainValue result={result} index={i} />
+                        </MobileValue>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {draft.rows.length === 0 ? <p className="text-center text-xs text-muted-foreground">Noch kein Angriff eingetragen.</p> : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => setDraft((prev) => ({ ...prev, rows: [...prev.rows, newRow()] }))}>
                 <Plus data-icon="inline-start" />
                 Angriff hinzufügen
               </Button>

@@ -27,6 +27,8 @@ function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
 function formatClock(time: number) {
   const d = new Date(time);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -101,48 +103,50 @@ function FleetTable({
   onTicksChange: (fleetId: string, ticks: number) => void;
 }) {
   return (
-    <table className="mt-2 w-full text-xs tabular-nums">
-      <thead className="text-[11px] text-muted-foreground">
-        <tr className="border-b border-border">
-          <th className="py-1 text-left font-normal">Flotte</th>
-          <th className="py-1 text-left font-normal">Ankunft</th>
-          <th className="py-1 text-left font-normal">Kampf</th>
-          <th className="py-1 text-left font-normal">Ticks im Orbit</th>
-          {attackers &&
-            DEFENSE_TYPES.map((d) => (
-              <th
-                key={d.label}
-                className="py-1 text-left font-normal"
-                title={`Abflugfenster für ${d.label} (${d.flightTicks} Ticks Flugzeit)`}
-              >
-                {d.header}
-              </th>
-            ))}
-        </tr>
-      </thead>
-      <tbody>
-        {fleets.map((f) => (
-          <tr key={f.id} className="border-b border-border/50 last:border-b-0">
-            <td className="py-1.5">
-              <FleetName fleet={f} />
-            </td>
-            <td className="py-1.5">{formatClock(f.arrival)}</td>
-            <td className="py-1.5">
-              {formatClock(f.firstCombat)}–{formatClock(f.lastCombat)}
-            </td>
-            <td className="py-1.5">
-              <OrbitInput fleet={f} onChange={(ticks) => onTicksChange(f.id, ticks)} />
-            </td>
+    <div className="max-md:overflow-x-auto">
+      <table className="mt-2 w-full text-xs tabular-nums">
+        <thead className="text-[11px] text-muted-foreground">
+          <tr className="border-b border-border">
+            <th className="py-1 text-left font-normal">Flotte</th>
+            <th className="py-1 text-left font-normal">Ankunft</th>
+            <th className="py-1 text-left font-normal">Kampf</th>
+            <th className="py-1 text-left font-normal">Ticks im Orbit</th>
             {attackers &&
               DEFENSE_TYPES.map((d) => (
-                <td key={d.label} className="py-1.5">
-                  <DeadlineCell attacker={f} flightTicks={d.flightTicks} now={now} />
-                </td>
+                <th
+                  key={d.label}
+                  className="py-1 text-left font-normal"
+                  title={`Abflugfenster für ${d.label} (${d.flightTicks} Ticks Flugzeit)`}
+                >
+                  {d.header}
+                </th>
               ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {fleets.map((f) => (
+            <tr key={f.id} className="border-b border-border/50 last:border-b-0">
+              <td className="py-1.5">
+                <FleetName fleet={f} />
+              </td>
+              <td className="py-1.5">{formatClock(f.arrival)}</td>
+              <td className="py-1.5">
+                {formatClock(f.firstCombat)}–{formatClock(f.lastCombat)}
+              </td>
+              <td className="py-1.5">
+                <OrbitInput fleet={f} onChange={(ticks) => onTicksChange(f.id, ticks)} />
+              </td>
+              {attackers &&
+                DEFENSE_TYPES.map((d) => (
+                  <td key={d.label} className="py-1.5">
+                    <DeadlineCell attacker={f} flightTicks={d.flightTicks} now={now} />
+                  </td>
+                ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -174,6 +178,13 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
 
   const tickCount = Math.round(span / NEWS_TICK_MS);
   const labelEvery = tickCount <= 16 ? 1 : tickCount <= 32 ? 2 : 4;
+  // Mobil ist zu wenig Platz für jede Beschriftung: dort nur volle Stunden, bei langen Kämpfen jede zweite bzw. dritte.
+  const hourCount = span / HOUR_MS;
+  const mobileHourEvery = hourCount <= 6 ? 1 : hourCount <= 12 ? 2 : 3;
+  function isMobileLabel(t: number) {
+    const d = new Date(t);
+    return d.getMinutes() === 0 && d.getHours() % mobileHourEvery === 0;
+  }
   const ticks: number[] = [];
   for (let t = start; t <= end; t += NEWS_TICK_MS) ticks.push(t);
 
@@ -199,7 +210,7 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
         const visible = to > from;
         return (
           <div key={f.id} className="flex items-stretch">
-            <div className="flex w-56 shrink-0 items-center pr-3 text-[11px]" title={fleetLabel(f)}>
+            <div className="flex w-56 shrink-0 items-center pr-3 text-[11px] max-md:w-28" title={fleetLabel(f)}>
               <FleetName fleet={f} className="block min-w-0 truncate" />
             </div>
             <div className="relative h-8 flex-1">
@@ -233,19 +244,26 @@ function Timeline({ analysis }: { analysis: NewsAnalysis }) {
         );
       })}
       <div className="flex">
-        <div className="w-56 shrink-0" />
+        <div className="w-56 shrink-0 max-md:w-28" />
         <div className="relative h-5 flex-1 border-t border-border">
-          {ticks.map((t, i) =>
-            i % labelEvery === 0 ? (
+          {ticks.map((t, i) => {
+            const desktop = i % labelEvery === 0;
+            const mobile = isMobileLabel(t);
+            if (!desktop && !mobile) return null;
+            return (
               <span
                 key={t}
-                className="absolute top-1 -translate-x-1/2 text-[10px] text-muted-foreground tabular-nums"
+                className={cn(
+                  "absolute top-1 -translate-x-1/2 text-[10px] text-muted-foreground tabular-nums",
+                  !desktop && "md:hidden",
+                  !mobile && "max-md:hidden"
+                )}
                 style={{ left: `${pct(t)}%` }}
               >
                 {formatClock(t)}
               </span>
-            ) : null
-          )}
+            );
+          })}
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
@@ -447,8 +465,8 @@ export function NewsAnalysisView({
             <Timeline analysis={analysis} />
           </section>
 
-          {/* Über die ganze Breite: hebt das p-6 des Auswertungsbereichs auf. */}
-          <Separator className="-mx-6 data-horizontal:w-auto" />
+          {/* Über die ganze Breite: hebt das p-6 (mobil p-4) des Auswertungsbereichs auf. */}
+          <Separator className="-mx-6 max-md:-mx-4 data-horizontal:w-auto" />
 
           {(["attacker", "defender"] as const).map((role) => {
             const fleets = analysis.fleets.filter((f) => f.role === role);

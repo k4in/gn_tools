@@ -25,7 +25,7 @@ export function ScanLayout() {
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background text-foreground">
       <Tabs value={active} className="gap-0">
-        <div className="flex h-12 shrink-0 items-center border-b border-border px-6">
+        <div className="flex h-12 shrink-0 items-center border-b border-border px-6 max-md:px-4">
           <TabsList aria-label="Auswertungen">
             {TABS.map((tab) => (
               <TabsTrigger key={tab.to} value={tab.to} nativeButton={false} render={<Link to={tab.to} />}>
