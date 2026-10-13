@@ -9,8 +9,6 @@ export type AttackInput = {
 
 export type AttackProfitResult = {
   loss: number;
-  /** Netto-Ertrag der erbeuteten Extraktoren im nächsten Tick. */
-  extraIncome: number;
   /** Ticks ab Bewertungs-Tick, bis der Flottenverlust wieder eingespielt ist; null = nicht im Horizont. */
   breakEvenTicks: number | null;
   /** Vorsprung mit Angriff gegenüber ohne Angriff je Stichtag (gleiche Reihenfolge wie übergeben); null = Stichtag bereits vorbei. */
@@ -60,7 +58,6 @@ export function calculateAttackProfit(
 
   return {
     loss,
-    extraIncome: netExtractorIncome(captured, taxes, fromTick + 1),
     breakEvenTicks,
     gainsAt,
   };

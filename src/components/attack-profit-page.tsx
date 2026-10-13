@@ -25,7 +25,7 @@ import { useStoredState } from "@/hooks/useStoredState.tsx";
 
 // Shadcn components
 import { Button } from "@/components/shadcn/button.tsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/shadcn/card.tsx";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/shadcn/card.tsx";
 import { Field, FieldLabel } from "@/components/shadcn/field.tsx";
 import { Input } from "@/components/shadcn/input.tsx";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group.tsx";
@@ -225,7 +225,7 @@ function AmountInput({ label, unit, value, onChange }: { label: string; unit: st
 }
 
 function LossValue({ result }: { result: AttackResult | null }) {
-  return <CellValue value={result ? formatRes(result.loss) : "–"} hint={result ? `+${formatRes(result.extraIncome)} pro Tick` : null} />;
+  return <CellValue value={result ? formatRes(result.loss) : "–"} />;
 }
 
 function BreakEvenValue({
@@ -268,7 +268,8 @@ export function AttackProfitPage() {
 
   const cfg = useMemo(() => configFromState(appState, planId), [appState, planId]);
   const now = useNow();
-  const currentTick = Math.max(0, computeCurrentTick(cfg, now));
+  const ticksSinceStart = computeCurrentTick(cfg, now);
+  const currentTick = Math.max(0, ticksSinceStart);
   const perDay = ticksPerDay(cfg);
   const gainTicks = useMemo(() => GAIN_DAYS.map((day) => dayToTick(day, perDay)), [perDay]);
   const manualTaxes = draft.manualTaxes;
@@ -455,6 +456,13 @@ export function AttackProfitPage() {
             <CardDescription>
               {GAIN_DAYS.map((day, i) => `Tick ${formatRes(gainTicks[i])} = ${day} Tage`).join(", ")} nach Rundenanfang.
             </CardDescription>
+            <CardAction className="flex flex-col items-end gap-0.5 text-right max-md:col-start-1 max-md:row-span-1 max-md:row-start-3 max-md:items-start max-md:text-left">
+              <span className="text-sm font-medium text-sky-500">
+                Die Berechnung nimmt den Rundenstart am {clockLabel(cfg, 0)} an (
+                {ticksSinceStart >= 0 ? `vor ${formatRes(ticksSinceStart)} Ticks` : `in ${formatRes(-ticksSinceStart)} Ticks`}).
+              </span>
+              <span className="text-[11px] text-muted-foreground">Dies kann in den Einstellungen geändert werden.</span>
+            </CardAction>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             <Table containerClassName="max-md:hidden">
