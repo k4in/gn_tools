@@ -1,8 +1,0 @@
-Extraktoren	Vorher	Nachher	Geklaut	Geklaut von 2:4 Tulsi	Geklaut von Verteidiger 1
-Metall	803	476	327	327	-
-Kristall	271	162	109	109	-
-Kosten pro Extraktor		133.446	-
-
-
-
------
