@@ -43,18 +43,23 @@ function parseSimulation(lines: string[]): ParsedAttacker[] {
 
   const metal = rowStartingWith(/^Metall$/i);
   const crystal = rowStartingWith(/^Kristall$/i);
-  const costs = (rowStartingWith(/^Kosten pro Extraktor$/i) ?? [])
-    .slice(1)
-    .map(parseGermanNumber)
-    .filter((n) => n !== null);
+  // „-“ zählt als Wert, damit die Zuordnung der Kosten zu den Spalten stimmt.
+  const costs = (rowStartingWith(/^Kosten pro Extraktor$/i) ?? []).slice(1).filter((cell) => cell !== "");
   // Fehlen Werte, gehören die vorhandenen zu den letzten Spalten (die Zeile ist rechtsbündig).
   const costOffset = columns.length - costs.length;
 
-  return columns.map((column, i) => ({
-    name: column.name,
-    capturedExtractors: (parseGermanNumber(metal?.[column.index] ?? "") ?? 0) + (parseGermanNumber(crystal?.[column.index] ?? "") ?? 0),
-    costPerExtractor: costs[i - costOffset] ?? null,
-  }));
+  return columns.flatMap((column, i) => {
+    const cost = costs[i - costOffset] ?? "";
+    // Spieler ohne Beute (z. B. Verteidiger) haben überall „-“ und werden übersprungen.
+    if ([metal?.[column.index], crystal?.[column.index], cost].some((cell) => cell === "-")) return [];
+    return [
+      {
+        name: column.name,
+        capturedExtractors: (parseGermanNumber(metal?.[column.index] ?? "") ?? 0) + (parseGermanNumber(crystal?.[column.index] ?? "") ?? 0),
+        costPerExtractor: parseGermanNumber(cost),
+      },
+    ];
+  });
 }
 
 /** Wert nach dem Label einer Kampfbericht-Zeile („Geklaute Metall Extraktoren:\t95 (161)“); die Klammer wird ignoriert. */
