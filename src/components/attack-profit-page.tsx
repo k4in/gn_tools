@@ -1,8 +1,8 @@
 // React
-import { type ReactNode, useMemo, useState } from "react";
+import { type ClipboardEvent, type ReactNode, useMemo, useRef, useState } from "react";
 
 // Packages
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Plus, Trash2 } from "lucide-react";
 
 // Lib/Utils
 import { planSlotLabel } from "@/lib/gn-data/plan.ts";
@@ -17,6 +17,7 @@ import {
 import { configFromState, loadStoredState } from "@/lib/features/plan-storage.ts";
 import { calculateAttackProfit } from "@/lib/utils/attack-profit.ts";
 import { cn } from "@/lib/utils/cn.ts";
+import { parseAttackCalculations, type ParsedAttacker } from "@/lib/utils/parse-attack-calculation.ts";
 
 // Hooks
 import { useNow } from "@/hooks/useNow.tsx";
@@ -28,6 +29,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldLabel } from "@/components/shadcn/field.tsx";
 import { Input } from "@/components/shadcn/input.tsx";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn/input-group.tsx";
+import { Textarea } from "@/components/shadcn/textarea.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/shadcn/table.tsx";
 
 const STORAGE_KEY = "gn_tool.attack-profit";
@@ -44,8 +46,12 @@ type AttackRow = {
   id: string;
   /** Nur zur Erinnerung, welches Ziel zu den Werten gehört; wird nicht ausgewertet. */
   target: string;
+  /** Wer angreift, z. B. „18:8 Lady“; ebenfalls nur zur Erinnerung. */
+  attacker: string;
   capturedExtractors: string;
   costPerExtractor: string;
+  /** Aus der eingefügten Angriffsberechnung erzeugt; wird bei jeder Textänderung neu aufgebaut. */
+  fromPaste: boolean;
 };
 
 /** Steuern in Prozent, falls im Plan keine (passenden) gesetzt sind; gelten für den ganzen Zeitraum. */
@@ -58,6 +64,8 @@ type AttackDraft = {
   rows: AttackRow[];
   /** null = Steuern aus dem Plan. */
   manualTaxes: ManualTaxes | null;
+  /** Eingefügte Angriffsberechnungen, eine Kopie nach der anderen. */
+  pasteText: string;
 };
 
 function newRowId() {
@@ -65,7 +73,7 @@ function newRowId() {
 }
 
 function newRow(): AttackRow {
-  return { id: newRowId(), target: "", capturedExtractors: "0", costPerExtractor: "0" };
+  return { id: newRowId(), target: "", attacker: "", capturedExtractors: "0", costPerExtractor: "0", fromPaste: false };
 }
 
 function loadRow(raw: unknown): AttackRow | null {
@@ -74,9 +82,13 @@ function loadRow(raw: unknown): AttackRow | null {
   if (typeof o.capturedExtractors !== "string" || typeof o.costPerExtractor !== "string") return null;
   return {
     id: typeof o.id === "string" ? o.id : newRowId(),
-    target: typeof o.target === "string" ? o.target : "",
+    // Früher landete der eingelesene Angreifer im Ziel-Feld.
+    ...(typeof o.attacker !== "string" && o.fromPaste === true
+      ? { target: "", attacker: typeof o.target === "string" ? o.target : "" }
+      : { target: typeof o.target === "string" ? o.target : "", attacker: typeof o.attacker === "string" ? o.attacker : "" }),
     capturedExtractors: o.capturedExtractors,
     costPerExtractor: o.costPerExtractor,
+    fromPaste: o.fromPaste === true,
   };
 }
 
@@ -90,10 +102,41 @@ function loadManualTaxes(raw: unknown): ManualTaxes | null {
 function loadDraft(raw: unknown): AttackDraft {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const manualTaxes = loadManualTaxes(o.manualTaxes);
-  if (Array.isArray(o.rows)) return { rows: o.rows.map(loadRow).filter((row) => row !== null), manualTaxes };
+  const pasteText = typeof o.pasteText === "string" ? o.pasteText : "";
+  if (Array.isArray(o.rows)) return { rows: o.rows.map(loadRow).filter((row) => row !== null), manualTaxes, pasteText };
   // Früheres Format mit nur einer Eingabe wird zur ersten Zeile.
   const legacy = loadRow(o);
-  return { rows: [legacy ?? newRow()], manualTaxes };
+  return { rows: [legacy ?? newRow()], manualTaxes, pasteText };
+}
+
+function isEmptyRow(row: AttackRow): boolean {
+  return (
+    row.target.trim() === "" &&
+    row.attacker.trim() === "" &&
+    parseAmount(row.capturedExtractors) === 0 &&
+    parseAmount(row.costPerExtractor) === 0
+  );
+}
+
+/**
+ * Baut die eingefügten Zeilen aus den eingelesenen Angreifern neu auf; manuell angelegte Zeilen bleiben,
+ * leere werden dabei verworfen. ID und Ziel werden der Reihe nach weiterverwendet, damit die Zeilen stabil bleiben.
+ */
+function syncPastedRows(rows: AttackRow[], attackers: ParsedAttacker[]): AttackRow[] {
+  const pasted = rows.filter((row) => row.fromPaste);
+  const manual = rows.filter((row) => !row.fromPaste && (attackers.length === 0 || !isEmptyRow(row)));
+  return [
+    ...manual,
+    ...attackers.map((attacker, i) => ({
+      id: pasted[i]?.id ?? newRowId(),
+      // Das Ziel steht nicht in der Angriffsberechnung und bleibt bei Textänderungen erhalten.
+      target: pasted[i]?.target ?? "",
+      attacker: attacker.name,
+      capturedExtractors: String(attacker.capturedExtractors),
+      costPerExtractor: String(attacker.costPerExtractor ?? 0),
+      fromPaste: true,
+    })),
+  ];
 }
 
 function parseAmount(value: string): number {
@@ -249,6 +292,31 @@ export function AttackProfitPage() {
 
   const tax = taxRatesAt(taxes, currentTick + 1);
 
+  const pasteText = draft.pasteText;
+  const pasteRef = useRef<HTMLTextAreaElement>(null);
+  const pastedCount = draft.rows.filter((row) => row.fromPaste).length;
+
+  function updatePasteText(text: string) {
+    setDraft((prev) => ({ ...prev, pasteText: text, rows: syncPastedRows(prev.rows, parseAttackCalculations(text)) }));
+  }
+
+  /** Jede eingefügte Kopie kommt in eigene Zeilen, damit direkt die nächste dahinter eingefügt werden kann. */
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const pasted = event.clipboardData.getData("text").trim();
+    if (pasted === "") return;
+    event.preventDefault();
+    const el = event.currentTarget;
+    const before = pasteText.slice(0, el.selectionStart);
+    const after = pasteText.slice(el.selectionEnd);
+    const separator = before.trim() === "" || before.endsWith("\n") ? "" : "\n";
+    const insert = `${separator}${pasted}\n`;
+    const cursor = before.length + insert.length;
+    updatePasteText(before + insert + after);
+    requestAnimationFrame(() => {
+      pasteRef.current?.setSelectionRange(cursor, cursor);
+    });
+  }
+
   function updateRow(id: string, patch: Partial<AttackRow>) {
     setDraft((prev) => ({ ...prev, rows: prev.rows.map((row) => (row.id === id ? { ...row, ...patch } : row)) }));
   }
@@ -266,74 +334,120 @@ export function AttackProfitPage() {
       <div className="flex flex-col gap-6 px-6 py-8 max-md:px-4 max-md:py-6">
         <h1 className="font-heading text-xl font-semibold tracking-tight">Lohnt sich der Angriff?</h1>
 
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle>Steuern</CardTitle>
-            <CardDescription>
-              {manualTaxes
-                ? "Manuell gesetzt, gelten für den ganzen Zeitraum."
-                : `Aus dem aktiven Plan (${planSlotLabel(planId)}), Stand Tick ${currentTick} (${clockLabel(cfg, currentTick)}).`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-end justify-between gap-4">
-            {manualTaxes ? (
-              <div className="grid w-72 grid-cols-2 gap-2">
-                <Field>
-                  <FieldLabel>Steuer Met</FieldLabel>
-                  <InputGroup>
-                    <InputGroupInput
-                      type="number"
-                      min={0}
-                      max={100}
-                      inputMode="decimal"
-                      aria-label="Steuer auf Metall"
-                      className="tabular-nums"
-                      value={manualTaxes.met}
-                      onChange={(e) => updateManualTaxes({ met: e.target.value })}
-                    />
-                    <InputGroupAddon align="inline-end">%</InputGroupAddon>
-                  </InputGroup>
-                </Field>
-                <Field>
-                  <FieldLabel>Steuer Kris</FieldLabel>
-                  <InputGroup>
-                    <InputGroupInput
-                      type="number"
-                      min={0}
-                      max={100}
-                      inputMode="decimal"
-                      aria-label="Steuer auf Kristall"
-                      className="tabular-nums"
-                      value={manualTaxes.kris}
-                      onChange={(e) => updateManualTaxes({ kris: e.target.value })}
-                    />
-                    <InputGroupAddon align="inline-end">%</InputGroupAddon>
-                  </InputGroup>
-                </Field>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Steuern</CardTitle>
+              <CardDescription>
+                {manualTaxes
+                  ? "Manuell gesetzt, gelten für den ganzen Zeitraum."
+                  : `Aus dem aktiven Plan (${planSlotLabel(planId)}), Stand Tick ${currentTick} (${clockLabel(cfg, currentTick)}).`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-end justify-between gap-4">
+              {manualTaxes ? (
+                <div className="grid w-72 grid-cols-2 gap-2">
+                  <Field>
+                    <FieldLabel>Steuer Met</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        type="number"
+                        min={0}
+                        max={100}
+                        inputMode="decimal"
+                        aria-label="Steuer auf Metall"
+                        className="tabular-nums"
+                        value={manualTaxes.met}
+                        onChange={(e) => updateManualTaxes({ met: e.target.value })}
+                      />
+                      <InputGroupAddon align="inline-end">%</InputGroupAddon>
+                    </InputGroup>
+                  </Field>
+                  <Field>
+                    <FieldLabel>Steuer Kris</FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        type="number"
+                        min={0}
+                        max={100}
+                        inputMode="decimal"
+                        aria-label="Steuer auf Kristall"
+                        className="tabular-nums"
+                        value={manualTaxes.kris}
+                        onChange={(e) => updateManualTaxes({ kris: e.target.value })}
+                      />
+                      <InputGroupAddon align="inline-end">%</InputGroupAddon>
+                    </InputGroup>
+                  </Field>
+                </div>
+              ) : (
+                <Stat
+                  label="Steuern"
+                  value={`${tax.met} % / ${tax.kris} %`}
+                  hint={cfg.taxes.length === 0 ? "Im Plan sind keine Steuern gesetzt" : "Met / Kris, ab nächstem Tick"}
+                />
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                className="ml-auto max-md:ml-0"
+                onClick={() =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    // Beim Umschalten starten die manuellen Steuern mit den aktuellen aus dem Plan.
+                    manualTaxes: prev.manualTaxes ? null : { met: String(tax.met), kris: String(tax.kris) },
+                  }))
+                }
+              >
+                <ArrowRightLeft data-icon="inline-start" />
+                {manualTaxes ? "Steuern aus Plan" : "Steuern manuell setzen"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card size="sm">
+            <CardHeader>
+              <CardTitle>Angriffsberechnung einfügen</CardTitle>
+              <CardDescription>
+                Aus einer Kampfsim die Zeilen von <span className="font-medium text-foreground">„Extraktoren …“</span> oben links bis zum
+                letzten Wert von <span className="font-medium text-foreground">„Geklaut von …“</span> des letzten Angreifers unten rechts
+                kopieren, oder aus einem ZKB die Extraktoren-Info ab <span className="font-medium text-foreground">„Extraktoren“</span>. Es
+                können mehrere Auswertungen untereinander eingefügt werden.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <Textarea
+                  ref={pasteRef}
+                  aria-label="Angriffsberechnung"
+                  className="max-h-40 font-mono"
+                  placeholder="Angriffsberechnung hier einfügen …"
+                  spellCheck={false}
+                  value={pasteText}
+                  onChange={(e) => updatePasteText(e.target.value)}
+                  onPaste={handlePaste}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Eingefügte Angriffsberechnungen löschen"
+                  disabled={pasteText === ""}
+                  onClick={() => updatePasteText("")}
+                >
+                  <Trash2 />
+                </Button>
               </div>
-            ) : (
-              <Stat
-                label="Steuern"
-                value={`${tax.met} % / ${tax.kris} %`}
-                hint={cfg.taxes.length === 0 ? "Im Plan sind keine Steuern gesetzt" : "Met / Kris, ab nächstem Tick"}
-              />
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              className="ml-auto max-md:ml-0"
-              onClick={() =>
-                setDraft((prev) => ({
-                  ...prev,
-                  // Beim Umschalten starten die manuellen Steuern mit den aktuellen aus dem Plan.
-                  manualTaxes: prev.manualTaxes ? null : { met: String(tax.met), kris: String(tax.kris) },
-                }))
-              }
-            >
-              {manualTaxes ? "Steuern aus Plan" : "Steuern manuell setzen"}
-            </Button>
-          </CardContent>
-        </Card>
+              {pasteText.trim() === "" ? null : pastedCount === 0 ? (
+                <p className="text-xs text-destructive">Keine Kampfsim und kein ZKB erkannt.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {pastedCount} {pastedCount === 1 ? "Angriff" : "Angriffe"} aus der Angriffsberechnung.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <Card size="sm">
           <CardHeader>
@@ -346,7 +460,8 @@ export function AttackProfitPage() {
             <Table containerClassName="max-md:hidden">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-56">Ziel</TableHead>
+                  <TableHead className="w-44">Ziel</TableHead>
+                  <TableHead className="w-44">Angreifer</TableHead>
                   <TableHead className="w-36">Erbeutete Extraktoren</TableHead>
                   <TableHead className="w-40">Kosten pro Extraktor</TableHead>
                   <TableHead>Verlust gesamt</TableHead>
@@ -367,10 +482,19 @@ export function AttackProfitPage() {
                       <TableCell>
                         <Input
                           aria-label="Ziel"
-                          className="min-w-56"
+                          className="min-w-40"
                           placeholder="Name, Koordinaten,..."
                           value={row.target}
                           onChange={(e) => updateRow(row.id, { target: e.target.value })}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          aria-label="Angreifer"
+                          className="min-w-40"
+                          placeholder="Name, Koordinaten,..."
+                          value={row.attacker}
+                          onChange={(e) => updateRow(row.id, { attacker: e.target.value })}
                         />
                       </TableCell>
                       <TableCell>
@@ -410,7 +534,7 @@ export function AttackProfitPage() {
                 })}
                 {draft.rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5 + gainTicks.length + 1} className="text-center text-muted-foreground">
+                    <TableCell colSpan={6 + gainTicks.length + 1} className="text-center text-muted-foreground">
                       Noch kein Angriff eingetragen.
                     </TableCell>
                   </TableRow>
@@ -423,13 +547,27 @@ export function AttackProfitPage() {
                 const result = results[index] ?? null;
                 return (
                   <div key={row.id} className="flex flex-col gap-3 rounded-lg border border-border p-3">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        aria-label="Ziel"
-                        placeholder="Name, Koordinaten,..."
-                        value={row.target}
-                        onChange={(e) => updateRow(row.id, { target: e.target.value })}
-                      />
+                    <div className="flex items-end gap-2">
+                      <div className="grid flex-1 grid-cols-2 gap-2">
+                        <Field>
+                          <FieldLabel>Ziel</FieldLabel>
+                          <Input
+                            aria-label="Ziel"
+                            placeholder="Name, Koord.,..."
+                            value={row.target}
+                            onChange={(e) => updateRow(row.id, { target: e.target.value })}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Angreifer</FieldLabel>
+                          <Input
+                            aria-label="Angreifer"
+                            placeholder="Name, Koord.,..."
+                            value={row.attacker}
+                            onChange={(e) => updateRow(row.id, { attacker: e.target.value })}
+                          />
+                        </Field>
+                      </div>
                       <Button type="button" variant="ghost" size="icon" aria-label="Angriff entfernen" onClick={() => removeRow(row.id)}>
                         <Trash2 />
                       </Button>
@@ -481,7 +619,7 @@ export function AttackProfitPage() {
                 type="button"
                 variant="outline"
                 disabled={draft.rows.length === 0}
-                onClick={() => setDraft((prev) => ({ ...prev, rows: [] }))}
+                onClick={() => setDraft((prev) => ({ ...prev, rows: [], pasteText: "" }))}
               >
                 <Trash2 data-icon="inline-start" />
                 Alle löschen
